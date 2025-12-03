@@ -24,12 +24,13 @@ add_library(skeleton_cpp STATIC
 )
 
 # 链接OpenCV库到我们的库
-target_link_libraries(skeleton_cpp PRIVATE ${OpenCV_LIBS})
+target_link_libraries(skeleton_cpp PRIVATE ${OpenCV_LIBS} ${LIBRKNNRT})
 
 # 设置库的包含目录
 target_include_directories(skeleton_cpp PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    $<BUILD_INTERFACE:${LIBRKNNRT_INCLUDES}>
 )
 
 # 安装规则

@@ -23,5 +23,6 @@ set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 
 # 导入自定义的查找模块
 include(FindOpenCVCustom)
+include(FindRknn)
 
 message(STATUS "已完成第三方库配置")
