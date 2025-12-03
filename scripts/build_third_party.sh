@@ -188,38 +188,59 @@ fi
 # 新增：处理 RKNPU1/RKNPU2（仅 aarch64）
 # ======================
 
-if [ "${PLATFORM}" = "aarch64" ]; then 
+if [ "${PLATFORM}" = "aarch64" ] && [ "${BUILD_RKNPU}" = "yes" ]; then
     echo "开始编译RKNPU..."
-    $BUILD_RKNPU = yes
+    BUILD_RKNPU=yes
 else
     echo "跳过RKNPU编译"
-    $BUILD_RKNPU = no
+    BUILD_RKNPU=no
 fi
 
 if [ "$BUILD_RKNPU" = "yes" ]; then
+    echo "开始处理RKNPU库..."
     cd ${PROJECT_ROOT}/tmp
 
     if [ ! -d "rknn_model_zoo" ]; then
+        echo "初始化rknn_model_zoo仓库..."
         git init rknn_model_zoo
         cd rknn_model_zoo
+        echo "添加远程仓库..."
         git remote add origin https://github.com/airockchip/rknn_model_zoo.git
+        echo "初始化sparse-checkout..."
         git sparse-checkout init --cone
+        echo "设置要检出的目录..."
         git sparse-checkout set 3rdparty/rknpu2 3rdparty/rknpu1
+        echo "拉取main分支..."
         git pull origin main
+        echo "仓库克隆完成"
     else
         echo "rknn_model_zoo目录已存在，跳过克隆"
     fi
 
     cd ${PROJECT_ROOT}/tmp/rknn_model_zoo
+    echo "开始拷贝RKNPU库文件到third_party目录..."
     # 拷贝rknpu2和rknpu1目录到third_party
     if [ -d "3rdparty/rknpu2" ]; then
+        echo "拷贝rknpu2目录..."
+        # 如果目标目录已存在，则先删除再拷贝
+        if [ -d "${INSTALL_DIR}/rknpu2" ]; then
+            echo "删除已存在的${INSTALL_DIR}/rknpu2目录..."
+            rm -rf ${INSTALL_DIR}/rknpu2
+        fi
         cp -r 3rdparty/rknpu2 ${INSTALL_DIR}/
     fi
     
     if [ -d "3rdparty/rknpu1" ]; then
+        echo "拷贝rknpu1目录..."
+        # 如果目标目录已存在，则先删除再拷贝
+        if [ -d "${INSTALL_DIR}/rknpu1" ]; then
+            echo "删除已存在的${INSTALL_DIR}/rknpu1目录..."
+            rm -rf ${INSTALL_DIR}/rknpu1
+        fi
         cp -r 3rdparty/rknpu1 ${INSTALL_DIR}/
     fi
     
+    echo "RKNPU库处理完成"
 fi
 
 echo "为${PLATFORM}平台的第三方库构建任务已完成"
