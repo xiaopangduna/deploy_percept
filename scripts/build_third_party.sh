@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             echo "未知选项: $1"
             echo "用法: $0 <platform> [--libs <libraries>]"
             echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv)"
+            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu2,rknpu1)"
             echo "             默认构建所有支持的库"
             exit 1
             ;;
@@ -40,7 +40,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "用法: $0 <platform> [--libs <libraries>]"
     echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv"
+    echo "支持的库: gtest, opencv, rknpu1, rknpu2"
     exit 1
 fi
 
@@ -101,9 +101,13 @@ echo "交叉编译工具链检查通过"
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     BUILD_GTEST=yes
     BUILD_OPENCV=yes
+    BUILD_RKNPU1=yes
+    BUILD_RKNPU2=yes
 else
     BUILD_GTEST=no
     BUILD_OPENCV=no
+    BUILD_RKNPU1=no
+    BUILD_RKNPU2=no
     
     IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
     for lib in "${LIBS[@]}"; do
@@ -113,6 +117,12 @@ else
                 ;;
             opencv)
                 BUILD_OPENCV=yes
+                ;;
+            rknpu1)
+                BUILD_RKNPU1=yes
+                ;;
+            rknpu2)
+                BUILD_RKNPU2=yes
                 ;;
             *)
                 echo "警告: 忽略未知的库 '$lib'"
@@ -180,6 +190,47 @@ if [ "$BUILD_OPENCV" = "yes" ]; then
 else
     echo "跳过OpenCV编译"
 fi
+
+
+
+# ======================
+# 新增：处理 RKNPU1/RKNPU2（仅 aarch64）
+# ======================
+
+if [ "$BUILD_RKNPU1" = "yes" ] || [ "$BUILD_RKNPU2" = "yes" ]; then
+
+    REPO="airockchip/rknn_model_zoo"
+    BRANCH="main"
+    FOLDER="3rdparty/rknpu2"
+
+    download() {
+        local path="$1"
+        local api="https://api.github.com/repos/$REPO/contents/$path?ref=$BRANCH"
+
+        curl -s "$api" | jq -c '.[]' | while read item; do
+            type=$(echo "$item" | jq -r '.type')
+            name=$(echo "$item" | jq -r '.name')
+            path=$(echo "$item" | jq -r '.path')
+
+            if [ "$type" = "file" ]; then
+                url=$(echo "$item" | jq -r '.download_url')
+                echo "Downloading: $path"
+                mkdir -p "$(dirname "$path")"
+                curl -s -L "$url" -o "$path"
+            elif [ "$type" = "dir" ]; then
+                echo "Entering directory: $path"
+                download "$path"
+            fi
+        done
+    }
+
+    download "$FOLDER"
+
+    echo "为${PLATFORM}平台的第三方库构建任务已完成"
+    echo "已安装到 ${INSTALL_DIR}"
+
+fi
+
 
 echo "为${PLATFORM}平台的第三方库构建任务已完成"
 echo "已安装到 ${INSTALL_DIR}"
