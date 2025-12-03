@@ -3,6 +3,8 @@ third_party/
 datas/
 install/
 tmp/
+logs/
+runs/
 
 # Prerequisites
 *.d
