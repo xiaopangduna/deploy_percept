@@ -125,7 +125,11 @@ fi
 if [ "$BUILD_GTEST" = "yes" ]; then
     echo "开始编译GTest..."
     cd ${PROJECT_ROOT}/tmp
-    # git clone https://gitee.com/mirrors/googletest.git -b v1.14.0
+    if [ ! -d "googletest" ]; then
+        git clone https://gitee.com/mirrors/googletest.git -b v1.14.0
+    else
+        echo "googletest目录已存在，跳过克隆"
+    fi
     cd ${PROJECT_ROOT}/tmp/googletest
     rm -rf build_${PLATFORM}
     mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
@@ -147,18 +151,26 @@ fi
 if [ "$BUILD_OPENCV" = "yes" ]; then
     echo "开始编译OpenCV..."
     cd ${PROJECT_ROOT}/tmp
-    # git clone https://gitee.com/opencv/opencv.git
+    if [ ! -d "opencv" ]; then
+        git clone https://gitee.com/opencv/opencv.git
+    else
+        echo "opencv目录已存在，跳过克隆"
+    fi
     cd ${PROJECT_ROOT}/tmp/opencv
-    # git checkout 4.10.0
+    git checkout 4.5.4
     rm -rf build_${PLATFORM}
     mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
-
+    # 当系统libpng异常才开启opencv自带的libpng
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/opencv/${PLATFORM} \
         -DOPENCV_DOWNLOAD_PATH=../../opencv_${PLATFORM}_cache \
         -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_PNG=ON \
+        -DPNG_LIBRARY="" \
+        -DPNG_PNG_INCLUDE_DIR="" \
+
 
     make -j4  
 
