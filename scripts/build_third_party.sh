@@ -198,39 +198,30 @@ fi
 # ======================
 
 if [ "$BUILD_RKNPU1" = "yes" ] || [ "$BUILD_RKNPU2" = "yes" ]; then
+    cd ${PROJECT_ROOT}/tmp
 
-    REPO="airockchip/rknn_model_zoo"
-    BRANCH="main"
-    FOLDER="3rdparty/rknpu2"
+    if [ ! -d "rknn_model_zoo" ]; then
+        git init rknn_model_zoo
+        cd rknn_model_zoo
+        git remote add origin https://github.com/airockchip/rknn_model_zoo.git
+        git sparse-checkout init --cone
+        git sparse-checkout set 3rdparty/rknpu2 3rdparty/rknpu1
+        git pull origin main
+    else
+        echo "opencv目录已存在，跳过克隆"
+    fi
 
-    download() {
-        local path="$1"
-        local api="https://api.github.com/repos/$REPO/contents/$path?ref=$BRANCH"
-
-        curl -s "$api" | jq -c '.[]' | while read item; do
-            type=$(echo "$item" | jq -r '.type')
-            name=$(echo "$item" | jq -r '.name')
-            path=$(echo "$item" | jq -r '.path')
-
-            if [ "$type" = "file" ]; then
-                url=$(echo "$item" | jq -r '.download_url')
-                echo "Downloading: $path"
-                mkdir -p "$(dirname "$path")"
-                curl -s -L "$url" -o "$path"
-            elif [ "$type" = "dir" ]; then
-                echo "Entering directory: $path"
-                download "$path"
-            fi
-        done
-    }
-
-    download "$FOLDER"
-
-    echo "为${PLATFORM}平台的第三方库构建任务已完成"
-    echo "已安装到 ${INSTALL_DIR}"
-
+    cd ${PROJECT_ROOT}/tmp/rknn_model_zoo
+    # 拷贝rknpu2和rknpu1目录到third_party
+    if [ -d "3rdparty/rknpu2" ]; then
+        cp -r 3rdparty/rknpu2 ${INSTALL_DIR}/
+    fi
+    
+    if [ -d "3rdparty/rknpu1" ]; then
+        cp -r 3rdparty/rknpu1 ${INSTALL_DIR}/
+    fi
+    
 fi
-
 
 echo "为${PLATFORM}平台的第三方库构建任务已完成"
 echo "已安装到 ${INSTALL_DIR}"
