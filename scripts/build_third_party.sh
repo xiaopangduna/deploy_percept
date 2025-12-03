@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             echo "未知选项: $1"
             echo "用法: $0 <platform> [--libs <libraries>]"
             echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu2,rknpu1)"
+            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu)"
             echo "             默认构建所有支持的库"
             exit 1
             ;;
@@ -40,7 +40,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "用法: $0 <platform> [--libs <libraries>]"
     echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv, rknpu1, rknpu2"
+    echo "支持的库: gtest, opencv, rknpu"
     exit 1
 fi
 
@@ -101,13 +101,12 @@ echo "交叉编译工具链检查通过"
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     BUILD_GTEST=yes
     BUILD_OPENCV=yes
-    BUILD_RKNPU1=yes
-    BUILD_RKNPU2=yes
+    BUILD_RKNPU=yes
+
 else
     BUILD_GTEST=no
     BUILD_OPENCV=no
-    BUILD_RKNPU1=no
-    BUILD_RKNPU2=no
+    BUILD_RKNPU=no
     
     IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
     for lib in "${LIBS[@]}"; do
@@ -118,11 +117,8 @@ else
             opencv)
                 BUILD_OPENCV=yes
                 ;;
-            rknpu1)
-                BUILD_RKNPU1=yes
-                ;;
-            rknpu2)
-                BUILD_RKNPU2=yes
+            rknpu)
+                BUILD_RKNPU=yes
                 ;;
             *)
                 echo "警告: 忽略未知的库 '$lib'"
@@ -143,12 +139,10 @@ if [ "$BUILD_GTEST" = "yes" ]; then
     cd ${PROJECT_ROOT}/tmp/googletest
     rm -rf build_${PLATFORM}
     mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
-
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/gtest/${PLATFORM} \
         -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-        
     make -j$(nproc)
     make install
 
@@ -180,10 +174,7 @@ if [ "$BUILD_OPENCV" = "yes" ]; then
         -DBUILD_PNG=ON \
         -DPNG_LIBRARY="" \
         -DPNG_PNG_INCLUDE_DIR="" \
-
-
     make -j4  
-
     make install
 
     echo "OpenCV编译完成"
@@ -197,7 +188,15 @@ fi
 # 新增：处理 RKNPU1/RKNPU2（仅 aarch64）
 # ======================
 
-if [ "$BUILD_RKNPU1" = "yes" ] || [ "$BUILD_RKNPU2" = "yes" ]; then
+if [ "${PLATFORM}" = "aarch64" ]; then 
+    echo "开始编译RKNPU..."
+    $BUILD_RKNPU = yes
+else
+    echo "跳过RKNPU编译"
+    $BUILD_RKNPU = no
+fi
+
+if [ "$BUILD_RKNPU" = "yes" ]; then
     cd ${PROJECT_ROOT}/tmp
 
     if [ ! -d "rknn_model_zoo" ]; then
@@ -208,7 +207,7 @@ if [ "$BUILD_RKNPU1" = "yes" ] || [ "$BUILD_RKNPU2" = "yes" ]; then
         git sparse-checkout set 3rdparty/rknpu2 3rdparty/rknpu1
         git pull origin main
     else
-        echo "opencv目录已存在，跳过克隆"
+        echo "rknn_model_zoo目录已存在，跳过克隆"
     fi
 
     cd ${PROJECT_ROOT}/tmp/rknn_model_zoo
