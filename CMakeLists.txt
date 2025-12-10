@@ -24,7 +24,7 @@ add_library(skeleton_cpp STATIC
 )
 
 # 链接OpenCV库到我们的库
-target_link_libraries(skeleton_cpp PRIVATE ${OpenCV_LIBS} ${LIBRKNNRT})
+target_link_libraries(skeleton_cpp PUBLIC ${OpenCV_LIBS} ${LIBRKNNRT})
 
 # 设置库的包含目录
 target_include_directories(skeleton_cpp PUBLIC
