@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             echo "未知选项: $1"
             echo "用法: $0 <platform> [--libs <libraries>]"
             echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu)"
+            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog"
             echo "             默认构建所有支持的库"
             exit 1
             ;;
@@ -40,7 +40,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "用法: $0 <platform> [--libs <libraries>]"
     echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv, rknpu"
+    echo "支持的库: gtest, opencv, spdlog, rknpu"
     exit 1
 fi
 
@@ -101,13 +101,15 @@ echo "交叉编译工具链检查通过"
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     BUILD_GTEST=yes
     BUILD_OPENCV=yes
+    BUILD_SPDLOG=yes
     BUILD_RKNPU=yes
 
 else
     BUILD_GTEST=no
     BUILD_OPENCV=no
     BUILD_RKNPU=no
-    
+    BUILD_SPDLOG=no
+
     IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
     for lib in "${LIBS[@]}"; do
         case "$lib" in
@@ -116,6 +118,9 @@ else
                 ;;
             opencv)
                 BUILD_OPENCV=yes
+                ;;
+            spdlog)
+                BUILD_SPDLOG=yes
                 ;;
             rknpu)
                 BUILD_RKNPU=yes
@@ -182,7 +187,33 @@ else
     echo "跳过OpenCV编译"
 fi
 
+# 编译spdlog（如果需要）
+if [ "$BUILD_SPDLOG" = "yes" ]; then
+    echo "开始编译spdlog..."
+    cd ${PROJECT_ROOT}/tmp
+    if [ ! -d "spdlog" ]; then
+        git clone https://gitee.com/mirror-luyi/spdlog.git
+        cd ${PROJECT_ROOT}/tmp/spdlog
+        git checkout v1.14.1
+    else
+        echo "spdlog目录已存在，跳过git clone步骤"
+    fi
+    cd ${PROJECT_ROOT}/tmp/spdlog
+    rm -rf build_${PLATFORM}
+    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
 
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/spdlog/${PLATFORM} \
+        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} 
+
+    make -j4
+    make install
+
+    echo "spdlog编译完成"
+else
+    echo "跳过spdlog编译"
+fi
 
 # ======================
 # 新增：处理 RKNPU1/RKNPU2（仅 aarch64）
