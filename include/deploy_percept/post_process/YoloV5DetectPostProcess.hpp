@@ -2,6 +2,7 @@
 #define DEPLOY_PERCEPT_POST_PROCESS_YOLOV5DETECTPOSTPROCESS_HPP
 
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
+#include "deploy_percept/post_process/types.hpp"
 
 namespace deploy_percept {
 namespace post_process {
@@ -18,12 +19,12 @@ public:
         int8_t* input2,
         int model_in_h,
         int model_in_w,
-        BOX_RECT pads,
+        BoxRect pads,
         float scale_w,
         float scale_h,
         std::vector<int32_t>& qnt_zps,
         std::vector<float>& qnt_scales,
-        detect_result_group_t* group
+        DetectResultGroup* group
     ) override;
 
     int processYoloOutput(int8_t* input, int* anchor, int grid_h, int grid_w, 

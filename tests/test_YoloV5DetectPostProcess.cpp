@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/post_process/types.hpp"
 #include "utils/environment.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +87,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithDummyData)
     input0[offset + (5 + class_idx) * grid_h0 * grid_w0] = 90; // class probability
 
     // 创建结果组
-    deploy_percept::post_process::detect_result_group_t group;
+    deploy_percept::post_process::DetectResultGroup group;
     memset(&group, 0, sizeof(group));
 
     // 设置量化参数
@@ -94,7 +95,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithDummyData)
     std::vector<float> qnt_scales = {1.0, 1.0, 1.0};
     
     // 设置填充和缩放参数
-    deploy_percept::post_process::BOX_RECT pads = {0, 0, 0, 0};
+    deploy_percept::post_process::BoxRect pads = {0, 0, 0, 0};
     float scale_w = 1.0;
     float scale_h = 1.0;
 

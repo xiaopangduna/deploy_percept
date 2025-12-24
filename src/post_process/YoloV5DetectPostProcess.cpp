@@ -1,4 +1,5 @@
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/post_process/types.hpp"
 #include <vector>
 #include <algorithm>
 #include <set>
@@ -25,14 +26,14 @@ int YoloV5DetectPostProcess::process(
     int8_t* input2,
     int model_in_h,
     int model_in_w,
-    BOX_RECT pads,
+    BoxRect pads,
     float scale_w,
     float scale_h,
     std::vector<int32_t>& qnt_zps,
     std::vector<float>& qnt_scales,
-    detect_result_group_t* group
+    DetectResultGroup* group
 ) {
-    memset(group, 0, sizeof(detect_result_group_t));
+    memset(group, 0, sizeof(DetectResultGroup));
 
     std::vector<float> filterBoxes;
     std::vector<float> objProbs;
@@ -76,20 +77,8 @@ int YoloV5DetectPostProcess::process(
         indexArray.push_back(i);
     }
 
-    // 为 YoloV5DetectPostProcess 提供的排序方法
-    // 由于我们不能直接访问 YoloV5DetectPostProcess 的方法，这里使用标准库的排序
-    std::vector<std::pair<float, int>> scoreIndexPairs;
-    for (int i = 0; i < objProbs.size(); ++i) {
-        scoreIndexPairs.push_back({objProbs[i], i});
-    }
-    std::sort(scoreIndexPairs.begin(), scoreIndexPairs.end(), 
-              [](const std::pair<float, int>& a, const std::pair<float, int>& b) {
-                  return a.first > b.first;
-              });
-    
-    for (int i = 0; i < scoreIndexPairs.size(); ++i) {
-        indexArray[i] = scoreIndexPairs[i].second;
-    }
+    // 使用与main.cpp中相同的快速排序方法
+    quickSortIndices(objProbs, 0, validCount - 1, indexArray);
 
     std::set<int> class_set(classId.begin(), classId.end());
 
@@ -113,10 +102,11 @@ int YoloV5DetectPostProcess::process(
         int id = classId[n];
         float obj_conf = objProbs[i];
 
-        group->results[last_count].box.left = YoloBasePostProcess::clamp(x1 / scale_w, 0, model_in_w);
-        group->results[last_count].box.top = YoloBasePostProcess::clamp(y1 / scale_h, 0, model_in_h);
-        group->results[last_count].box.right = YoloBasePostProcess::clamp(x2 / scale_w, 0, model_in_w);
-        group->results[last_count].box.bottom = YoloBasePostProcess::clamp(y2 / scale_h, 0, model_in_h);
+        // 使用与main.cpp一致的坐标计算方式
+        group->results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
+        group->results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
+        group->results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_w);
+        group->results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
         group->results[last_count].prop = obj_conf;
         
         // 设置标签名称，这里只是框架，实际需要从外部加载标签
