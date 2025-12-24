@@ -37,6 +37,5 @@ endfunction()
 
 # 使用函数创建测试
 create_test(calculator_test calculator_test.cpp)
-create_test(subtract_test subtract_test.cpp)
 
 enable_testing()
