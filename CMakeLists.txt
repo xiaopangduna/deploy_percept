@@ -22,6 +22,9 @@ include_directories(include)
 add_library(deploy_percept STATIC
     src/calculator/Calculator.cpp
     src/utils/logger_factory.cpp
+    src/post_process/YoloBasePostProcess.cpp
+    src/post_process/YoloV5DetectPostProcess.cpp
+    src/post_process/PostProcessFactory.cpp
 )
 
 # 链接OpenCV库到我们的库
