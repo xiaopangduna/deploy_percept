@@ -6,7 +6,7 @@
 // 前向声明，避免包含 spdlog 头文件到公共接口
 
 
-namespace skeleton_cpp
+namespace deploy_percept
 {
     namespace calculator
     {

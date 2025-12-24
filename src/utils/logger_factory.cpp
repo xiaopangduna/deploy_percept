@@ -5,7 +5,7 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include <memory>
 
-namespace skeleton_cpp::calculator {
+namespace deploy_percept::calculator {
 
 std::shared_ptr<spdlog::logger> create_app_logger(
     bool is_debug,
@@ -46,4 +46,4 @@ std::shared_ptr<spdlog::logger> create_app_logger(
     }
 }
 
-} // namespace skeleton_cpp::calculator
+} // namespace deploy_percept::calculator

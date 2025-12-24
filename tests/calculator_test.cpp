@@ -21,7 +21,7 @@ TEST_P(CalculatorAddTest, Add)
     {
         GlobalLoggerEnvironment::logger->info("Testing addition: {} + {} = {}", a, b, expected);
     }
-    EXPECT_DOUBLE_EQ(skeleton_cpp::calculator::Calculator::add(a, b), expected);
+    EXPECT_DOUBLE_EQ(deploy_percept::calculator::Calculator::add(a, b), expected);
 }
 
 // 定义加法测试用例数据
@@ -45,7 +45,7 @@ TEST(CalculatorAddDebugTest, DebugAdd)
         GlobalLoggerEnvironment::logger->info("Starting debug addition test");
     }
 
-    double result = skeleton_cpp::calculator::Calculator::add(10.5, 20.3);
+    double result = deploy_percept::calculator::Calculator::add(10.5, 20.3);
     EXPECT_DOUBLE_EQ(result, 30.8);
 
     if (GlobalLoggerEnvironment::logger)
@@ -67,7 +67,7 @@ class CalculatorSubtractTest : public ::testing::TestWithParam<std::tuple<double
 TEST_P(CalculatorSubtractTest, Subtract)
 {
     auto [a, b, expected] = GetParam();
-    EXPECT_DOUBLE_EQ(skeleton_cpp::calculator::Calculator::subtract(a, b), expected);
+    EXPECT_DOUBLE_EQ(deploy_percept::calculator::Calculator::subtract(a, b), expected);
 }
 
 // 定义减法测试用例数据
@@ -86,7 +86,7 @@ INSTANTIATE_TEST_SUITE_P(
 // 简单的调试测试函数，测试减法
 TEST(CalculatorSubtractDebugTest, DebugSubtract)
 {
-    double result = skeleton_cpp::calculator::Calculator::subtract(30.8, 10.5);
+    double result = deploy_percept::calculator::Calculator::subtract(30.8, 10.5);
     EXPECT_DOUBLE_EQ(result, 20.3);
 }
 
@@ -100,7 +100,7 @@ class CalculatorFixtureTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        calc = new skeleton_cpp::calculator::Calculator();
+        calc = new deploy_percept::calculator::Calculator();
         if (GlobalLoggerEnvironment::logger)
         {
             GlobalLoggerEnvironment::logger->info("Calculator instance created for test");
@@ -116,7 +116,7 @@ protected:
         }
     }
 
-    skeleton_cpp::calculator::Calculator *calc;
+    deploy_percept::calculator::Calculator *calc;
 };
 
 // 使用普通测试夹具测试加法功能

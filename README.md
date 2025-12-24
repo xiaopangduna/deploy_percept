@@ -1,15 +1,15 @@
-# skeleton_cpp
+# deploy_percept
 
 一个基于 CMake 构建的 C++ 项目骨架，旨在提供模块化、可复用的 C++ 库开发模板。
 
 ## 项目结构
 
 ```
-skeleton_cpp/
+deploy_percept/
 ├── CMakeLists.txt                 # 根CMakeLists.txt，配置整个项目
 ├── README.md
 ├── include/                       # 公共头文件
-│   └── skeleton_cpp/             # 项目名作为子目录
+│   └── deploy_percept/             # 项目名作为子目录
 │       └── calculator/
 │           └── Calculator.hpp    # Calculator类声明
 ├── src/                           # 源代码
@@ -65,9 +65,9 @@ make install
 ```cmake
 list(APPEND CMAKE_PREFIX_PATH "/path/to/install")  # 告诉 CMake 去哪里找包
 
-find_package(skeleton_cpp REQUIRED)
+find_package(deploy_percept REQUIRED)
 
-target_link_libraries(myExecutable PRIVATE skeleton_cpp::skeleton_cpp)
+target_link_libraries(myExecutable PRIVATE deploy_percept::deploy_percept)
 ```
 
-这样你的库 skeleton_cpp 就像 OpenCV、Boost 一样被其他模块方便调用，且自动处理依赖和头文件路径。
+这样你的库 deploy_percept 就像 OpenCV、Boost 一样被其他模块方便调用，且自动处理依赖和头文件路径。

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace skeleton_cpp {
+namespace deploy_percept {
 namespace calculator {
 
 class Calculator {
@@ -23,5 +23,5 @@ public:
 };
 
 } // namespace calculator
-} // namespace skeleton_cpp
+} // namespace deploy_percept
 

@@ -14,7 +14,7 @@ public:
         // 初始化日志系统
         try
         {
-            logger = skeleton_cpp::calculator::create_app_logger(true);
+            logger = deploy_percept::calculator::create_app_logger(true);
         }
         catch (...)
         {

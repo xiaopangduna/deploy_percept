@@ -1,6 +1,6 @@
 #include "deploy_percept/calculator/Calculator.hpp"
 
-namespace skeleton_cpp {
+namespace deploy_percept {
 namespace calculator {
 
 double Calculator::add(double a, double b) {
