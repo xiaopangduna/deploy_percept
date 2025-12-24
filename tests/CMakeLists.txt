@@ -16,13 +16,13 @@ function(create_test TEST_NAME)
     if(TARGET GTest::gtest_main)
       # 如果找到了GTest目标，则使用目标链接
       target_link_libraries(${TEST_NAME} PRIVATE
-          skeleton_cpp
+          deploy_percept
           GTest::gtest_main)
     else()
       # 否则直接链接库文件
       target_include_directories(${TEST_NAME} PRIVATE ${GTEST_INCLUDE_DIRS})
       target_link_libraries(${TEST_NAME} PRIVATE
-          skeleton_cpp
+          deploy_percept
           ${GTEST_MAIN_LIBRARIES}
           ${GTEST_LIBRARIES})
     endif()

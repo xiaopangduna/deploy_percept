@@ -1,4 +1,4 @@
-#include "skeleton_cpp/calculator/Calculator.hpp"
+#include "deploy_percept/calculator/Calculator.hpp"
 
 namespace skeleton_cpp {
 namespace calculator {
@@ -12,4 +12,4 @@ double Calculator::subtract(double a, double b) {
 }
 
 } // namespace calculator
-} // namespace skeleton_cpp
+} // namespace 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <gtest/gtest.h>
-#include "skeleton_cpp/utils/logger_factory.hpp"
+#include "deploy_percept/utils/logger_factory.hpp"
 
 // 全局环境类，用于管理整个测试过程中的日志系统
 class GlobalLoggerEnvironment : public ::testing::Environment

@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <tuple>
 
-#include "skeleton_cpp/calculator/Calculator.hpp"
+#include "deploy_percept/calculator/Calculator.hpp"
 #include "utils/environment.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

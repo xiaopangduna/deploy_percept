@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # 定义项目名称
-project(skeleton_cpp VERSION 0.1.0 LANGUAGES CXX)
+project(deploy_percept VERSION 0.1.0 LANGUAGES CXX)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -19,24 +19,24 @@ include_directories(include)
 # 添加子目录
 
 # 创建库目标
-add_library(skeleton_cpp STATIC
+add_library(deploy_percept STATIC
     src/calculator/Calculator.cpp
     src/utils/logger_factory.cpp
 )
 
 # 链接OpenCV库到我们的库
-target_link_libraries(skeleton_cpp PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT})
+target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT})
 
 # 设置库的包含目录
-target_include_directories(skeleton_cpp PUBLIC
+target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${LIBRKNNRT_INCLUDES}>
 )
 
 # 安装规则
-install(TARGETS skeleton_cpp
-    EXPORT skeleton_cppTargets
+install(TARGETS deploy_percept
+    EXPORT deploy_perceptTargets
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -47,10 +47,10 @@ install(DIRECTORY include/
     DESTINATION include
 )
 
-install(EXPORT skeleton_cppTargets
-    FILE skeleton_cppConfig.cmake
-    NAMESPACE skeleton_cpp::
-    DESTINATION lib/cmake/skeleton_cpp
+install(EXPORT deploy_perceptTargets
+    FILE deploy_perceptConfig.cmake
+    NAMESPACE deploy_percept::
+    DESTINATION lib/cmake/deploy_percept
 )
 
 # 添加子目录
