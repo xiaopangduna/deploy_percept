@@ -556,6 +556,89 @@ void saveInt8ArrayAsNpy(const std::string& filename,
     std::cout << ")" << std::endl;
 }
 
+// 保存参数到JSON文件
+void saveParamsToJson(const std::string& filename,
+                     int model_h, int model_w,
+                     float box_conf_threshold, float nms_threshold,
+                     BOX_RECT pads,
+                     float scale_w, float scale_h,
+                     std::vector<int32_t> qnt_zps,
+                     std::vector<float> qnt_scales) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Cannot open file for writing: " << filename << std::endl;
+        return;
+    }
+    
+    file << "{\n";
+    file << "  \"model_h\": " << model_h << ",\n";
+    file << "  \"model_w\": " << model_w << ",\n";
+    file << "  \"box_conf_threshold\": " << box_conf_threshold << ",\n";
+    file << "  \"nms_threshold\": " << nms_threshold << ",\n";
+    file << "  \"pads\": {\n";
+    file << "    \"left\": " << pads.left << ",\n";
+    file << "    \"top\": " << pads.top << ",\n";
+    file << "    \"right\": " << pads.right << ",\n";
+    file << "    \"bottom\": " << pads.bottom << "\n";
+    file << "  },\n";
+    file << "  \"scale_w\": " << scale_w << ",\n";
+    file << "  \"scale_h\": " << scale_h << ",\n";
+    file << "  \"qnt_zps\": [";
+    for (size_t i = 0; i < qnt_zps.size(); ++i) {
+        file << qnt_zps[i];
+        if (i < qnt_zps.size() - 1) file << ", ";
+    }
+    file << "],\n";
+    file << "  \"qnt_scales\": [";
+    for (size_t i = 0; i < qnt_scales.size(); ++i) {
+        file << qnt_scales[i];
+        if (i < qnt_scales.size() - 1) file << ", ";
+    }
+    file << "]\n";
+    file << "}\n";
+    
+    file.close();
+    std::cout << "Saved parameters to JSON file: " << filename << std::endl;
+}
+
+// 保存检测结果到JSON文件
+void saveDetectionResultsToJson(const std::string& filename, detect_result_group_t* group) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Cannot open file for writing: " << filename << std::endl;
+        return;
+    }
+    
+    file << "{\n";
+    file << "  \"detection_count\": " << group->count << ",\n";
+    file << "  \"detections\": [\n";
+    
+    for (int i = 0; i < group->count; i++) {
+        detect_result_t* det_result = &(group->results[i]);
+        
+        file << "    {\n";
+        file << "      \"id\": " << i << ",\n";
+        file << "      \"name\": \"" << det_result->name << "\",\n";
+        file << "      \"box\": {\n";
+        file << "        \"left\": " << det_result->box.left << ",\n";
+        file << "        \"top\": " << det_result->box.top << ",\n";
+        file << "        \"right\": " << det_result->box.right << ",\n";
+        file << "        \"bottom\": " << det_result->box.bottom << "\n";
+        file << "      },\n";
+        file << "      \"prop\": " << det_result->prop << "\n";
+        file << "    }";
+        
+        if (i < group->count - 1) file << ",";
+        file << "\n";
+    }
+    
+    file << "  ]\n";
+    file << "}\n";
+    
+    file.close();
+    std::cout << "Saved detection results to JSON file: " << filename << std::endl;
+}
+
 int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
@@ -733,12 +816,23 @@ int main()
   auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
   
   // 保存三个输出到NPY文件
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/output0_" + std::to_string(timestamp) + ".npy", output0_ptr, output0_shape, 3);
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/output1_" + std::to_string(timestamp) + ".npy", output1_ptr, output1_shape, 3);
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/output2_" + std::to_string(timestamp) + ".npy", output2_ptr, output2_shape, 3);
+  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output0.npy", 
+                     output0_ptr, output0_shape, 3);
+  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output1.npy", 
+                     output1_ptr, output1_shape, 3);
+  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output2.npy", 
+                     output2_ptr, output2_shape, 3);
+  
+  // 保存参数到JSON文件
+  saveParamsToJson("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_params.json",
+                   height, width, box_conf_threshold, nms_threshold,
+                   pads, scale_w, scale_h, out_zps, out_scales);
   
   post_process((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, height, width,
                box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+
+  // 保存检测结果到JSON文件
+  saveDetectionResultsToJson("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_detect_results.json", &detect_result_group);
 
   // 画框和概率
   char text[256];
