@@ -1,1 +1,1 @@
-cd build && ctest
+cd build && ctest -V

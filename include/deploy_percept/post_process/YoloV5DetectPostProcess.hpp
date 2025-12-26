@@ -31,11 +31,9 @@ namespace deploy_percept
             // 结果结构体
             struct Result
             {
-                DetectResultGroup group;
-                bool success;
-                std::string message; // 可选的详细信息
-
-                Result() : group(), success(false), message() {}
+                DetectResultGroup group{};
+                bool success = false;
+                std::string message{}; // 可选的详细信息
             };
 
             // 使用参数结构体的构造函数
@@ -58,7 +56,7 @@ namespace deploy_percept
 
         private:
             Params params_;
-            Result result_;
+            Result result_{};
             void quickSortIndices(std::vector<float> &input, int left, int right, std::vector<int> &indices);
 
             int processYoloOutput(int8_t *input, int *anchor, int grid_h, int grid_w,

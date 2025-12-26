@@ -3,7 +3,6 @@
 #include <cstring>
 #include <fstream>
 #include <streambuf>
-#include <dirent.h>
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
@@ -251,8 +250,10 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     std::vector<int8_t> input0, input1, input2;
     std::vector<int> shape0, shape1, shape2;
     
-    // 直接使用固定的NPZ输出文件路径
-    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_outputs.npz";
+    // 定义项目根目录路径前缀（当前工作目录已设置为项目根目录）
+    std::string workspaceFolder = "";
+    // 使用项目根目录作为工作路径
+    std::string npz_path = workspaceFolder + "examples/data/yolov5_detect/yolov5_outputs.npz";
     
     bool success = false;
     
@@ -262,13 +263,13 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     
     // 如果无法读取真实数据，则跳过测试
     if (!success) {
-        std::cout << "Could not load real data from NPZ file, skipping this test." << std::endl;
+        std::cout << "Could not load real data from NPZ file: " << npz_path << ", skipping this test." << std::endl;
         GTEST_SKIP() << "Real NPZ data file not found";
         return;
     }
     
-    // 使用固定的参数文件路径，现在是YAML格式
-    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.yaml";
+    // 使用相对路径的参数文件
+    std::string params_path = workspaceFolder + "examples/data/yolov5_detect/yolov5_params.yaml";
     
     // 读取参数YAML文件
     int model_in_h, model_in_w;
@@ -286,7 +287,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     
     if (!params_loaded) {
         std::cout << "Could not load parameters from file: " << params_path << ", skipping this test." << std::endl;
-        GTEST_SKIP() << "Parameters JSON file not found";
+        GTEST_SKIP() << "Parameters YAML file not found";
         return;
     }
     
@@ -332,12 +333,12 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     deploy_percept::post_process::DetectResultGroup expected_group;
     memset(&expected_group, 0, sizeof(expected_group));
     
-    std::string results_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_detect_results.yaml";
+    std::string results_path = workspaceFolder + "examples/data/yolov5_detect/yolov5_detect_results.yaml";
     bool expected_loaded = readExpectedResultsFromYaml(results_path, expected_group);
     
     if (!expected_loaded) {
         std::cout << "Could not load expected results from file: " << results_path << ", skipping validation." << std::endl;
-        GTEST_SKIP() << "Expected results JSON file not found";
+        GTEST_SKIP() << "Expected results YAML file not found";
         return;
     }
     
