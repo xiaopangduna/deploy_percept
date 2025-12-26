@@ -222,7 +222,9 @@ protected:
         }
         
         // 初始化一个基本的YoloV5DetectPostProcess实例
-        processor = std::make_unique<deploy_percept::post_process::YoloV5DetectPostProcess>();
+        processor = std::make_unique<deploy_percept::post_process::YoloV5DetectPostProcess>(
+            deploy_percept::post_process::YoloV5DetectPostProcess::Params{}
+        );
     }
 
     void TearDown() override

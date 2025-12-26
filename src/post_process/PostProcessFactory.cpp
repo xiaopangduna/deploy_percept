@@ -7,7 +7,7 @@ namespace post_process {
 std::unique_ptr<BasePostProcess> PostProcessFactory::create(PostProcessType type) {
     switch (type) {
         case PostProcessType::YOLOV5:
-            return std::make_unique<YoloV5DetectPostProcess>();
+            return std::make_unique<YoloV5DetectPostProcess>(YoloV5DetectPostProcess::Params());
         default:
             return nullptr;
     }
