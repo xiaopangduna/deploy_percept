@@ -494,69 +494,6 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
   return 0;
 }
 
-// 保存int8数组到NPY格式的函数
-void saveInt8ArrayAsNpy(const std::string& filename, 
-                       const int8_t* data, 
-                       int32_t* shape,  // shape数组，例如[batch, height, width, channels]
-                       int ndim) {
-    std::ofstream file(filename, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open file for writing: " << filename << std::endl;
-        return;
-    }
-
-    // 构建头信息
-    std::string shape_str = "";
-    for (int i = 0; i < ndim; i++) {
-        shape_str += std::to_string(shape[i]);
-        if (i < ndim - 1) shape_str += ", ";
-    }
-    
-    std::string header_dict = "{'descr': '<i1', 'fortran_order': False, 'shape': (" + shape_str + ",)}";
-    
-    // 对齐到64字节边界
-    int header_len = header_dict.length();
-    int padding = 64 - ((10 + header_len) % 64);
-    if (padding < 0) padding += 64;
-    
-    for (int i = 0; i < padding; i++) {
-        header_dict += " ";
-    }
-    header_dict += "\n";
-    
-    // 写入文件头 (魔数 + 版本 + 头长度)
-    unsigned char magic[6] = {0x93, 'N', 'U', 'M', 'P', 'Y'};
-    file.write(reinterpret_cast<char*>(magic), 6);
-    
-    // 版本号 (1.0)
-    uint8_t version[] = {1, 0};
-    file.write(reinterpret_cast<char*>(version), 2);
-    
-    // 头部长度
-    uint16_t header_len_final = static_cast<uint16_t>(header_dict.length());
-    file.write(reinterpret_cast<char*>(&header_len_final), 2);
-    
-    // 写入头数据
-    file.write(header_dict.c_str(), header_dict.length());
-    
-    // 计算数据元素总数
-    size_t total_elements = 1;
-    for (int i = 0; i < ndim; i++) {
-        total_elements *= shape[i];
-    }
-    
-    // 写入实际数据
-    file.write(reinterpret_cast<const char*>(data), total_elements * sizeof(int8_t));
-    file.close();
-    
-    std::cout << "Saved NPY file: " << filename << " with shape (";
-    for (int i = 0; i < ndim; i++) {
-        std::cout << shape[i];
-        if (i < ndim - 1) std::cout << ", ";
-    }
-    std::cout << ")" << std::endl;
-}
-
 // 保存参数到JSON文件
 void saveParamsToJson(const std::string& filename,
                      int model_h, int model_w,

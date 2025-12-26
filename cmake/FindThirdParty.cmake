@@ -13,6 +13,7 @@ set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 # 导入自定义的查找模块
 include(FindOpenCVCustom)
 include(FindSpdlogCustom)
+include(FindYamlCppCustom)
 include(FindRknn)
 include(FindCnpyCustom)
 

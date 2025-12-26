@@ -5,10 +5,10 @@
 #include <streambuf>
 #include <dirent.h>
 #include <algorithm>
-#include <regex>
-#include <sstream>
 #include <iostream>
 #include <stdexcept>
+
+#include <yaml-cpp/yaml.h>
 
 #include "cnpy.h"
 
@@ -20,14 +20,14 @@
 // YoloV5后处理相关测试
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// 读取NPZ文件的辅助函数
-bool readNpzFile(const std::string& filename, 
-                 std::vector<int8_t>& output0_data, std::vector<int>& output0_shape,
-                 std::vector<int8_t>& output1_data, std::vector<int>& output1_shape,
-                 std::vector<int8_t>& output2_data, std::vector<int>& output2_shape) {
+// 从NPZ文件读取数据的辅助函数
+bool readNpzFile(const std::string& filepath, 
+                 std::vector<int8_t>& output0, std::vector<int>& shape0,
+                 std::vector<int8_t>& output1, std::vector<int>& shape1,
+                 std::vector<int8_t>& output2, std::vector<int>& shape2) {
     try {
         // 加载NPZ文件
-        cnpy::npz_t npzFile = cnpy::npz_load(filename);
+        cnpy::npz_t npzFile = cnpy::npz_load(filepath);
         
         // 获取output0
         cnpy::NpyArray arr0 = npzFile["output0"];
@@ -35,10 +35,10 @@ bool readNpzFile(const std::string& filename,
             std::cerr << "output0 data type mismatch" << std::endl;
             return false;
         }
-        output0_data.resize(arr0.num_vals);
-        std::memcpy(output0_data.data(), arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
+        output0.resize(arr0.num_vals);
+        std::memcpy(output0.data(), arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
         
-        output0_shape.assign(arr0.shape.begin(), arr0.shape.end());
+        shape0.assign(arr0.shape.begin(), arr0.shape.end());
         
         // 获取output1
         cnpy::NpyArray arr1 = npzFile["output1"];
@@ -46,10 +46,10 @@ bool readNpzFile(const std::string& filename,
             std::cerr << "output1 data type mismatch" << std::endl;
             return false;
         }
-        output1_data.resize(arr1.num_vals);
-        std::memcpy(output1_data.data(), arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
+        output1.resize(arr1.num_vals);
+        std::memcpy(output1.data(), arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
         
-        output1_shape.assign(arr1.shape.begin(), arr1.shape.end());
+        shape1.assign(arr1.shape.begin(), arr1.shape.end());
         
         // 获取output2
         cnpy::NpyArray arr2 = npzFile["output2"];
@@ -57,10 +57,10 @@ bool readNpzFile(const std::string& filename,
             std::cerr << "output2 data type mismatch" << std::endl;
             return false;
         }
-        output2_data.resize(arr2.num_vals);
-        std::memcpy(output2_data.data(), arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
+        output2.resize(arr2.num_vals);
+        std::memcpy(output2.data(), arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
         
-        output2_shape.assign(arr2.shape.begin(), arr2.shape.end());
+        shape2.assign(arr2.shape.begin(), arr2.shape.end());
         
         return true;
     } catch (const std::exception& e) {
@@ -69,119 +69,144 @@ bool readNpzFile(const std::string& filename,
     }
 }
 
-// 读取参数JSON文件的辅助函数
-bool readParamsJson(const std::string& filename, 
-                   int& model_in_h, int& model_in_w, 
+// 从YAML文件读取参数的辅助函数
+bool readParamsYaml(const std::string& filepath,
+                   int& model_in_h, int& model_in_w,
                    float& box_conf_threshold, float& nms_threshold,
                    deploy_percept::post_process::BoxRect& pads,
                    float& scale_w, float& scale_h,
                    std::vector<int32_t>& qnt_zps,
                    std::vector<float>& qnt_scales) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open params file: " << filename << std::endl;
+    try {
+        YAML::Node config = YAML::LoadFile(filepath);
+        
+        // 读取基本参数
+        model_in_h = config["model_h"].as<int>();
+        model_in_w = config["model_w"].as<int>();
+        box_conf_threshold = config["box_conf_threshold"].as<float>();
+        nms_threshold = config["nms_threshold"].as<float>();
+        scale_w = config["scale_w"].as<float>();
+        scale_h = config["scale_h"].as<float>();
+        
+        // 读取pads参数
+        YAML::Node pads_node = config["pads"];
+        if (pads_node) {
+            pads.left = pads_node["left"].as<int>();
+            pads.top = pads_node["top"].as<int>();
+            pads.right = pads_node["right"].as<int>();
+            pads.bottom = pads_node["bottom"].as<int>();
+        }
+        
+        // 读取量化参数
+        if (config["qnt_zps"]) {
+            qnt_zps.clear();
+            for (const auto& val : config["qnt_zps"]) {
+                qnt_zps.push_back(val.as<int32_t>());
+            }
+        }
+        
+        if (config["qnt_scales"]) {
+            qnt_scales.clear();
+            for (const auto& val : config["qnt_scales"]) {
+                qnt_scales.push_back(val.as<float>());
+            }
+        }
+        
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading YAML file: " << e.what() << std::endl;
         return false;
     }
+}
 
-    std::string content;
-    std::string line;
-    while (std::getline(file, line)) {
-        content += line + "\n";
-    }
-    file.close();
-
-    // 简单解析JSON内容
-    std::istringstream stream(content);
-    std::string part;
-    while (std::getline(stream, part, ',')) {
-        // 查找键值对
-        size_t colon_pos = part.find(':');
-        if (colon_pos != std::string::npos) {
-            std::string key = part.substr(0, colon_pos);
-            std::string value = part.substr(colon_pos + 1);
+// 从YAML文件读取预期检测结果的辅助函数
+bool readExpectedResultsFromYaml(const std::string& filepath,
+                                deploy_percept::post_process::DetectResultGroup& expected_group) {
+    try {
+        YAML::Node config = YAML::LoadFile(filepath);
+        
+        // 读取检测数量
+        expected_group.count = config["detection_count"].as<int>();
+        
+        // 读取检测结果
+        YAML::Node detections = config["detections"];
+        int idx = 0;
+        for (const auto& detection : detections) {
+            if (idx >= 64) break; // 防止越界
             
-            // 清理键和值的空格
-            key.erase(0, key.find_first_not_of(" \t\n\r\"{"));
-            key.erase(key.find_last_not_of(" \t\n\r\"}") + 1);
-            value.erase(0, value.find_first_not_of(" \t\n\r: [{"));
-            value.erase(value.find_last_not_of(" \t\n\r}]") + 1);
+            // 读取名称
+            std::string name = detection["name"].as<std::string>();
+            strncpy(expected_group.results[idx].name, name.c_str(), sizeof(expected_group.results[idx].name) - 1);
+            expected_group.results[idx].name[sizeof(expected_group.results[idx].name) - 1] = '\0';
             
-            if (key == "model_h") {
-                model_in_h = std::stoi(value);
-            } else if (key == "model_w") {
-                model_in_w = std::stoi(value);
-            } else if (key == "box_conf_threshold") {
-                box_conf_threshold = std::stof(value);
-            } else if (key == "nms_threshold") {
-                nms_threshold = std::stof(value);
-            } else if (key == "scale_w") {
-                scale_w = std::stof(value);
-            } else if (key == "scale_h") {
-                scale_h = std::stof(value);
-            }
+            // 读取边界框
+            YAML::Node box = detection["box"];
+            expected_group.results[idx].box.left = box["left"].as<int>();
+            expected_group.results[idx].box.top = box["top"].as<int>();
+            expected_group.results[idx].box.right = box["right"].as<int>();
+            expected_group.results[idx].box.bottom = box["bottom"].as<int>();
+            
+            // 读取置信度
+            expected_group.results[idx].prop = detection["prop"].as<float>();
+            
+            idx++;
         }
         
-        // 检查pads部分
-        if (part.find("pads") != std::string::npos) {
-            // 解析pads部分
-            if (part.find("left") != std::string::npos) {
-                size_t pos = part.find("left");
-                size_t val_start = part.find(':', pos) + 1;
-                size_t val_end = part.find(',', val_start);
-                if (val_end == std::string::npos) val_end = part.find('}', val_start);
-                pads.left = std::stoi(part.substr(val_start, val_end - val_start));
-            }
-            if (part.find("\"top\"") != std::string::npos) {
-                size_t pos = part.find("\"top\"");
-                size_t val_start = part.find(':', pos) + 1;
-                size_t val_end = part.find(',', val_start);
-                pads.top = std::stoi(part.substr(val_start, val_end - val_start));
-            }
-            if (part.find("\"right\"") != std::string::npos) {
-                size_t pos = part.find("\"right\"");
-                size_t val_start = part.find(':', pos) + 1;
-                size_t val_end = part.find(',', val_start);
-                pads.right = std::stoi(part.substr(val_start, val_end - val_start));
-            }
-            if (part.find("\"bottom\"") != std::string::npos) {
-                size_t pos = part.find("\"bottom\"");
-                size_t val_start = part.find(':', pos) + 1;
-                size_t val_end = part.find(',', val_start);
-                if (val_end == std::string::npos) val_end = part.find('}', val_start);
-                pads.bottom = std::stoi(part.substr(val_start, val_end - val_start));
-            }
-        }
-        
-        // 检查数组部分
-        if (part.find("qnt_zps") != std::string::npos) {
-            size_t start = content.find("\"qnt_zps\": [") + 12; // length of "\"qnt_zps\": ["
-            size_t end = content.find("]", start);
-            std::string zps_str = content.substr(start, end - start);
-            
-            std::stringstream ss(zps_str);
-            std::string item;
-            qnt_zps.clear();
-            while (std::getline(ss, item, ',')) {
-                item.erase(0, item.find_first_not_of(" \t\n\r"));
-                item.erase(item.find_last_not_of(" \t\n\r") + 1);
-                qnt_zps.push_back(std::stoi(item));
-            }
-        }
-        if (part.find("qnt_scales") != std::string::npos) {
-            size_t start = content.find("\"qnt_scales\": [") + 15; // length of "\"qnt_scales\": ["
-            size_t end = content.find("]", start);
-            std::string scales_str = content.substr(start, end - start);
-            
-            std::stringstream ss(scales_str);
-            std::string item;
-            qnt_scales.clear();
-            while (std::getline(ss, item, ',')) {
-                item.erase(0, item.find_first_not_of(" \t\n\r"));
-                item.erase(item.find_last_not_of(" \t\n\r") + 1);
-                qnt_scales.push_back(std::stof(item));
-            }
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading YAML file: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+// 比较两个检测结果是否相等（考虑浮点数精度）
+bool compareDetectionResults(const deploy_percept::post_process::DetectResult& a,
+                           const deploy_percept::post_process::DetectResult& b,
+                           float tolerance = 0.01f) {
+    // 比较名称
+    // if (strcmp(a.name, b.name) != 0) {
+    //     return false;
+    // }
+    
+    // 比较边界框
+    if (a.box.left != b.box.left || a.box.top != b.box.top || 
+        a.box.right != b.box.right || a.box.bottom != b.box.bottom) {
+        return false;
+    }
+    
+    // 比较置信度，考虑浮点误差
+    if (abs(a.prop - b.prop) > tolerance) {
+        return false;
+    }
+    
+    return true;
+}
+
+// 比较检测结果组是否相等
+bool compareResultGroups(const deploy_percept::post_process::DetectResultGroup& actual,
+                        const deploy_percept::post_process::DetectResultGroup& expected,
+                        float tolerance = 0.01f) {
+    if (actual.count != expected.count) {
+        std::cout << "Detection count mismatch: actual=" << actual.count << ", expected=" << expected.count << std::endl;
+        return false;
+    }
+    
+    // 简单比较，按顺序对比
+    for (int i = 0; i < actual.count; ++i) {
+        if (!compareDetectionResults(actual.results[i], expected.results[i], tolerance)) {
+            std::cout << "Detection result " << i << " mismatch:" << std::endl;
+            std::cout << "  Actual: " << actual.results[i].name 
+                      << " [" << actual.results[i].box.left << "," << actual.results[i].box.top 
+                      << "," << actual.results[i].box.right << "," << actual.results[i].box.bottom 
+                      << "] prop=" << actual.results[i].prop << std::endl;
+            std::cout << "  Expected: " << expected.results[i].name 
+                      << " [" << expected.results[i].box.left << "," << expected.results[i].box.top 
+                      << "," << expected.results[i].box.right << "," << expected.results[i].box.bottom 
+                      << "] prop=" << expected.results[i].prop << std::endl;
+            return false;
         }
     }
+    
     return true;
 }
 
@@ -225,7 +250,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     std::vector<int> shape0, shape1, shape2;
     
     // 直接使用固定的NPZ输出文件路径
-    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
+    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_outputs.npz";
     
     bool success = false;
     
@@ -240,10 +265,10 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         return;
     }
     
-    // 使用固定的参数文件路径
-    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
+    // 使用固定的参数文件路径，现在是YAML格式
+    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.yaml";
     
-    // 读取参数JSON文件
+    // 读取参数YAML文件
     int model_in_h, model_in_w;
     float box_conf_threshold = 0.5f, nms_threshold = 0.5f;
     deploy_percept::post_process::BoxRect pads = {0, 0, 0, 0};
@@ -251,7 +276,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     std::vector<int32_t> qnt_zps;
     std::vector<float> qnt_scales;
     
-    bool params_loaded = readParamsJson(params_path, 
+    bool params_loaded = readParamsYaml(params_path, 
                                        model_in_h, model_in_w, 
                                        box_conf_threshold, nms_threshold,
                                        pads, scale_w, scale_h,
@@ -306,6 +331,30 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
                   << " at (" << group.results[i].box.left << ", " << group.results[i].box.top 
                   << ", " << group.results[i].box.right << ", " << group.results[i].box.bottom 
                   << ") with confidence " << group.results[i].prop << std::endl;
+    }
+    
+    // 验证group和预期结果是否一致
+    deploy_percept::post_process::DetectResultGroup expected_group;
+    memset(&expected_group, 0, sizeof(expected_group));
+    
+    std::string results_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_detect_results.yaml";
+    bool expected_loaded = readExpectedResultsFromYaml(results_path, expected_group);
+    
+    if (!expected_loaded) {
+        std::cout << "Could not load expected results from file: " << results_path << ", skipping validation." << std::endl;
+        GTEST_SKIP() << "Expected results JSON file not found";
+        return;
+    }
+    
+    std::cout << "Validating detection results against expected results..." << std::endl;
+    bool results_match = compareResultGroups(group, expected_group);
+    
+    if (results_match) {
+        std::cout << "Detection results match expected results!" << std::endl;
+        EXPECT_TRUE(results_match);
+    } else {
+        std::cout << "Detection results do not match expected results." << std::endl;
+        EXPECT_FALSE(true) << "Detection results do not match expected results";
     }
 }
 

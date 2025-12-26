@@ -1,0 +1,13 @@
+model_h: 640
+model_w: 640
+box_conf_threshold: 0.25
+nms_threshold: 0.45
+pads:
+  left: 0
+  top: 0
+  right: 0
+  bottom: 0
+scale_w: 1
+scale_h: 1
+qnt_zps: [-128, -128, -128]
+qnt_scales: [0.00392157, 0.00392157, 0.00392157]
