@@ -36,9 +36,6 @@ public:
 private:
     // YoloV5特有的一些处理函数
     void quickSortIndices(std::vector<float>& input, int left, int right, std::vector<int>& indices);
-    int8_t qntF32ToAffine(float f32, int32_t zp, float scale);
-    float deqntAffineToF32(int8_t qnt, int32_t zp, float scale);
-    int32_t clip(float val, float min, float max);
 };
 
 } // namespace post_process

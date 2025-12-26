@@ -42,6 +42,11 @@ public:
         return val > min ? (val < max ? static_cast<int>(val) : max) : min;
     }
 
+    // 通用的量化和反量化函数
+    static int8_t qntF32ToAffine(float f32, int32_t zp, float scale);
+    static float deqntAffineToF32(int8_t qnt, int32_t zp, float scale);
+    static int32_t clip(float val, float min, float max);
+
     // 通用的NMS实现
     int nms(int validCount, std::vector<float>& outputLocations, std::vector<int> classIds, 
             std::vector<int>& order, int filterId, float threshold);

@@ -198,20 +198,6 @@ void YoloV5DetectPostProcess::quickSortIndices(std::vector<float>& input, int le
     }
 }
 
-int8_t YoloV5DetectPostProcess::qntF32ToAffine(float f32, int32_t zp, float scale) {
-    float dst_val = (f32 / scale) + zp;
-    int8_t res = (int8_t)clip(dst_val, -128, 127);
-    return res;
-}
-
-float YoloV5DetectPostProcess::deqntAffineToF32(int8_t qnt, int32_t zp, float scale) {
-    return ((float)qnt - (float)zp) * scale;
-}
-
-int32_t YoloV5DetectPostProcess::clip(float val, float min, float max) {
-    float f = val <= min ? min : (val >= max ? max : val);
-    return static_cast<int32_t>(f);
-}
 
 } // namespace post_process
 } // namespace deploy_percept
