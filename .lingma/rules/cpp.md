@@ -9,3 +9,4 @@ trigger: manual
 ### 测试规范
 1. **框架与工具**：
    - 测试框架：gtest
+   - 路径管理：filesystem
