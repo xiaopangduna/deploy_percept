@@ -3,6 +3,7 @@
 #include <string>
 #include "rknn_api.h"
 
+#include "cnpy.h"
 #include <stdio.h>
 // #include "im2d.h"
 // #include "rga.h"
@@ -815,13 +816,13 @@ int main()
   auto duration = now.time_since_epoch();
   auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
   
-  // 保存三个输出到NPY文件
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output0.npy", 
-                     output0_ptr, output0_shape, 3);
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output1.npy", 
-                     output1_ptr, output1_shape, 3);
-  saveInt8ArrayAsNpy("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_output2.npy", 
-                     output2_ptr, output2_shape, 3);
+  // 使用NPZ格式保存三个输出到一个文件
+  std::string npz_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
+  cnpy::npz_save(npz_filename, "output0", output0_ptr, {output0_shape, output0_shape+3}, "w");  // write mode
+  cnpy::npz_save(npz_filename, "output1", output1_ptr, {output1_shape, output1_shape+3}, "a");  // append mode
+  cnpy::npz_save(npz_filename, "output2", output2_ptr, {output2_shape, output2_shape+3}, "a");  // append mode
+  
+  std::cout << "Saved YOLOv5 outputs to NPZ file: " << npz_filename << std::endl;
   
   // 保存参数到JSON文件
   saveParamsToJson("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_params.json",

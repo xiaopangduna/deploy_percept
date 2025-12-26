@@ -14,5 +14,6 @@ set(THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/third_party")
 include(FindOpenCVCustom)
 include(FindSpdlogCustom)
 include(FindRknn)
+include(FindCnpyCustom)
 
 message(STATUS "已完成第三方库配置")

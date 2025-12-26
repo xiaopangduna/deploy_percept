@@ -8,6 +8,9 @@
 #include <regex>
 #include <sstream>
 #include <iostream>
+#include <stdexcept>
+
+#include "cnpy.h"
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
@@ -17,98 +20,53 @@
 // YoloV5后处理相关测试
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// 从目录中查找最新的output NPY文件
-std::string findLatestOutputFile(const std::string& pattern) {
-    DIR* dir;
-    struct dirent* ent;
-    std::vector<std::string> files;
-    std::regex pattern_regex(pattern);
-    
-    if ((dir = opendir("/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/")) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            std::string filename = ent->d_name;
-            if (std::regex_match(filename, pattern_regex)) {
-                files.push_back("/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/" + filename);
-            }
-        }
-        closedir(dir);
-    } else {
-        std::cerr << "Could not open directory" << std::endl;
-        return "";
-    }
-    
-    if (files.empty()) {
-        return "";
-    }
-    
-    // 按文件名排序，找到最新的文件（按时间戳）
-    std::sort(files.begin(), files.end());
-    return files.back(); // 返回最后一个（最新的）文件
-}
-
-// 读取NPY文件的辅助函数
-bool readNpyFile(const std::string& filename, std::vector<int8_t>& data, std::vector<int>& shape) {
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open file: " << filename << std::endl;
-        return false;
-    }
-
-    // 读取魔数
-    char magic[6];
-    file.read(magic, 6);
-    if (magic[0] != 0x93 || magic[1] != 'N' || magic[2] != 'U' || 
-        magic[3] != 'M' || magic[4] != 'P' || magic[5] != 'Y') {
-        std::cerr << "Invalid NPY file: " << filename << std::endl;
-        return false;
-    }
-
-    // 读取版本
-    uint8_t version[2];
-    file.read(reinterpret_cast<char*>(version), 2);
-
-    // 读取头长度
-    uint16_t header_len;
-    file.read(reinterpret_cast<char*>(&header_len), 2);
-
-    // 读取头
-    std::vector<char> header(header_len + 1);  // +1 for null terminator
-    file.read(header.data(), header_len);
-    header[header_len] = '\0';
-
-    // 解析头部信息，提取shape
-    std::string header_str(header.data());
-    
-    // 简单解析shape - 在实际项目中可能需要更复杂的解析
-    // 这里我们假设格式是已知的
-    size_t shape_pos = header_str.find("shape': (");
-    if (shape_pos != std::string::npos) {
-        size_t start = shape_pos + 9; // length of "shape': ("
-        size_t end = header_str.find(")", start);
-        std::string shape_str = header_str.substr(start, end - start);
+// 读取NPZ文件的辅助函数
+bool readNpzFile(const std::string& filename, 
+                 std::vector<int8_t>& output0_data, std::vector<int>& output0_shape,
+                 std::vector<int8_t>& output1_data, std::vector<int>& output1_shape,
+                 std::vector<int8_t>& output2_data, std::vector<int>& output2_shape) {
+    try {
+        // 加载NPZ文件
+        cnpy::npz_t npzFile = cnpy::npz_load(filename);
         
-        // 解析维度
-        size_t pos = 0;
-        std::string token;
-        while ((pos = shape_str.find(", ")) != std::string::npos) {
-            token = shape_str.substr(0, pos);
-            shape.push_back(std::stoi(token));
-            shape_str.erase(0, pos + 2);
+        // 获取output0
+        cnpy::NpyArray arr0 = npzFile["output0"];
+        if (arr0.word_size != sizeof(int8_t)) {
+            std::cerr << "output0 data type mismatch" << std::endl;
+            return false;
         }
-        shape.push_back(std::stoi(shape_str)); // 添加最后一个维度
+        output0_data.resize(arr0.num_vals);
+        std::memcpy(output0_data.data(), arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
+        
+        output0_shape.assign(arr0.shape.begin(), arr0.shape.end());
+        
+        // 获取output1
+        cnpy::NpyArray arr1 = npzFile["output1"];
+        if (arr1.word_size != sizeof(int8_t)) {
+            std::cerr << "output1 data type mismatch" << std::endl;
+            return false;
+        }
+        output1_data.resize(arr1.num_vals);
+        std::memcpy(output1_data.data(), arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
+        
+        output1_shape.assign(arr1.shape.begin(), arr1.shape.end());
+        
+        // 获取output2
+        cnpy::NpyArray arr2 = npzFile["output2"];
+        if (arr2.word_size != sizeof(int8_t)) {
+            std::cerr << "output2 data type mismatch" << std::endl;
+            return false;
+        }
+        output2_data.resize(arr2.num_vals);
+        std::memcpy(output2_data.data(), arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
+        
+        output2_shape.assign(arr2.shape.begin(), arr2.shape.end());
+        
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading NPZ file: " << e.what() << std::endl;
+        return false;
     }
-
-    // 计算数据大小
-    size_t data_size = 1;
-    for (int dim : shape) {
-        data_size *= dim;
-    }
-
-    // 读取数据
-    data.resize(data_size);
-    file.read(reinterpret_cast<char*>(data.data()), data_size * sizeof(int8_t));
-
-    return true;
 }
 
 // 读取参数JSON文件的辅助函数
@@ -254,42 +212,36 @@ protected:
     std::unique_ptr<deploy_percept::post_process::YoloV5DetectPostProcess> processor;
 };
 
-// 测试基本的process功能（使用从NPY文件读取的真实数据）
+// 测试基本的process功能（使用从NPZ文件读取的真实数据）
 TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
 {
     if (GlobalLoggerEnvironment::logger)
     {
-        GlobalLoggerEnvironment::logger->info("Testing YoloV5DetectPostProcess process function with real data from NPY files");
+        GlobalLoggerEnvironment::logger->info("Testing YoloV5DetectPostProcess process function with real data from NPZ files");
     }
 
-    // 尝试从NPY文件读取数据
+    // 尝试从NPZ文件读取数据
     std::vector<int8_t> input0, input1, input2;
     std::vector<int> shape0, shape1, shape2;
     
-    // 直接使用示例数据文件路径
-    std::string output0_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output0.npy";
-    std::string output1_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output1.npy";
-    std::string output2_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output2.npy";
-    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
+    // 直接使用固定的NPZ输出文件路径
+    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
     
-    bool success0 = false, success1 = false, success2 = false;
+    bool success = false;
     
-    if (!output0_path.empty()) {
-        success0 = readNpyFile(output0_path, input0, shape0);
-    }
-    if (!output1_path.empty()) {
-        success1 = readNpyFile(output1_path, input1, shape1);
-    }
-    if (!output2_path.empty()) {
-        success2 = readNpyFile(output2_path, input2, shape2);
+    if (!npz_path.empty()) {
+        success = readNpzFile(npz_path, input0, shape0, input1, shape1, input2, shape2);
     }
     
     // 如果无法读取真实数据，则跳过测试
-    if (!success0 || !success1 || !success2) {
-        std::cout << "Could not load real data from NPY files, skipping this test." << std::endl;
-        GTEST_SKIP() << "Real NPY data files not found";
+    if (!success) {
+        std::cout << "Could not load real data from NPZ file, skipping this test." << std::endl;
+        GTEST_SKIP() << "Real NPZ data file not found";
         return;
     }
+    
+    // 使用固定的参数文件路径
+    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
     
     // 读取参数JSON文件
     int model_in_h, model_in_w;
@@ -311,7 +263,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         return;
     }
     
-    std::cout << "Successfully loaded real data from NPY files:" << std::endl;
+    std::cout << "Successfully loaded real data from NPZ file: " << npz_path << std::endl;
     std::cout << "  Output0 shape: (" << shape0[0] << ", " << shape0[1] << ", " << shape0[2] << ")" << std::endl;
     std::cout << "  Output1 shape: (" << shape1[0] << ", " << shape1[1] << ", " << shape1[2] << ")" << std::endl;
     std::cout << "  Output2 shape: (" << shape2[0] << ", " << shape2[1] << ", " << shape2[2] << ")" << std::endl;
@@ -365,34 +317,28 @@ TEST_F(YoloV5DetectPostProcessTest, CompareWithOriginalPostProcess)
         GlobalLoggerEnvironment::logger->info("Comparing YoloV5DetectPostProcess with original post_process function");
     }
 
-    // 尝试从NPY文件读取数据
+    // 尝试从NPZ文件读取数据
     std::vector<int8_t> input0, input1, input2;
     std::vector<int> shape0, shape1, shape2;
     
-    // 直接使用示例数据文件路径
-    std::string output0_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output0.npy";
-    std::string output1_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output1.npy";
-    std::string output2_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_output2.npy";
-    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
+    // 直接使用固定的NPZ输出文件路径
+    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
     
-    bool success0 = false, success1 = false, success2 = false;
+    bool success = false;
     
-    if (!output0_path.empty()) {
-        success0 = readNpyFile(output0_path, input0, shape0);
-    }
-    if (!output1_path.empty()) {
-        success1 = readNpyFile(output1_path, input1, shape1);
-    }
-    if (!output2_path.empty()) {
-        success2 = readNpyFile(output2_path, input2, shape2);
+    if (!npz_path.empty()) {
+        success = readNpzFile(npz_path, input0, shape0, input1, shape1, input2, shape2);
     }
     
     // 如果无法读取真实数据，则跳过测试
-    if (!success0 || !success1 || !success2) {
-        std::cout << "Could not load real data from NPY files, skipping this test." << std::endl;
-        GTEST_SKIP() << "Real NPY data files not found";
+    if (!success) {
+        std::cout << "Could not load real data from NPZ file, skipping this test." << std::endl;
+        GTEST_SKIP() << "Real NPZ data file not found";
         return;
     }
+    
+    // 使用固定的参数文件路径
+    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
     
     // 读取参数JSON文件
     int model_in_h, model_in_w;

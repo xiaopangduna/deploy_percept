@@ -1,6 +1,6 @@
 #!/bin/bash
-# bash scripts/build_third_party.sh x86_64 --libs gtest,opencv
-# bash scripts/build_third_party.sh aarch64 --libs gtest,opencv
+# bash scripts/build_third_party.sh x86_64 --libs gtest,opencv,cnpy
+# bash scripts/build_third_party.sh aarch64 --libs gtest,opencv,cnpy
 # 为不同平台编译第三方库的通用脚本
 
 set -e  # 遇到错误时停止执行
@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             echo "未知选项: $1"
             echo "用法: $0 <platform> [--libs <libraries>]"
             echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog"
+            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog,cnpy"
             echo "             默认构建所有支持的库"
             exit 1
             ;;
@@ -40,7 +40,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "用法: $0 <platform> [--libs <libraries>]"
     echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv, spdlog, rknpu"
+    echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy"
     exit 1
 fi
 
@@ -97,18 +97,34 @@ fi
 
 echo "交叉编译工具链检查通过"
 
+# 检查zlib开发库是否安装
+if [ "${PLATFORM}" = "x86_64" ]; then
+    if ! pkg-config --exists zlib; then
+        echo "错误: 未找到zlib开发库"
+        echo "请先安装: sudo apt install zlib1g-dev"
+        exit 1
+    fi
+else
+    # 对于aarch64交叉编译，检查aarch64版本的zlib
+    if [ ! -f "/usr/lib/$(uname -m)-linux-gnu/aarch64-linux-gnu/libz.a" ] && [ ! -f "/usr/aarch64-linux-gnu/lib/libz.a" ]; then
+        echo "警告: 可能缺少aarch64的zlib库，如果编译失败请确认已安装aarch64的zlib开发包"
+    fi
+fi
+
 # 解析要构建的库列表
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     BUILD_GTEST=yes
     BUILD_OPENCV=yes
     BUILD_SPDLOG=yes
     BUILD_RKNPU=yes
+    BUILD_CNPY=yes
 
 else
     BUILD_GTEST=no
     BUILD_OPENCV=no
     BUILD_RKNPU=no
     BUILD_SPDLOG=no
+    BUILD_CNPY=no
 
     IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
     for lib in "${LIBS[@]}"; do
@@ -124,6 +140,9 @@ else
                 ;;
             rknpu)
                 BUILD_RKNPU=yes
+                ;;
+            cnpy)
+                BUILD_CNPY=yes
                 ;;
             *)
                 echo "警告: 忽略未知的库 '$lib'"
@@ -147,7 +166,7 @@ if [ "$BUILD_GTEST" = "yes" ]; then
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/gtest/${PLATFORM} \
-        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
     make -j$(nproc)
     make install
 
@@ -178,7 +197,7 @@ if [ "$BUILD_OPENCV" = "yes" ]; then
         -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_PNG=ON \
         -DPNG_LIBRARY="" \
-        -DPNG_PNG_INCLUDE_DIR="" \
+        -DPNG_PNG_INCLUDE_DIR=""
     make -j4  
     make install
 
@@ -213,6 +232,39 @@ if [ "$BUILD_SPDLOG" = "yes" ]; then
     echo "spdlog编译完成"
 else
     echo "跳过spdlog编译"
+fi
+
+# 编译cnpy（如果需要）
+if [ "$BUILD_CNPY" = "yes" ]; then
+    echo "开始编译cnpy..."
+    cd ${PROJECT_ROOT}/tmp
+    if [ ! -d "cnpy" ]; then
+        echo "克隆cnpy仓库..."
+        git clone https://github.com/rogersce/cnpy.git
+    else
+        echo "cnpy目录已存在，跳过克隆"
+    fi
+
+    cd ${PROJECT_ROOT}/tmp/cnpy
+    rm -rf build_${PLATFORM}
+    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
+
+    echo "配置cmake..."
+    # 配置cmake并编译
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/cnpy/${PLATFORM} \
+        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+        -DBUILD_SHARED_LIBS=OFF
+
+    echo "开始编译..."
+    make -j$(nproc)
+    echo "编译完成，开始安装..."
+    make install
+
+    echo "cnpy编译完成，已安装到 ${INSTALL_DIR}/cnpy/${PLATFORM}"
+else
+    echo "跳过cnpy编译"
 fi
 
 # ======================
