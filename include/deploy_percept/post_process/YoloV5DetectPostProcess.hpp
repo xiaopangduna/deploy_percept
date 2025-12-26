@@ -12,21 +12,25 @@ class YoloV5DetectPostProcess : public YoloBasePostProcess {
 public:
     // 参数配置结构体
     struct Params {
-        float conf_threshold = 0.25f;          // 检测置信度阈值
-        float nms_threshold = 0.45f;           // NMS阈值
-        int obj_class_num = 80;                // 类别数量
-        int obj_name_max_size = 16;            // 类别名称最大长度
-        int obj_numb_max_size = 64;            // 检测框最大数量
+        float conf_threshold;          // 检测置信度阈值
+        float nms_threshold;           // NMS阈值
+        int obj_class_num;             // 类别数量
+        int obj_name_max_size;         // 类别名称最大长度
+        int obj_numb_max_size;         // 检测框最大数量
         std::vector<int> anchor_stride8;       // stride 8 的锚框配置
         std::vector<int> anchor_stride16;      // stride 16 的锚框配置
         std::vector<int> anchor_stride32;      // stride 32 的锚框配置
         
-        // 默认锚框值
-        Params() {
-            anchor_stride8 = {10, 13, 16, 30, 33, 23};           // stride 8
-            anchor_stride16 = {30, 61, 62, 45, 59, 119};         // stride 16
-            anchor_stride32 = {116, 90, 156, 198, 373, 326};     // stride 32
-        }
+        // 默认构造函数设置默认值
+        Params() : 
+            conf_threshold(0.25f),
+            nms_threshold(0.45f),
+            obj_class_num(80),
+            obj_name_max_size(16),
+            obj_numb_max_size(64),
+            anchor_stride8({10, 13, 16, 30, 33, 23}),
+            anchor_stride16({30, 61, 62, 45, 59, 119}),
+            anchor_stride32({116, 90, 156, 198, 373, 326}) {}
     };
 
     // 使用参数结构体的构造函数

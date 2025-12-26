@@ -109,7 +109,7 @@ int YoloV5DetectPostProcess::process(
         // 使用与main.cpp一致的坐标计算方式
         group->results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
         group->results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
-        group->results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_w);
+        group->results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_h);
         group->results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
         group->results[last_count].prop = obj_conf;
         
