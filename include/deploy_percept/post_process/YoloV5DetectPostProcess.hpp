@@ -16,8 +16,8 @@ public:
     static constexpr float NMS_THRESH = 0.45f;
     static constexpr float BOX_THRESH = 0.25f;
 
-    // YOLOv5参数配置结构体
-    struct YoloV5Params {
+    // 参数配置结构体
+    struct Params {
         float conf_threshold = BOX_THRESH;     // 检测置信度阈值
         float nms_threshold = NMS_THRESH;      // NMS阈值
         int obj_class_num = 80;                // 类别数量
@@ -26,7 +26,7 @@ public:
         std::vector<std::vector<int>> anchors; // 锚框配置，格式为[[s8], [s16], [s32]]
         
         // 默认锚框值
-        YoloV5Params() {
+        Params() {
             anchors = {
                 {10, 13, 16, 30, 33, 23},           // stride 8
                 {30, 61, 62, 45, 59, 119},          // stride 16
@@ -36,7 +36,7 @@ public:
     };
 
     // 使用参数结构体的构造函数
-    explicit YoloV5DetectPostProcess(const YoloV5Params& params = YoloV5Params{});
+    explicit YoloV5DetectPostProcess(const Params& params = Params{});
     virtual ~YoloV5DetectPostProcess() = default;
 
     // YOLOv5特定的处理接口
@@ -61,17 +61,17 @@ public:
                          int32_t zp, float scale);
 
     // 获取当前参数的方法
-    const YoloV5Params& getParams() const { return params_; }
+    const Params& getParams() const { return params_; }
     
     // 更新参数的方法
-    void setParams(const YoloV5Params& params) { params_ = params; }
+    void setParams(const Params& params) { params_ = params; }
 
 private:
     // YoloV5特有的一些处理函数
     void quickSortIndices(std::vector<float>& input, int left, int right, std::vector<int>& indices);
     
     // 参数配置
-    YoloV5Params params_;
+    Params params_;
     
     // 锚框相关（从参数中获取）
     std::vector<int> anchor0_;

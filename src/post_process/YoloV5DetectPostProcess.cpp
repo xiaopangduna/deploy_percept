@@ -8,7 +8,7 @@
 namespace deploy_percept {
 namespace post_process {
 
-YoloV5DetectPostProcess::YoloV5DetectPostProcess(const YoloV5DetectPostProcess::YoloV5Params& params)
+YoloV5DetectPostProcess::YoloV5DetectPostProcess(const YoloV5DetectPostProcess::Params& params)
     : YoloBasePostProcess(), params_(params) {
     // 初始化锚框值，从参数中获取
     if (params_.anchors.size() >= 3) {
