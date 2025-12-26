@@ -8,9 +8,9 @@
 namespace deploy_percept {
 namespace post_process {
 
-YoloBasePostProcess::YoloBasePostProcess(float conf_threshold, float nms_threshold)
-    : conf_threshold_(conf_threshold), nms_threshold_(nms_threshold) {}
-
+YoloBasePostProcess::YoloBasePostProcess() {
+    // 无状态构造函数，不需要任何初始化
+}
 
 int YoloBasePostProcess::nms(int validCount, std::vector<float>& outputLocations, 
                          std::vector<int> classIds, std::vector<int>& order, 

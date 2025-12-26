@@ -9,7 +9,7 @@ namespace deploy_percept {
 namespace post_process {
 
 YoloV5DetectPostProcess::YoloV5DetectPostProcess(float conf_threshold, float nms_threshold)
-    : YoloBasePostProcess(conf_threshold, nms_threshold) {
+    : YoloBasePostProcess(), conf_threshold_(conf_threshold), nms_threshold_(nms_threshold) {
     // 初始化锚框值
     static const int default_anchor0[6] = {10, 13, 16, 30, 33, 23};
     static const int default_anchor1[6] = {30, 61, 62, 45, 59, 119};
@@ -131,9 +131,9 @@ int YoloV5DetectPostProcess::processYoloOutput(int8_t* input, int* anchor, int g
     for (int a = 0; a < 3; a++) {
         for (int i = 0; i < grid_h; i++) {
             for (int j = 0; j < grid_w; j++) {
-                int8_t box_confidence = input[(YoloBasePostProcess::PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+                int8_t box_confidence = input[(YoloV5DetectPostProcess::PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
                 if (box_confidence >= thres_i8) {
-                    int offset = (YoloBasePostProcess::PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
+                    int offset = (YoloV5DetectPostProcess::PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
                     int8_t *in_ptr = input + offset;
                     float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
                     float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
@@ -197,7 +197,6 @@ void YoloV5DetectPostProcess::quickSortIndices(std::vector<float>& input, int le
         quickSortIndices(input, low + 1, right, indices);
     }
 }
-
 
 } // namespace post_process
 } // namespace deploy_percept
