@@ -10,28 +10,22 @@ namespace post_process {
 
 class YoloV5DetectPostProcess : public YoloBasePostProcess {
 public:
-    // 静态常量定义
-    static constexpr int OBJ_NAME_MAX_SIZE = 16;
-    static constexpr int OBJ_NUMB_MAX_SIZE = 64;
-    static constexpr float NMS_THRESH = 0.45f;
-    static constexpr float BOX_THRESH = 0.25f;
-
     // 参数配置结构体
     struct Params {
-        float conf_threshold = BOX_THRESH;     // 检测置信度阈值
-        float nms_threshold = NMS_THRESH;      // NMS阈值
+        float conf_threshold = 0.25f;          // 检测置信度阈值
+        float nms_threshold = 0.45f;           // NMS阈值
         int obj_class_num = 80;                // 类别数量
-        int obj_name_max_size = OBJ_NAME_MAX_SIZE; // 类别名称最大长度
-        int obj_numb_max_size = OBJ_NUMB_MAX_SIZE; // 检测框最大数量
-        std::vector<std::vector<int>> anchors; // 锚框配置，格式为[[s8], [s16], [s32]]
+        int obj_name_max_size = 16;            // 类别名称最大长度
+        int obj_numb_max_size = 64;            // 检测框最大数量
+        std::vector<int> anchor_stride8;       // stride 8 的锚框配置
+        std::vector<int> anchor_stride16;      // stride 16 的锚框配置
+        std::vector<int> anchor_stride32;      // stride 32 的锚框配置
         
         // 默认锚框值
         Params() {
-            anchors = {
-                {10, 13, 16, 30, 33, 23},           // stride 8
-                {30, 61, 62, 45, 59, 119},          // stride 16
-                {116, 90, 156, 198, 373, 326}       // stride 32
-            };
+            anchor_stride8 = {10, 13, 16, 30, 33, 23};           // stride 8
+            anchor_stride16 = {30, 61, 62, 45, 59, 119};         // stride 16
+            anchor_stride32 = {116, 90, 156, 198, 373, 326};     // stride 32
         }
     };
 
@@ -72,14 +66,6 @@ private:
     
     // 参数配置
     Params params_;
-    
-    // 锚框相关（从参数中获取）
-    std::vector<int> anchor0_;
-    std::vector<int> anchor1_;
-    std::vector<int> anchor2_;
-
-    // 根据当前类别数计算的属性
-    static constexpr int PROP_BOX_SIZE = (5 + 80);  // 5 = x, y, w, h, obj_confidence; + 类别数
 };
 
 } // namespace post_process

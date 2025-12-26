@@ -10,16 +10,15 @@ namespace post_process {
 
 YoloV5DetectPostProcess::YoloV5DetectPostProcess(const YoloV5DetectPostProcess::Params& params)
     : YoloBasePostProcess(), params_(params) {
-    // 初始化锚框值，从参数中获取
-    if (params_.anchors.size() >= 3) {
-        anchor0_ = params_.anchors[0];
-        anchor1_ = params_.anchors[1];
-        anchor2_ = params_.anchors[2];
-    } else {
-        // 默认锚框值
-        anchor0_ = {10, 13, 16, 30, 33, 23};
-        anchor1_ = {30, 61, 62, 45, 59, 119};
-        anchor2_ = {116, 90, 156, 198, 373, 326};
+    // 如果锚框为空，则使用默认值
+    if (params_.anchor_stride8.empty()) {
+        params_.anchor_stride8 = {10, 13, 16, 30, 33, 23};
+    }
+    if (params_.anchor_stride16.empty()) {
+        params_.anchor_stride16 = {30, 61, 62, 45, 59, 119};
+    }
+    if (params_.anchor_stride32.empty()) {
+        params_.anchor_stride32 = {116, 90, 156, 198, 373, 326};
     }
 }
 
@@ -48,7 +47,7 @@ int YoloV5DetectPostProcess::process(
     int grid_w0 = model_in_w / stride0;
     int validCount0 = 0;
     const int prop_box_size = (5 + params_.obj_class_num);  // 重新计算box_size
-    validCount0 = processYoloOutput(input0, anchor0_.data(), grid_h0, grid_w0, 
+    validCount0 = processYoloOutput(input0, params_.anchor_stride8.data(), grid_h0, grid_w0, 
                                    model_in_h, model_in_w, stride0, filterBoxes, objProbs,
                                    classId, params_.conf_threshold, qnt_zps[0], qnt_scales[0]);
 
@@ -57,7 +56,7 @@ int YoloV5DetectPostProcess::process(
     int grid_h1 = model_in_h / stride1;
     int grid_w1 = model_in_w / stride1;
     int validCount1 = 0;
-    validCount1 = processYoloOutput(input1, anchor1_.data(), grid_h1, grid_w1, 
+    validCount1 = processYoloOutput(input1, params_.anchor_stride16.data(), grid_h1, grid_w1, 
                                    model_in_h, model_in_w, stride1, filterBoxes, objProbs,
                                    classId, params_.conf_threshold, qnt_zps[1], qnt_scales[1]);
 
@@ -66,7 +65,7 @@ int YoloV5DetectPostProcess::process(
     int grid_h2 = model_in_h / stride2;
     int grid_w2 = model_in_w / stride2;
     int validCount2 = 0;
-    validCount2 = processYoloOutput(input2, anchor2_.data(), grid_h2, grid_w2, 
+    validCount2 = processYoloOutput(input2, params_.anchor_stride32.data(), grid_h2, grid_w2, 
                                    model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                                    classId, params_.conf_threshold, qnt_zps[2], qnt_scales[2]);
 
