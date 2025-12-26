@@ -244,7 +244,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
 {
     if (GlobalLoggerEnvironment::logger)
     {
-        GlobalLoggerEnvironment::logger->info("Testing YoloV5DetectPostProcess process function with real data from NPZ files");
+        GlobalLoggerEnvironment::logger->info("Testing YoloV5DetectPostProcess run function with real data from NPZ files");
     }
 
     // 尝试从NPZ文件读取数据
@@ -304,27 +304,20 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     for (auto val : qnt_scales) std::cout << val << " ";
     std::cout << std::endl;
 
-    // 创建结果组
-    deploy_percept::post_process::DetectResultGroup group;
-    memset(&group, 0, sizeof(group));
-
     // 执行处理
-    int result = processor->process(
-        input0.data(),
-        input1.data(),
-        input2.data(),
-        model_in_h,
-        model_in_w,
-        pads,
-        scale_w,
-        scale_h,
-        qnt_zps,
-        qnt_scales,
-        &group
+    bool result = processor->run(
+        input0.data(), input1.data(), input2.data(),
+        model_in_h, model_in_w,
+        pads, scale_w, scale_h,
+        qnt_zps, qnt_scales
     );
 
     // 验证结果
-    EXPECT_EQ(result, 0);  // 确保处理成功
+    EXPECT_TRUE(result);  // 确保处理成功
+    
+    // 获取检测结果
+    const auto& result_wrapper = processor->getResult();
+    const auto& group = result_wrapper.group;  // 从Result结构体中获取DetectResultGroup
     std::cout << "Detection results count: " << group.count << std::endl;
     
     // 输出检测到的对象信息
@@ -356,7 +349,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         EXPECT_TRUE(results_match);
     } else {
         std::cout << "Detection results do not match expected results." << std::endl;
-        EXPECT_FALSE(true) << "Detection results do not match expected results";
+        EXPECT_FALSE(results_match) << "Detection results do not match expected results";
     }
 }
 

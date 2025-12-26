@@ -22,20 +22,22 @@ YoloV5DetectPostProcess::YoloV5DetectPostProcess(const YoloV5DetectPostProcess::
     }
 }
 
-int YoloV5DetectPostProcess::process(
-    int8_t* input0,
-    int8_t* input1, 
-    int8_t* input2,
+bool YoloV5DetectPostProcess::run(
+    int8_t *input0,
+    int8_t *input1,
+    int8_t *input2,
     int model_in_h,
     int model_in_w,
     BoxRect pads,
     float scale_w,
     float scale_h,
-    std::vector<int32_t>& qnt_zps,
-    std::vector<float>& qnt_scales,
-    DetectResultGroup* group
+    std::vector<int32_t> &qnt_zps,
+    std::vector<float> &qnt_scales
 ) {
-    memset(group, 0, sizeof(DetectResultGroup));
+    // 重置结果
+    memset(&result_.group, 0, sizeof(DetectResultGroup));
+    result_.success = false;
+    result_.message = "";
 
     std::vector<float> filterBoxes;
     std::vector<float> objProbs;
@@ -72,7 +74,8 @@ int YoloV5DetectPostProcess::process(
     int validCount = validCount0 + validCount1 + validCount2;
     // no object detect
     if (validCount <= 0) {
-        return 0;
+        result_.message = "No objects detected";
+        return false;
     }
 
     std::vector<int> indexArray;
@@ -90,7 +93,7 @@ int YoloV5DetectPostProcess::process(
     }
 
     int last_count = 0;
-    group->count = 0;
+    result_.group.count = 0;
     /* box valid detect target */
     for (int i = 0; i < validCount; ++i) {
         if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size) {
@@ -107,20 +110,22 @@ int YoloV5DetectPostProcess::process(
         float obj_conf = objProbs[i];
 
         // 使用与main.cpp一致的坐标计算方式
-        group->results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
-        group->results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
-        group->results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_h);
-        group->results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
-        group->results[last_count].prop = obj_conf;
+        result_.group.results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
+        result_.group.results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
+        result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_h);
+        result_.group.results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
+        result_.group.results[last_count].prop = obj_conf;
         
         // 设置标签名称，这里只是框架，实际需要从外部加载标签
-        snprintf(group->results[last_count].name, params_.obj_name_max_size, "class_%d", id);
+        snprintf(result_.group.results[last_count].name, params_.obj_name_max_size, "class_%d", id);
 
         last_count++;
     }
-    group->count = last_count;
+    result_.group.count = last_count;
 
-    return 0;
+    result_.success = (last_count > 0);
+    result_.message = "Processing completed successfully";
+    return true;
 }
 
 int YoloV5DetectPostProcess::processYoloOutput(int8_t* input, int* anchor, int grid_h, int grid_w, 
