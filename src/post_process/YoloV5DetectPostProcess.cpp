@@ -8,16 +8,19 @@
 namespace deploy_percept {
 namespace post_process {
 
-YoloV5DetectPostProcess::YoloV5DetectPostProcess(float conf_threshold, float nms_threshold)
-    : YoloBasePostProcess(), conf_threshold_(conf_threshold), nms_threshold_(nms_threshold) {
-    // 初始化锚框值
-    static const int default_anchor0[6] = {10, 13, 16, 30, 33, 23};
-    static const int default_anchor1[6] = {30, 61, 62, 45, 59, 119};
-    static const int default_anchor2[6] = {116, 90, 156, 198, 373, 326};
-    
-    anchor0 = default_anchor0;
-    anchor1 = default_anchor1;
-    anchor2 = default_anchor2;
+YoloV5DetectPostProcess::YoloV5DetectPostProcess(const YoloV5DetectPostProcess::YoloV5Params& params)
+    : YoloBasePostProcess(), params_(params) {
+    // 初始化锚框值，从参数中获取
+    if (params_.anchors.size() >= 3) {
+        anchor0_ = params_.anchors[0];
+        anchor1_ = params_.anchors[1];
+        anchor2_ = params_.anchors[2];
+    } else {
+        // 默认锚框值
+        anchor0_ = {10, 13, 16, 30, 33, 23};
+        anchor1_ = {30, 61, 62, 45, 59, 119};
+        anchor2_ = {116, 90, 156, 198, 373, 326};
+    }
 }
 
 int YoloV5DetectPostProcess::process(
@@ -44,27 +47,28 @@ int YoloV5DetectPostProcess::process(
     int grid_h0 = model_in_h / stride0;
     int grid_w0 = model_in_w / stride0;
     int validCount0 = 0;
-    validCount0 = processYoloOutput(input0, const_cast<int*>(anchor0), grid_h0, grid_w0, 
+    const int prop_box_size = (5 + params_.obj_class_num);  // 重新计算box_size
+    validCount0 = processYoloOutput(input0, anchor0_.data(), grid_h0, grid_w0, 
                                    model_in_h, model_in_w, stride0, filterBoxes, objProbs,
-                                   classId, conf_threshold_, qnt_zps[0], qnt_scales[0]);
+                                   classId, params_.conf_threshold, qnt_zps[0], qnt_scales[0]);
 
     // stride 16
     int stride1 = 16;
     int grid_h1 = model_in_h / stride1;
     int grid_w1 = model_in_w / stride1;
     int validCount1 = 0;
-    validCount1 = processYoloOutput(input1, const_cast<int*>(anchor1), grid_h1, grid_w1, 
+    validCount1 = processYoloOutput(input1, anchor1_.data(), grid_h1, grid_w1, 
                                    model_in_h, model_in_w, stride1, filterBoxes, objProbs,
-                                   classId, conf_threshold_, qnt_zps[1], qnt_scales[1]);
+                                   classId, params_.conf_threshold, qnt_zps[1], qnt_scales[1]);
 
     // stride 32
     int stride2 = 32;
     int grid_h2 = model_in_h / stride2;
     int grid_w2 = model_in_w / stride2;
     int validCount2 = 0;
-    validCount2 = processYoloOutput(input2, const_cast<int*>(anchor2), grid_h2, grid_w2, 
+    validCount2 = processYoloOutput(input2, anchor2_.data(), grid_h2, grid_w2, 
                                    model_in_h, model_in_w, stride2, filterBoxes, objProbs,
-                                   classId, conf_threshold_, qnt_zps[2], qnt_scales[2]);
+                                   classId, params_.conf_threshold, qnt_zps[2], qnt_scales[2]);
 
     int validCount = validCount0 + validCount1 + validCount2;
     // no object detect
@@ -83,14 +87,14 @@ int YoloV5DetectPostProcess::process(
     std::set<int> class_set(classId.begin(), classId.end());
 
     for (auto c : class_set) {
-        nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold_);
+        nms(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
     }
 
     int last_count = 0;
     group->count = 0;
     /* box valid detect target */
     for (int i = 0; i < validCount; ++i) {
-        if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE) {
+        if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size) {
             continue;
         }
         int n = indexArray[i];
@@ -99,6 +103,7 @@ int YoloV5DetectPostProcess::process(
         float y1 = filterBoxes[n * 4 + 1] - pads.top;
         float x2 = x1 + filterBoxes[n * 4 + 2];
         float y2 = y1 + filterBoxes[n * 4 + 3];
+
         int id = classId[n];
         float obj_conf = objProbs[i];
 
@@ -110,7 +115,7 @@ int YoloV5DetectPostProcess::process(
         group->results[last_count].prop = obj_conf;
         
         // 设置标签名称，这里只是框架，实际需要从外部加载标签
-        snprintf(group->results[last_count].name, OBJ_NAME_MAX_SIZE, "class_%d", id);
+        snprintf(group->results[last_count].name, params_.obj_name_max_size, "class_%d", id);
 
         last_count++;
     }
@@ -127,13 +132,14 @@ int YoloV5DetectPostProcess::processYoloOutput(int8_t* input, int* anchor, int g
     int validCount = 0;
     int grid_len = grid_h * grid_w;
     int8_t thres_i8 = qntF32ToAffine(threshold, zp, scale);
+    const int prop_box_size = (5 + params_.obj_class_num);  // 使用参数中的类别数计算box_size
     
     for (int a = 0; a < 3; a++) {
         for (int i = 0; i < grid_h; i++) {
             for (int j = 0; j < grid_w; j++) {
-                int8_t box_confidence = input[(YoloV5DetectPostProcess::PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+                int8_t box_confidence = input[(prop_box_size * a + 4) * grid_len + i * grid_w + j];
                 if (box_confidence >= thres_i8) {
-                    int offset = (YoloV5DetectPostProcess::PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
+                    int offset = (prop_box_size * a) * grid_len + i * grid_w + j;
                     int8_t *in_ptr = input + offset;
                     float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
                     float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
@@ -148,7 +154,7 @@ int YoloV5DetectPostProcess::processYoloOutput(int8_t* input, int* anchor, int g
 
                     int8_t maxClassProbs = in_ptr[5 * grid_len];
                     int maxClassId = 0;
-                    for (int k = 1; k < OBJ_CLASS_NUM; ++k) {
+                    for (int k = 1; k < params_.obj_class_num; ++k) {  // 使用参数中的类别数量
                         int8_t prob = in_ptr[(5 + k) * grid_len];
                         if (prob > maxClassProbs) {
                             maxClassId = k;
