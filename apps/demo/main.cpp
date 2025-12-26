@@ -14,6 +14,8 @@
 #include <sys/time.h>
 #include <fstream>
 #include <chrono>
+#include <yaml-cpp/yaml.h>
+
 #define PERF_WITH_POST 1
 #define OBJ_NAME_MAX_SIZE 16
 #define OBJ_NUMB_MAX_SIZE 64
@@ -494,87 +496,80 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
   return 0;
 }
 
-// 保存参数到JSON文件
-void saveParamsToJson(const std::string& filename,
+// 保存参数到YAML文件
+void saveParamsToYaml(const std::string& filename,
                      int model_h, int model_w,
                      float box_conf_threshold, float nms_threshold,
                      BOX_RECT pads,
                      float scale_w, float scale_h,
                      std::vector<int32_t> qnt_zps,
                      std::vector<float> qnt_scales) {
+    YAML::Node params;
+    
+    params["model_h"] = model_h;
+    params["model_w"] = model_w;
+    params["box_conf_threshold"] = box_conf_threshold;
+    params["nms_threshold"] = nms_threshold;
+    
+    YAML::Node pads_node;
+    pads_node["left"] = pads.left;
+    pads_node["top"] = pads.top;
+    pads_node["right"] = pads.right;
+    pads_node["bottom"] = pads.bottom;
+    params["pads"] = pads_node;
+    
+    params["scale_w"] = scale_w;
+    params["scale_h"] = scale_h;
+    params["qnt_zps"] = qnt_zps;
+    params["qnt_scales"] = qnt_scales;
+    
     std::ofstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Cannot open file for writing: " << filename << std::endl;
         return;
     }
     
-    file << "{\n";
-    file << "  \"model_h\": " << model_h << ",\n";
-    file << "  \"model_w\": " << model_w << ",\n";
-    file << "  \"box_conf_threshold\": " << box_conf_threshold << ",\n";
-    file << "  \"nms_threshold\": " << nms_threshold << ",\n";
-    file << "  \"pads\": {\n";
-    file << "    \"left\": " << pads.left << ",\n";
-    file << "    \"top\": " << pads.top << ",\n";
-    file << "    \"right\": " << pads.right << ",\n";
-    file << "    \"bottom\": " << pads.bottom << "\n";
-    file << "  },\n";
-    file << "  \"scale_w\": " << scale_w << ",\n";
-    file << "  \"scale_h\": " << scale_h << ",\n";
-    file << "  \"qnt_zps\": [";
-    for (size_t i = 0; i < qnt_zps.size(); ++i) {
-        file << qnt_zps[i];
-        if (i < qnt_zps.size() - 1) file << ", ";
-    }
-    file << "],\n";
-    file << "  \"qnt_scales\": [";
-    for (size_t i = 0; i < qnt_scales.size(); ++i) {
-        file << qnt_scales[i];
-        if (i < qnt_scales.size() - 1) file << ", ";
-    }
-    file << "]\n";
-    file << "}\n";
-    
+    file << params;
     file.close();
-    std::cout << "Saved parameters to JSON file: " << filename << std::endl;
+    std::cout << "Saved parameters to YAML file: " << filename << std::endl;
 }
 
-// 保存检测结果到JSON文件
-void saveDetectionResultsToJson(const std::string& filename, detect_result_group_t* group) {
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open file for writing: " << filename << std::endl;
-        return;
-    }
+// 保存检测结果到YAML文件
+void saveDetectionResultsToYaml(const std::string& filename, detect_result_group_t* group) {
+    YAML::Node results;
     
-    file << "{\n";
-    file << "  \"detection_count\": " << group->count << ",\n";
-    file << "  \"detections\": [\n";
+    results["detection_count"] = group->count;
     
+    YAML::Node detections;
     for (int i = 0; i < group->count; i++) {
         detect_result_t* det_result = &(group->results[i]);
         
-        file << "    {\n";
-        file << "      \"id\": " << i << ",\n";
-        file << "      \"name\": \"" << det_result->name << "\",\n";
-        file << "      \"box\": {\n";
-        file << "        \"left\": " << det_result->box.left << ",\n";
-        file << "        \"top\": " << det_result->box.top << ",\n";
-        file << "        \"right\": " << det_result->box.right << ",\n";
-        file << "        \"bottom\": " << det_result->box.bottom << "\n";
-        file << "      },\n";
-        file << "      \"prop\": " << det_result->prop << "\n";
-        file << "    }";
+        YAML::Node detection;
+        detection["id"] = i;
+        detection["name"] = det_result->name;
         
-        if (i < group->count - 1) file << ",";
-        file << "\n";
+        YAML::Node box;
+        box["left"] = det_result->box.left;
+        box["top"] = det_result->box.top;
+        box["right"] = det_result->box.right;
+        box["bottom"] = det_result->box.bottom;
+        detection["box"] = box;
+        
+        detection["prop"] = det_result->prop;
+        
+        detections.push_back(detection);
+    }
+    results["detections"] = detections;
+    
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Cannot open file for writing: " << filename << std::endl;
+        return;
     }
     
-    file << "  ]\n";
-    file << "}\n";
-    
+    file << results;
     file.close();
-    std::cout << "Saved detection results to JSON file: " << filename << std::endl;
+    std::cout << "Saved detection results to YAML file: " << filename << std::endl;
 }
 
 int main()
@@ -761,16 +756,16 @@ int main()
   
   std::cout << "Saved YOLOv5 outputs to NPZ file: " << npz_filename << std::endl;
   
-  // 保存参数到JSON文件
-  saveParamsToJson("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_params.json",
+  // 保存参数到YAML文件
+  saveParamsToYaml("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_params.yaml",
                    height, width, box_conf_threshold, nms_threshold,
                    pads, scale_w, scale_h, out_zps, out_scales);
   
   post_process((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, height, width,
                box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 
-  // 保存检测结果到JSON文件
-  saveDetectionResultsToJson("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_detect_results.json", &detect_result_group);
+  // 保存检测结果到YAML文件
+  saveDetectionResultsToYaml("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_detect_results.yaml", &detect_result_group);
 
   // 画框和概率
   char text[256];
