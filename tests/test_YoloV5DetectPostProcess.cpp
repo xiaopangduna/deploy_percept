@@ -212,7 +212,7 @@ protected:
     std::unique_ptr<deploy_percept::post_process::YoloV5DetectPostProcess> processor;
 };
 
-// 测试基本的process功能（使用从NPZ文件读取的真实数据）
+// 测试YoloV5后处理功能并与原始实现进行对比
 TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
 {
     if (GlobalLoggerEnvironment::logger)
@@ -307,90 +307,6 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
                   << ", " << group.results[i].box.right << ", " << group.results[i].box.bottom 
                   << ") with confidence " << group.results[i].prop << std::endl;
     }
-}
-
-// 与原始main.cpp中post_process函数对比测试
-TEST_F(YoloV5DetectPostProcessTest, CompareWithOriginalPostProcess)
-{
-    if (GlobalLoggerEnvironment::logger)
-    {
-        GlobalLoggerEnvironment::logger->info("Comparing YoloV5DetectPostProcess with original post_process function");
-    }
-
-    // 尝试从NPZ文件读取数据
-    std::vector<int8_t> input0, input1, input2;
-    std::vector<int> shape0, shape1, shape2;
-    
-    // 直接使用固定的NPZ输出文件路径
-    std::string npz_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
-    
-    bool success = false;
-    
-    if (!npz_path.empty()) {
-        success = readNpzFile(npz_path, input0, shape0, input1, shape1, input2, shape2);
-    }
-    
-    // 如果无法读取真实数据，则跳过测试
-    if (!success) {
-        std::cout << "Could not load real data from NPZ file, skipping this test." << std::endl;
-        GTEST_SKIP() << "Real NPZ data file not found";
-        return;
-    }
-    
-    // 使用固定的参数文件路径
-    std::string params_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_detect/yolov5_params.json";
-    
-    // 读取参数JSON文件
-    int model_in_h, model_in_w;
-    float box_conf_threshold = 0.5f, nms_threshold = 0.5f;
-    deploy_percept::post_process::BoxRect pads = {0, 0, 0, 0};
-    float scale_w = 1.0, scale_h = 1.0;
-    std::vector<int32_t> qnt_zps;
-    std::vector<float> qnt_scales;
-    
-    bool params_loaded = readParamsJson(params_path, 
-                                       model_in_h, model_in_w, 
-                                       box_conf_threshold, nms_threshold,
-                                       pads, scale_w, scale_h,
-                                       qnt_zps, qnt_scales);
-    
-    if (!params_loaded) {
-        std::cout << "Could not load parameters from file: " << params_path << ", skipping this test." << std::endl;
-        GTEST_SKIP() << "Parameters JSON file not found";
-        return;
-    }
-
-    // 创建结果组用于测试
-    deploy_percept::post_process::DetectResultGroup new_group;
-    memset(&new_group, 0, sizeof(new_group));
-
-    // 使用重构后的函数处理
-    int result_new = processor->process(
-        input0.data(),
-        input1.data(),
-        input2.data(),
-        model_in_h,
-        model_in_w,
-        pads,
-        scale_w,
-        scale_h,
-        qnt_zps,
-        qnt_scales,
-        &new_group
-    );
-
-    std::cout << "New function results count: " << new_group.count << std::endl;
-    
-    // 输出检测到的对象信息
-    for (int i = 0; i < new_group.count; i++) {
-        std::cout << "New - Object " << i << ": " << new_group.results[i].name 
-                  << " at (" << new_group.results[i].box.left << ", " << new_group.results[i].box.top 
-                  << ", " << new_group.results[i].box.right << ", " << new_group.results[i].box.bottom 
-                  << ") with confidence " << new_group.results[i].prop << std::endl;
-    }
-
-    // 验证结果
-    EXPECT_EQ(result_new, 0);  // 确保处理成功
 }
 
 int main(int argc, char **argv)
