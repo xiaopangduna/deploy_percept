@@ -2,7 +2,6 @@
 
 #include "BasePostProcess.hpp"
 #include "YoloV5DetectPostProcess.hpp"
-#include "YoloBasePostProcess.hpp"
 #include <memory>
 
 namespace deploy_percept {

@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_HPP
-#define DEPLOY_PERCEPT_HPP
+#pragma once
 
 // 导出计算器模块
 #include "calculator/Calculator.hpp"
@@ -13,4 +12,3 @@
 // 导出工具模块
 #include "utils/logger_factory.hpp"
 
-#endif // DEPLOY_PERCEPT_HPP
