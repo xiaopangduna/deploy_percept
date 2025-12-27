@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_POST_PROCESS_YOLOV5DETECTPOSTPROCESS_HPP
-#define DEPLOY_PERCEPT_POST_PROCESS_YOLOV5DETECTPOSTPROCESS_HPP
+#pragma once
 
 #include <vector>
 #include <cstring>
@@ -69,4 +68,3 @@ namespace deploy_percept
     } // namespace post_process
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_POST_PROCESS_YOLOV5DETECTPOSTPROCESS_HPP

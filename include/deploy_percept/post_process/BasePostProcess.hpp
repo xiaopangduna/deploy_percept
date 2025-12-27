@@ -1,5 +1,5 @@
-#ifndef DEPLOY_PERCEPT_POST_PROCESS_BASEPOSTPROCESS_HPP
-#define DEPLOY_PERCEPT_POST_PROCESS_BASEPOSTPROCESS_HPP
+#pragma once
+
 
 namespace deploy_percept {
 namespace post_process {
@@ -12,4 +12,3 @@ public:
 } // namespace post_process
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_POST_PROCESS_BASEPOSTPROCESS_HPP

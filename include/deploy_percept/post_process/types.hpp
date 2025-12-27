@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_POST_PROCESS_TYPES_HPP
-#define DEPLOY_PERCEPT_POST_PROCESS_TYPES_HPP
+#pragma once
 
 #include <cstdint>
 #include <cstring>
@@ -29,4 +28,3 @@ struct DetectResultGroup {
 } // namespace post_process
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_POST_PROCESS_TYPES_HPP

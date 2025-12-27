@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_POST_PROCESS_POSTPROCESSFACTORY_HPP
-#define DEPLOY_PERCEPT_POST_PROCESS_POSTPROCESSFACTORY_HPP
+#pragma once
 
 #include "BasePostProcess.hpp"
 #include "YoloV5DetectPostProcess.hpp"
@@ -22,4 +21,3 @@ public:
 } // namespace post_process
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_POST_PROCESS_POSTPROCESSFACTORY_HPP

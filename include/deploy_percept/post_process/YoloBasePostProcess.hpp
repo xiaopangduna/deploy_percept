@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_POST_PROCESS_YOLOBASEPOSTPROCESS_HPP
-#define DEPLOY_PERCEPT_POST_PROCESS_YOLOBASEPOSTPROCESS_HPP
+#pragma once
 
 #include "deploy_percept/post_process/BasePostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
@@ -36,4 +35,3 @@ public:
 } // namespace post_process
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_POST_PROCESS_YOLOBASEPOSTPROCESS_HPP
