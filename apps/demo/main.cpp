@@ -16,6 +16,10 @@
 #include <chrono>
 #include <yaml-cpp/yaml.h>
 
+// 添加deploy_percept相关头文件
+#include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/post_process/types.hpp"
+
 #define PERF_WITH_POST 1
 #define OBJ_NAME_MAX_SIZE 16
 #define OBJ_NUMB_MAX_SIZE 64
@@ -26,12 +30,7 @@
 
 #define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/demo/coco_80_labels_list.txt"
 
-const int anchor0[6] = {10, 13, 16, 30, 33, 23};
-const int anchor1[6] = {30, 61, 62, 45, 59, 119};
-const int anchor2[6] = {116, 90, 156, 198, 373, 326};
-
-static char *labels[OBJ_CLASS_NUM];
-
+// 定义原始代码中使用的类型，与项目类型兼容
 typedef struct _BOX_RECT
 {
   int left;
@@ -53,123 +52,29 @@ typedef struct _detect_result_group_t
   int count;
   detect_result_t results[OBJ_NUMB_MAX_SIZE];
 } detect_result_group_t;
+
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
-void deinitPostProcess()
-{
-  for (int i = 0; i < OBJ_CLASS_NUM; i++)
-  {
-    if (labels[i] != nullptr)
-    {
-      free(labels[i]);
-      labels[i] = nullptr;
-    }
-  }
-}
-static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
-                              float ymax1)
-{
-  float w = fmax(0.f, fmin(xmax0, xmax1) - fmax(xmin0, xmin1) + 1.0);
-  float h = fmax(0.f, fmin(ymax0, ymax1) - fmax(ymin0, ymin1) + 1.0);
-  float i = w * h;
-  float u = (xmax0 - xmin0 + 1.0) * (ymax0 - ymin0 + 1.0) + (xmax1 - xmin1 + 1.0) * (ymax1 - ymin1 + 1.0) - i;
-  return u <= 0.f ? 0.f : (i / u);
-}
-inline static int clamp(float val, int min, int max) { return val > min ? (val < max ? val : max) : min; }
-static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
-               int filterId, float threshold)
-{
-  for (int i = 0; i < validCount; ++i)
-  {
-    int n = order[i];
-    if (n == -1 || classIds[n] != filterId)
-    {
-      continue;
-    }
-    for (int j = i + 1; j < validCount; ++j)
-    {
-      int m = order[j];
-      if (m == -1 || classIds[m] != filterId)
-      {
-        continue;
-      }
-      float xmin0 = outputLocations[n * 4 + 0];
-      float ymin0 = outputLocations[n * 4 + 1];
-      float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
-      float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
 
-      float xmin1 = outputLocations[m * 4 + 0];
-      float ymin1 = outputLocations[m * 4 + 1];
-      float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
-      float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
+static char *labels[OBJ_CLASS_NUM];
 
-      float iou = CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
-
-      if (iou > threshold)
-      {
-        order[j] = -1;
-      }
-    }
-  }
-  return 0;
-}
-static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
+void letterbox(const cv::Mat &image, cv::Mat &padded_image, BOX_RECT &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
 {
-  float key;
-  int key_index;
-  int low = left;
-  int high = right;
-  if (left < right)
-  {
-    key_index = indices[left];
-    key = input[left];
-    while (low < high)
-    {
-      while (low < high && input[high] <= key)
-      {
-        high--;
-      }
-      input[low] = input[high];
-      indices[low] = indices[high];
-      while (low < high && input[low] >= key)
-      {
-        low++;
-      }
-      input[high] = input[low];
-      indices[high] = indices[low];
-    }
-    input[low] = key;
-    indices[low] = key_index;
-    quick_sort_indice_inverse(input, left, low - 1, indices);
-    quick_sort_indice_inverse(input, low + 1, right, indices);
-  }
-  return low;
+  // 调整图像大小
+  cv::Mat resized_image;
+  cv::resize(image, resized_image, cv::Size(), scale, scale);
+
+  // 计算填充大小
+  int pad_width = target_size.width - resized_image.cols;
+  int pad_height = target_size.height - resized_image.rows;
+
+  pads.left = pad_width / 2;
+  pads.right = pad_width - pads.left;
+  pads.top = pad_height / 2;
+  pads.bottom = pad_height - pads.top;
+
+  // 在图像周围添加填充
+  cv::copyMakeBorder(resized_image, padded_image, pads.top, pads.bottom, pads.left, pads.right, cv::BORDER_CONSTANT, pad_color);
 }
-// int resize_rga(rga_buffer_t &src, rga_buffer_t &dst, const cv::Mat &image, cv::Mat &resized_image, const cv::Size &target_size)
-// {
-//   im_rect src_rect;
-//   im_rect dst_rect;
-//   memset(&src_rect, 0, sizeof(src_rect));
-//   memset(&dst_rect, 0, sizeof(dst_rect));
-//   size_t img_width = image.cols;
-//   size_t img_height = image.rows;
-//   if (image.type() != CV_8UC3)
-//   {
-//     printf("source image type is %d!\n", image.type());
-//     return -1;
-//   }
-//   size_t target_width = target_size.width;
-//   size_t target_height = target_size.height;
-//   src = wrapbuffer_virtualaddr((void *)image.data, img_width, img_height, RK_FORMAT_RGB_888);
-//   dst = wrapbuffer_virtualaddr((void *)resized_image.data, target_width, target_height, RK_FORMAT_RGB_888);
-//   int ret = imcheck(src, dst, src_rect, dst_rect);
-//   if (IM_STATUS_NOERROR != ret)
-//   {
-//     fprintf(stderr, "rga check error! %s", imStrError((IM_STATUS)ret));
-//     return -1;
-//   }
-//   IM_STATUS STATUS = imresize(src, dst);
-//   return 0;
-// }
 static unsigned char *load_data(FILE *fp, size_t ofst, size_t sz)
 {
   unsigned char *data;
@@ -227,24 +132,7 @@ static unsigned char *load_model(const char *filename, int *model_size)
   *model_size = size;
   return data;
 }
-void letterbox(const cv::Mat &image, cv::Mat &padded_image, BOX_RECT &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
-{
-  // 调整图像大小
-  cv::Mat resized_image;
-  cv::resize(image, resized_image, cv::Size(), scale, scale);
 
-  // 计算填充大小
-  int pad_width = target_size.width - resized_image.cols;
-  int pad_height = target_size.height - resized_image.rows;
-
-  pads.left = pad_width / 2;
-  pads.right = pad_width - pads.left;
-  pads.top = pad_height / 2;
-  pads.bottom = pad_height - pads.top;
-
-  // 在图像周围添加填充
-  cv::copyMakeBorder(resized_image, padded_image, pads.top, pads.bottom, pads.left, pads.right, cv::BORDER_CONSTANT, pad_color);
-}
 static void dump_tensor_attr(rknn_tensor_attr *attr)
 {
   std::string shape_str = attr->n_dims < 1 ? "" : std::to_string(attr->dims[0]);
@@ -324,178 +212,6 @@ int loadLabelName(const char *locationFilename, char *label[])
   readLines(locationFilename, label, OBJ_CLASS_NUM);
   return 0;
 }
-inline static int32_t __clip(float val, float min, float max)
-{
-  float f = val <= min ? min : (val >= max ? max : val);
-  return f;
-}
-static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
-{
-  float dst_val = (f32 / scale) + zp;
-  int8_t res = (int8_t)__clip(dst_val, -128, 127);
-  return res;
-}
-static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { return ((float)qnt - (float)zp) * scale; }
-static int process(int8_t *input, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
-                   std::vector<float> &boxes, std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                   int32_t zp, float scale)
-{
-  int validCount = 0;
-  int grid_len = grid_h * grid_w;
-  int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
-  for (int a = 0; a < 3; a++)
-  {
-    for (int i = 0; i < grid_h; i++)
-    {
-      for (int j = 0; j < grid_w; j++)
-      {
-        int8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
-        if (box_confidence >= thres_i8)
-        {
-          int offset = (PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
-          int8_t *in_ptr = input + offset;
-          float box_x = (deqnt_affine_to_f32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-          float box_y = (deqnt_affine_to_f32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-          float box_w = (deqnt_affine_to_f32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-          float box_h = (deqnt_affine_to_f32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
-          box_x = (box_x + j) * (float)stride;
-          box_y = (box_y + i) * (float)stride;
-          box_w = box_w * box_w * (float)anchor[a * 2];
-          box_h = box_h * box_h * (float)anchor[a * 2 + 1];
-          box_x -= (box_w / 2.0);
-          box_y -= (box_h / 2.0);
-
-          int8_t maxClassProbs = in_ptr[5 * grid_len];
-          int maxClassId = 0;
-          for (int k = 1; k < OBJ_CLASS_NUM; ++k)
-          {
-            int8_t prob = in_ptr[(5 + k) * grid_len];
-            if (prob > maxClassProbs)
-            {
-              maxClassId = k;
-              maxClassProbs = prob;
-            }
-          }
-          if (maxClassProbs > thres_i8)
-          {
-            objProbs.push_back((deqnt_affine_to_f32(maxClassProbs, zp, scale)) * (deqnt_affine_to_f32(box_confidence, zp, scale)));
-            classId.push_back(maxClassId);
-            validCount++;
-            boxes.push_back(box_x);
-            boxes.push_back(box_y);
-            boxes.push_back(box_w);
-            boxes.push_back(box_h);
-          }
-        }
-      }
-    }
-  }
-  return validCount;
-}
-int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h, int model_in_w, float conf_threshold,
-                 float nms_threshold, BOX_RECT pads, float scale_w, float scale_h, std::vector<int32_t> &qnt_zps,
-                 std::vector<float> &qnt_scales, detect_result_group_t *group)
-{
-  static int init = -1;
-  if (init == -1)
-  {
-    int ret = 0;
-    ret = loadLabelName(LABEL_NALE_TXT_PATH, labels);
-    if (ret < 0)
-    {
-      return -1;
-    }
-
-    init = 0;
-  }
-  memset(group, 0, sizeof(detect_result_group_t));
-
-  std::vector<float> filterBoxes;
-  std::vector<float> objProbs;
-  std::vector<int> classId;
-
-  // stride 8
-  int stride0 = 8;
-  int grid_h0 = model_in_h / stride0;
-  int grid_w0 = model_in_w / stride0;
-  int validCount0 = 0;
-  validCount0 = process(input0, (int *)anchor0, grid_h0, grid_w0, model_in_h, model_in_w, stride0, filterBoxes, objProbs,
-                        classId, conf_threshold, qnt_zps[0], qnt_scales[0]);
-
-  // stride 16
-  int stride1 = 16;
-  int grid_h1 = model_in_h / stride1;
-  int grid_w1 = model_in_w / stride1;
-  int validCount1 = 0;
-  validCount1 = process(input1, (int *)anchor1, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs,
-                        classId, conf_threshold, qnt_zps[1], qnt_scales[1]);
-
-  // stride 32
-  int stride2 = 32;
-  int grid_h2 = model_in_h / stride2;
-  int grid_w2 = model_in_w / stride2;
-  int validCount2 = 0;
-  validCount2 = process(input2, (int *)anchor2, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs,
-                        classId, conf_threshold, qnt_zps[2], qnt_scales[2]);
-
-  int validCount = validCount0 + validCount1 + validCount2;
-  // no object detect
-  if (validCount <= 0)
-  {
-    return 0;
-  }
-
-  std::vector<int> indexArray;
-  for (int i = 0; i < validCount; ++i)
-  {
-    indexArray.push_back(i);
-  }
-
-  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
-
-  std::set<int> class_set(std::begin(classId), std::end(classId));
-
-  for (auto c : class_set)
-  {
-    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
-  }
-
-  int last_count = 0;
-  group->count = 0;
-  /* box valid detect target */
-  for (int i = 0; i < validCount; ++i)
-  {
-    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
-    {
-      continue;
-    }
-    int n = indexArray[i];
-
-    float x1 = filterBoxes[n * 4 + 0] - pads.left;
-    float y1 = filterBoxes[n * 4 + 1] - pads.top;
-    float x2 = x1 + filterBoxes[n * 4 + 2];
-    float y2 = y1 + filterBoxes[n * 4 + 3];
-    int id = classId[n];
-    float obj_conf = objProbs[i];
-
-    group->results[last_count].box.left = (int)(clamp(x1, 0, model_in_w) / scale_w);
-    group->results[last_count].box.top = (int)(clamp(y1, 0, model_in_h) / scale_h);
-    group->results[last_count].box.right = (int)(clamp(x2, 0, model_in_w) / scale_w);
-    group->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / scale_h);
-    group->results[last_count].prop = obj_conf;
-    char *label = labels[id];
-    strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
-
-    // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left,
-    // group->results[last_count].box.top,
-    //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
-    last_count++;
-  }
-  group->count = last_count;
-
-  return 0;
-}
-
 // 保存参数到YAML文件
 void saveParamsToYaml(const std::string& filename,
                      int model_h, int model_w,
@@ -570,6 +286,19 @@ void saveDetectionResultsToYaml(const std::string& filename, detect_result_group
     file << results;
     file.close();
     std::cout << "Saved detection results to YAML file: " << filename << std::endl;
+}
+
+// 添加deinitPostProcess函数定义
+void deinitPostProcess()
+{
+  for (int i = 0; i < OBJ_CLASS_NUM; i++)
+  {
+    if (labels[i] != nullptr)
+    {
+      free(labels[i]);
+      labels[i] = nullptr;
+    }
+  }
 }
 
 int main()
@@ -719,7 +448,7 @@ int main()
   gettimeofday(&stop_time, NULL);
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-  // 后处理
+  // 后处理 - 使用YoloV5DetectPostProcess类
   detect_result_group_t detect_result_group;
   std::vector<float> out_scales;
   std::vector<int32_t> out_zps;
@@ -731,7 +460,7 @@ int main()
   const float nms_threshold = NMS_THRESH;      // 默认的NMS阈值
   const float box_conf_threshold = BOX_THRESH; // 默认的置信度阈值
   
-  // 保存输入数据到NPY文件
+  // 保存输入数据到NPZ文件
   // 计算YOLO输出层的形状 [height/stride, width/stride, channels]
   int8_t* output0_ptr = (int8_t *)outputs[0].buf;
   int8_t* output1_ptr = (int8_t *)outputs[1].buf;
@@ -761,10 +490,41 @@ int main()
                    height, width, box_conf_threshold, nms_threshold,
                    pads, scale_w, scale_h, out_zps, out_scales);
   
-  post_process((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, height, width,
-               box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // 使用YoloV5DetectPostProcess类进行后处理
+  deploy_percept::post_process::YoloV5DetectPostProcess::Params params;
+  params.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
+  params.nms_threshold = NMS_THRESH;
+  params.obj_class_num = OBJ_CLASS_NUM;
+  params.obj_name_max_size = OBJ_NAME_MAX_SIZE;
+  params.obj_numb_max_size = OBJ_NUMB_MAX_SIZE;
+  
+  deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
+  
+  // 转换BOX_RECT类型到项目类型
+  deploy_percept::post_process::BoxRect new_pads;
+  new_pads.left = pads.left;
+  new_pads.right = pads.right;
+  new_pads.top = pads.top;
+  new_pads.bottom = pads.bottom;
+  
+  processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
+                height, width, new_pads, scale_w, scale_h, out_zps, out_scales);
 
   // 保存检测结果到YAML文件
+  // 将processor的结果复制到detect_result_group中以保持兼容性
+  const auto& result_wrapper = processor.getResult();
+  const auto& new_detect_result_group = result_wrapper.group;
+  detect_result_group.count = new_detect_result_group.count;
+  for (int i = 0; i < new_detect_result_group.count; i++) {
+      strncpy(detect_result_group.results[i].name, new_detect_result_group.results[i].name, OBJ_NAME_MAX_SIZE-1);
+      detect_result_group.results[i].name[OBJ_NAME_MAX_SIZE-1] = '\0';
+      detect_result_group.results[i].box.left = new_detect_result_group.results[i].box.left;
+      detect_result_group.results[i].box.top = new_detect_result_group.results[i].box.top;
+      detect_result_group.results[i].box.right = new_detect_result_group.results[i].box.right;
+      detect_result_group.results[i].box.bottom = new_detect_result_group.results[i].box.bottom;
+      detect_result_group.results[i].prop = new_detect_result_group.results[i].prop;
+  }
+  
   saveDetectionResultsToYaml("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_detect_results.yaml", &detect_result_group);
 
   // 画框和概率
@@ -796,8 +556,36 @@ int main()
     ret = rknn_run(ctx, NULL);
     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
 #if PERF_WITH_POST
-    post_process((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, height, width,
-                 box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+    // 使用YoloV5DetectPostProcess类进行后处理
+    deploy_percept::post_process::YoloV5DetectPostProcess::Params params;
+    params.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
+    params.nms_threshold = NMS_THRESH;
+    
+    deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
+    
+    // 转换BOX_RECT类型到项目类型
+    deploy_percept::post_process::BoxRect new_pads;
+    new_pads.left = pads.left;
+    new_pads.right = pads.right;
+    new_pads.top = pads.top;
+    new_pads.bottom = pads.bottom;
+    
+    processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
+                  height, width, new_pads, scale_w, scale_h, out_zps, out_scales);
+    
+    // 获取结果用于验证
+    const auto& result_wrapper = processor.getResult();
+    const auto& new_detect_result_group = result_wrapper.group;
+    
+    // 验证结果一致性
+    printf("Processor: %d detections\n", new_detect_result_group.count);
+    for (int j = 0; j < new_detect_result_group.count; j++) {
+        printf("Result[%d]: %s (%d, %d, %d, %d) conf=%.3f\n", j,
+               new_detect_result_group.results[j].name,
+               new_detect_result_group.results[j].box.left, new_detect_result_group.results[j].box.top,
+               new_detect_result_group.results[j].box.right, new_detect_result_group.results[j].box.bottom,
+               new_detect_result_group.results[j].prop);
+    }
 #endif
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
   }

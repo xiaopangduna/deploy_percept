@@ -45,7 +45,8 @@
             "name": "(gdb) launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/tests/test_YoloV5DetectPostProcess",
+            // "program": "${workspaceFolder}/build/tests/test_YoloV5DetectPostProcess",
+            "program": "${workspaceFolder}/build/apps/demo/demo_app",
             "MIMode": "gdb",
             "cwd": "${workspaceFolder}",
             "setupCommands": [
