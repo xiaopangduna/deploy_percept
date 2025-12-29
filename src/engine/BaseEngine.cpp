@@ -10,44 +10,50 @@ namespace deploy_percept
     namespace engine
     {
 
-        std::unique_ptr<unsigned char[]> BaseEngine::load_file_data(const std::string& filepath, 
-                                                                 size_t offset, 
-                                                                 size_t size)
+        bool BaseEngine::get_binary_file_size(const std::string& filepath, size_t& size)
         {
             // 使用RAII管理文件资源
-            std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+            std::ifstream file(filepath, std::ios::binary);
             if (!file) {
-                return nullptr;
+                return false;
             }
 
             // 获取文件大小
+            file.seekg(0, std::ios::end);
             std::streamsize file_size = file.tellg();
             if (file_size <= 0) {
-                return nullptr;
+                return false;
             }
 
-            // 如果size为0，表示加载整个文件（从offset到文件末尾）
-            std::streamsize read_size = size == 0 ? (file_size - offset) : static_cast<std::streamsize>(size);
-            
-            // 检查偏移量和读取大小是否有效
-            if (offset + read_size > file_size) {
-                return nullptr;
+            size = static_cast<size_t>(file_size);
+            return true;
+        }
+
+        bool BaseEngine::load_binary_file_data(const std::string& filepath, std::vector<unsigned char>& data)
+        {
+            // 使用RAII管理文件资源
+            std::ifstream file(filepath, std::ios::binary);
+            if (!file) {
+                return false;
             }
 
-            // 移动到指定偏移位置
-            file.seekg(offset, std::ios::beg);
+            // 获取文件大小
+            file.seekg(0, std::ios::end);
+            std::streamsize file_size = file.tellg();
+            if (file_size <= 0) {
+                return false;
+            }
+
+            // 移动到文件开头
+            file.seekg(0, std::ios::beg);
 
             // 分配内存并读取文件内容
-            auto data = std::make_unique<unsigned char[]>(read_size);
-            if (!data) {
-                return nullptr;
+            data.resize(file_size);
+            if (!file.read(reinterpret_cast<char*>(data.data()), file_size)) {
+                return false; // 读取失败
             }
 
-            if (!file.read(reinterpret_cast<char*>(data.get()), read_size)) {
-                return nullptr; // 读取失败
-            }
-
-            return data;
+            return true;
         }
 
     } // namespace engine

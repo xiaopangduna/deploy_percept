@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace deploy_percept
 {
@@ -14,10 +15,11 @@ namespace deploy_percept
         class BaseEngine
         {
         public:
-            // 加载整个文件或从指定偏移加载指定大小的数据
-            static std::unique_ptr<unsigned char[]> load_file_data(const std::string& filepath, 
-                                                                 size_t offset = 0, 
-                                                                 size_t size = 0);
+            // 获取二进制文件大小，返回值表示是否成功
+            bool get_binary_file_size(const std::string& filepath, size_t& size);
+            
+            // 加载二进制文件数据，返回值表示是否成功
+            bool load_binary_file_data(const std::string& filepath, std::vector<unsigned char>& data);
         };
 
     } // namespace engine
