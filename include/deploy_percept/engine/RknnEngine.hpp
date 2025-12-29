@@ -3,6 +3,9 @@
 #include <vector>
 #include <cstring>
 #include <string>
+
+#include "rknn_api.h"
+
 #include "BaseEngine.hpp"
 
 namespace deploy_percept
@@ -15,6 +18,7 @@ namespace deploy_percept
             // 参数配置结构体
             struct Params
             {
+                std::string path_model;
             };
 
             // 结果结构体
@@ -43,6 +47,8 @@ namespace deploy_percept
         private:
             Params params_;
             Result result_{};
+
+            rknn_context ctx_;
         };
 
     } // namespace post_process

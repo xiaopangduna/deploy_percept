@@ -14,6 +14,7 @@
 #include <fstream>
 #include <chrono>
 #include <yaml-cpp/yaml.h>
+#include <memory>
 
 // 添加deploy_percept相关头文件
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
@@ -225,11 +226,25 @@ void deinitPostProcess()
 int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
-  int model_data_size = 0;
-  unsigned char *model_data = deploy_percept::engine::BaseEngine::load_model(model_name, &model_data_size);
+  std::unique_ptr<unsigned char[]> model_data = deploy_percept::engine::BaseEngine::load_file_data(std::string(model_name));
+  
+  if (!model_data) {
+      printf("Failed to load model\n");
+      return -1;
+  }
+
+  // 获取文件大小（这里需要额外计算，因为我们不再通过参数返回）
+  FILE *fp = fopen(model_name, "rb");
+  if (!fp) {
+      printf("Failed to open model file for size check\n");
+      return -1;
+  }
+  fseek(fp, 0, SEEK_END);
+  int model_data_size = ftell(fp);
+  fclose(fp);
 
   rknn_context ctx;
-  auto ret = rknn_init(&ctx, model_data, model_data_size, 0, NULL);
+  auto ret = rknn_init(&ctx, model_data.get(), model_data_size, 0, NULL);
 
   rknn_input_output_num io_num;
   ret = rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num));
@@ -510,11 +525,6 @@ int main()
 
   // release
   ret = rknn_destroy(ctx);
-
-  if (model_data)
-  {
-    free(model_data);
-  }
 
   return 0;
 }

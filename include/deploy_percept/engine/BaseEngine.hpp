@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <string>
 
 namespace deploy_percept
 {
@@ -12,8 +14,10 @@ namespace deploy_percept
         class BaseEngine
         {
         public:
-            static unsigned char *load_data(FILE *fp, size_t ofst, size_t sz);
-            static unsigned char *load_model(const char *filename, int *model_size);
+            // 加载整个文件或从指定偏移加载指定大小的数据
+            static std::unique_ptr<unsigned char[]> load_file_data(const std::string& filepath, 
+                                                                 size_t offset = 0, 
+                                                                 size_t size = 0);
         };
 
     } // namespace engine

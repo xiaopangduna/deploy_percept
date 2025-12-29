@@ -12,6 +12,7 @@ namespace deploy_percept
         RknnEngine::RknnEngine(const RknnEngine::Params &params)
             : params_(params)
         {
+            
         }
 
         // bool RknnEngine::run(
