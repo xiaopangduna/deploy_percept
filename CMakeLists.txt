@@ -25,6 +25,8 @@ add_library(deploy_percept STATIC
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
     src/post_process/PostProcessFactory.cpp
+    src/engine/RknnEngine.cpp
+    src/engine/EngineFactory.cpp
 )
 
 # 链接OpenCV库、spdlog、RKNN、cnpy和zlib库到我们的库

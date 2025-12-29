@@ -10,7 +10,6 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
-// #include "postprocess.h"
 #include <sys/time.h>
 #include <fstream>
 #include <chrono>
@@ -30,34 +29,12 @@
 
 #define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/demo/coco_80_labels_list.txt"
 
-// 定义原始代码中使用的类型，与项目类型兼容
-typedef struct _BOX_RECT
-{
-  int left;
-  int right;
-  int top;
-  int bottom;
-} BOX_RECT;
-
-typedef struct __detect_result_t
-{
-  char name[OBJ_NAME_MAX_SIZE];
-  BOX_RECT box;
-  float prop;
-} detect_result_t;
-
-typedef struct _detect_result_group_t
-{
-  int id;
-  int count;
-  detect_result_t results[OBJ_NUMB_MAX_SIZE];
-} detect_result_group_t;
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
 static char *labels[OBJ_CLASS_NUM];
 
-void letterbox(const cv::Mat &image, cv::Mat &padded_image, BOX_RECT &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
+void letterbox(const cv::Mat &image, cv::Mat &padded_image, deploy_percept::post_process::BoxRect &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
 {
   // 调整图像大小
   cv::Mat resized_image;
@@ -216,7 +193,7 @@ int loadLabelName(const char *locationFilename, char *label[])
 void saveParamsToYaml(const std::string& filename,
                      int model_h, int model_w,
                      float box_conf_threshold, float nms_threshold,
-                     BOX_RECT pads,
+                     deploy_percept::post_process::BoxRect pads,
                      float scale_w, float scale_h,
                      std::vector<int32_t> qnt_zps,
                      std::vector<float> qnt_scales) {
@@ -251,14 +228,14 @@ void saveParamsToYaml(const std::string& filename,
 }
 
 // 保存检测结果到YAML文件
-void saveDetectionResultsToYaml(const std::string& filename, detect_result_group_t* group) {
+void saveDetectionResultsToYaml(const std::string& filename, deploy_percept::post_process::DetectResultGroup* group) {
     YAML::Node results;
     
     results["detection_count"] = group->count;
     
     YAML::Node detections;
     for (int i = 0; i < group->count; i++) {
-        detect_result_t* det_result = &(group->results[i]);
+        deploy_percept::post_process::DetectResult* det_result = &(group->results[i]);
         
         YAML::Node detection;
         detection["id"] = i;
@@ -386,8 +363,8 @@ int main()
   printf("img width = %d, img height = %d\n", img_width, img_height);
 
   // 指定目标大小和预处理方式,默认使用LetterBox的预处理
-  BOX_RECT pads;
-  memset(&pads, 0, sizeof(BOX_RECT));
+  deploy_percept::post_process::BoxRect pads;
+  memset(&pads, 0, sizeof(deploy_percept::post_process::BoxRect));
   cv::Size target_size(width, height);
   cv::Mat resized_img(target_size.height, target_size.width, CV_8UC3);
   // 计算缩放比例
@@ -449,7 +426,7 @@ int main()
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
   // 后处理 - 使用YoloV5DetectPostProcess类
-  detect_result_group_t detect_result_group;
+  deploy_percept::post_process::DetectResultGroup detect_result_group;
   std::vector<float> out_scales;
   std::vector<int32_t> out_zps;
   for (int i = 0; i < io_num.n_output; ++i)
@@ -500,7 +477,6 @@ int main()
   
   deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
   
-  // 转换BOX_RECT类型到项目类型
   deploy_percept::post_process::BoxRect new_pads;
   new_pads.left = pads.left;
   new_pads.right = pads.right;
@@ -531,7 +507,7 @@ int main()
   char text[256];
   for (int i = 0; i < detect_result_group.count; i++)
   {
-    detect_result_t *det_result = &(detect_result_group.results[i]);
+    deploy_percept::post_process::DetectResult *det_result = &(detect_result_group.results[i]);
     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
     printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
            det_result->box.right, det_result->box.bottom, det_result->prop);
@@ -563,15 +539,8 @@ int main()
     
     deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
     
-    // 转换BOX_RECT类型到项目类型
-    deploy_percept::post_process::BoxRect new_pads;
-    new_pads.left = pads.left;
-    new_pads.right = pads.right;
-    new_pads.top = pads.top;
-    new_pads.bottom = pads.bottom;
-    
     processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
-                  height, width, new_pads, scale_w, scale_h, out_zps, out_scales);
+                  height, width, pads, scale_w, scale_h, out_zps, out_scales);
     
     // 获取结果用于验证
     const auto& result_wrapper = processor.getResult();
