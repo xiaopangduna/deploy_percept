@@ -18,6 +18,7 @@
 // 添加deploy_percept相关头文件
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/engine/BaseEngine.hpp"  // 添加BaseEngine头文件
 
 #define PERF_WITH_POST 1
 #define OBJ_NAME_MAX_SIZE 16
@@ -51,63 +52,6 @@ void letterbox(const cv::Mat &image, cv::Mat &padded_image, deploy_percept::post
 
   // 在图像周围添加填充
   cv::copyMakeBorder(resized_image, padded_image, pads.top, pads.bottom, pads.left, pads.right, cv::BORDER_CONSTANT, pad_color);
-}
-static unsigned char *load_data(FILE *fp, size_t ofst, size_t sz)
-{
-  unsigned char *data;
-  int ret;
-
-  data = NULL;
-
-  if (NULL == fp)
-  {
-    return NULL;
-  }
-
-  ret = fseek(fp, ofst, SEEK_SET);
-  if (ret != 0)
-  {
-    printf("blob seek failure.\n");
-    return NULL;
-  }
-
-  data = (unsigned char *)malloc(sz);
-  if (data == NULL)
-  {
-    printf("buffer malloc failure.\n");
-    return NULL;
-  }
-  ret = fread(data, 1, sz, fp);
-  return data;
-}
-static unsigned char *load_model(const char *filename, int *model_size)
-{
-  FILE *fp;
-  unsigned char *data;
-
-  fp = fopen(filename, "rb");
-  if (NULL == fp)
-  {
-    printf("Open file %s failed.\n", filename);
-    return NULL;
-  }
-
-  fseek(fp, 0, SEEK_END);
-  int size = ftell(fp);
-  if (size <= 0)
-  {
-    printf("Get file size failed.\n");
-    fclose(fp);
-    return NULL;
-  }
-
-  rewind(fp); // 重置文件指针到开始位置
-  data = load_data(fp, 0, size);
-
-  fclose(fp);
-
-  *model_size = size;
-  return data;
 }
 
 static void dump_tensor_attr(rknn_tensor_attr *attr)
@@ -282,7 +226,7 @@ int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
   int model_data_size = 0;
-  unsigned char *model_data = load_model(model_name, &model_data_size);
+  unsigned char *model_data = deploy_percept::engine::BaseEngine::load_model(model_name, &model_data_size);
 
   rknn_context ctx;
   auto ret = rknn_init(&ctx, model_data, model_data_size, 0, NULL);
