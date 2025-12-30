@@ -124,6 +124,34 @@ namespace deploy_percept
         }
 
         /**
+         * @brief 在图像上绘制检测结果组
+         * @param image 输入图像，会在该图像上直接绘制
+         * @param detect_result_group 检测结果组，包含所有检测框信息
+         * @param font_scale 字体缩放比例，默认为0.4
+         * @param line_thickness 线条粗细，默认为3
+         */
+        void YoloV5DetectPostProcess::drawDetectionsResultGroupOnImage(cv::Mat& image, 
+                                                                    const DetectResultGroup& detect_result_group,
+                                                                    double font_scale,
+                                                                    int line_thickness)
+        {
+            char text[256];
+            for (int i = 0; i < detect_result_group.count; i++)
+            {
+                const auto &det_result = detect_result_group.results[i];
+                sprintf(text, "%s %.1f%%", det_result.name, det_result.prop * 100);
+                printf("%s @ (%d %d %d %d) %f\n", det_result.name, det_result.box.left, det_result.box.top,
+                       det_result.box.right, det_result.box.bottom, det_result.prop);
+                int x1 = det_result.box.left;
+                int y1 = det_result.box.top;
+                int x2 = det_result.box.right;
+                int y2 = det_result.box.bottom;
+                cv::rectangle(image, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), line_thickness);
+                cv::putText(image, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, font_scale, cv::Scalar(255, 255, 255));
+            }
+        }
+
+        /**
          * @brief 处理YoloV5模型的单个输出层
          *
          * 解析模型输出的特征图，提取目标边界框、置信度和类别信息

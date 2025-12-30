@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstring>
 #include <string>
+#include <opencv2/opencv.hpp>
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 
@@ -53,6 +54,18 @@ namespace deploy_percept
                 std::vector<int32_t> &qnt_zps,
                 std::vector<float> &qnt_scales);
 
+            /**
+             * @brief 在图像上绘制检测结果组
+             * @param image 输入图像，会在该图像上直接绘制
+             * @param detect_result_group 检测结果组，包含所有检测框信息
+             * @param font_scale 字体缩放比例，默认为0.4
+             * @param line_thickness 线条粗细，默认为3
+             */
+            void drawDetectionsResultGroupOnImage(cv::Mat& image, 
+                                                const DetectResultGroup& detect_result_group,
+                                                double font_scale = 0.4,
+                                                int line_thickness = 3);
+
         private:
             Params params_;
             Result result_{};
@@ -67,4 +80,3 @@ namespace deploy_percept
 
     } // namespace post_process
 } // namespace deploy_percept
-

@@ -73,11 +73,10 @@ int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
 
-  // 使用RknnEngine来加载模型和初始化
   deploy_percept::engine::RknnEngine::Params params;
   params.model_path = std::string(model_name);
-
   deploy_percept::engine::RknnEngine engine(params);
+  
   rknn_context ctx = engine.ctx_;
 
   rknn_input_output_num io_num;
@@ -191,7 +190,6 @@ int main()
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
   // 后处理 - 使用YoloV5DetectPostProcess类
-  deploy_percept::post_process::DetectResultGroup detect_result_group;
   std::vector<float> out_scales;
   std::vector<int32_t> out_zps;
   for (int i = 0; i < io_num.n_output; ++i)
@@ -206,38 +204,8 @@ int main()
 
   processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
                 height, width, pads, scale_w, scale_h, out_zps, out_scales);
+  processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
 
-  // 保存检测结果到YAML文件
-  // 将processor的结果复制到detect_result_group中以保持兼容性
-  const auto &result_wrapper = processor.getResult();
-  const auto &new_detect_result_group = result_wrapper.group;
-  detect_result_group.count = new_detect_result_group.count;
-  for (int i = 0; i < new_detect_result_group.count; i++)
-  {
-    strncpy(detect_result_group.results[i].name, new_detect_result_group.results[i].name, OBJ_NAME_MAX_SIZE - 1);
-    detect_result_group.results[i].name[OBJ_NAME_MAX_SIZE - 1] = '\0';
-    detect_result_group.results[i].box.left = new_detect_result_group.results[i].box.left;
-    detect_result_group.results[i].box.top = new_detect_result_group.results[i].box.top;
-    detect_result_group.results[i].box.right = new_detect_result_group.results[i].box.right;
-    detect_result_group.results[i].box.bottom = new_detect_result_group.results[i].box.bottom;
-    detect_result_group.results[i].prop = new_detect_result_group.results[i].prop;
-  }
-
-  // 画框和概率
-  char text[256];
-  for (int i = 0; i < detect_result_group.count; i++)
-  {
-    deploy_percept::post_process::DetectResult *det_result = &(detect_result_group.results[i]);
-    sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-    printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-           det_result->box.right, det_result->box.bottom, det_result->prop);
-    int x1 = det_result->box.left;
-    int y1 = det_result->box.top;
-    int x2 = det_result->box.right;
-    int y2 = det_result->box.bottom;
-    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), 3);
-    putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-  }
   std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
   printf("save detect result to %s\n", out_path.c_str());
   imwrite(out_path, orig_img);
