@@ -20,23 +20,19 @@
 // 添加deploy_percept相关头文件
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
-#include "deploy_percept/engine/BaseEngine.hpp"  // 添加BaseEngine头文件
-#include "deploy_percept/engine/RknnEngine.hpp"  // 添加RknnEngine头文件
+#include "deploy_percept/engine/BaseEngine.hpp" // 添加BaseEngine头文件
+#include "deploy_percept/engine/RknnEngine.hpp" // 添加RknnEngine头文件
 
 #define PERF_WITH_POST 1
 #define OBJ_NAME_MAX_SIZE 16
 #define OBJ_NUMB_MAX_SIZE 64
 #define OBJ_CLASS_NUM 80
-#define NMS_THRESH 0.45
-#define BOX_THRESH 0.25
+
 #define PROP_BOX_SIZE (5 + OBJ_CLASS_NUM)
 
 #define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/demo/coco_80_labels_list.txt"
 
-
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
-
-static char *labels[OBJ_CLASS_NUM];
 
 void letterbox(const cv::Mat &image, cv::Mat &padded_image, deploy_percept::post_process::BoxRect &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
 {
@@ -72,93 +68,15 @@ static void dump_tensor_attr(rknn_tensor_attr *attr)
          attr->size_with_stride, get_format_string(attr->fmt), get_type_string(attr->type),
          get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
 }
-char *readLine(FILE *fp, char *buffer, int *len)
-{
-  int ch;
-  int i = 0;
-  size_t buff_len = 0;
-
-  buffer = (char *)malloc(buff_len + 1);
-  if (!buffer)
-    return NULL; // Out of memory
-
-  while ((ch = fgetc(fp)) != '\n' && ch != EOF)
-  {
-    buff_len++;
-    void *tmp = realloc(buffer, buff_len + 1);
-    if (tmp == NULL)
-    {
-      free(buffer);
-      return NULL; // Out of memory
-    }
-    buffer = (char *)tmp;
-
-    buffer[i] = (char)ch;
-    i++;
-  }
-  buffer[i] = '\0';
-
-  *len = buff_len;
-
-  // Detect end
-  if (ch == EOF && (i == 0 || ferror(fp)))
-  {
-    free(buffer);
-    return NULL;
-  }
-  return buffer;
-}
-int readLines(const char *fileName, char *lines[], int max_line)
-{
-  FILE *file = fopen(fileName, "r");
-  char *s;
-  int i = 0;
-  int n = 0;
-
-  if (file == NULL)
-  {
-    printf("Open %s fail!\n", fileName);
-    return -1;
-  }
-
-  while ((s = readLine(file, s, &n)) != NULL)
-  {
-    lines[i++] = s;
-    if (i >= max_line)
-      break;
-  }
-  fclose(file);
-  return i;
-}
-int loadLabelName(const char *locationFilename, char *label[])
-{
-  printf("loadLabelName %s\n", locationFilename);
-  readLines(locationFilename, label, OBJ_CLASS_NUM);
-  return 0;
-}
-
-
-// 添加deinitPostProcess函数定义
-void deinitPostProcess()
-{
-  for (int i = 0; i < OBJ_CLASS_NUM; i++)
-  {
-    if (labels[i] != nullptr)
-    {
-      free(labels[i]);
-      labels[i] = nullptr;
-    }
-  }
-}
 
 int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
-  
+
   // 使用RknnEngine来加载模型和初始化
   deploy_percept::engine::RknnEngine::Params params;
   params.model_path = std::string(model_name);
-  
+
   deploy_percept::engine::RknnEngine engine(params);
   rknn_context ctx = engine.ctx_;
 
@@ -211,7 +129,7 @@ int main()
 
   // 指定目标大小和预处理方式,默认使用LetterBox的预处理
   deploy_percept::post_process::BoxRect pads;
-  memset(&pads, 0, sizeof(deploy_percept::post_process::BoxRect));
+  // memset(&pads, 0, sizeof(deploy_percept::post_process::BoxRect));
   cv::Size target_size(width, height);
   cv::Mat resized_img(target_size.height, target_size.width, CV_8UC3);
   // 计算缩放比例
@@ -281,70 +199,29 @@ int main()
     out_scales.push_back(engine.model_output_attrs_[i].scale);
     out_zps.push_back(engine.model_output_attrs_[i].zp);
   }
-  const float nms_threshold = NMS_THRESH;      // 默认的NMS阈值
-  const float box_conf_threshold = BOX_THRESH; // 默认的置信度阈值
-  
-  // 保存输入数据到NPZ文件
-  // 计算YOLO输出层的形状 [height/stride, width/stride, channels]
-  int8_t* output0_ptr = (int8_t *)outputs[0].buf;
-  int8_t* output1_ptr = (int8_t *)outputs[1].buf;
-  int8_t* output2_ptr = (int8_t *)outputs[2].buf;
-  
-  // 假设YOLOv5的输出格式，对于输入尺寸height x width
-  int8_t stride0 = 8, stride1 = 16, stride2 = 32;
-  int32_t output0_shape[] = {height / stride0, width / stride0, PROP_BOX_SIZE * 3}; // 例如 80x80x255
-  int32_t output1_shape[] = {height / stride1, width / stride1, PROP_BOX_SIZE * 3}; // 例如 40x40x255
-  int32_t output2_shape[] = {height / stride2, width / stride2, PROP_BOX_SIZE * 3}; // 例如 20x20x255
-  
-  // 生成时间戳作为文件名的一部分，确保唯一性
-  auto now = std::chrono::system_clock::now();
-  auto duration = now.time_since_epoch();
-  auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  
-  // 使用NPZ格式保存三个输出到一个文件
-  std::string npz_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_outputs.npz";
-  cnpy::npz_save(npz_filename, "output0", output0_ptr, {output0_shape, output0_shape+3}, "w");  // write mode
-  cnpy::npz_save(npz_filename, "output1", output1_ptr, {output1_shape, output1_shape+3}, "a");  // append mode
-  cnpy::npz_save(npz_filename, "output2", output2_ptr, {output2_shape, output2_shape+3}, "a");  // append mode
-  
-  std::cout << "Saved YOLOv5 outputs to NPZ file: " << npz_filename << std::endl;
-  
 
-  
   // 使用YoloV5DetectPostProcess类进行后处理
   deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
-  params_post.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
-  params_post.nms_threshold = NMS_THRESH;
-  params_post.obj_class_num = OBJ_CLASS_NUM;
-  params_post.obj_name_max_size = OBJ_NAME_MAX_SIZE;
-  params_post.obj_numb_max_size = OBJ_NUMB_MAX_SIZE;
-  
   deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
-  
-  deploy_percept::post_process::BoxRect new_pads;
-  new_pads.left = pads.left;
-  new_pads.right = pads.right;
-  new_pads.top = pads.top;
-  new_pads.bottom = pads.bottom;
-  
-  processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
-                height, width, new_pads, scale_w, scale_h, out_zps, out_scales);
+
+  processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
+                height, width, pads, scale_w, scale_h, out_zps, out_scales);
 
   // 保存检测结果到YAML文件
   // 将processor的结果复制到detect_result_group中以保持兼容性
-  const auto& result_wrapper = processor.getResult();
-  const auto& new_detect_result_group = result_wrapper.group;
+  const auto &result_wrapper = processor.getResult();
+  const auto &new_detect_result_group = result_wrapper.group;
   detect_result_group.count = new_detect_result_group.count;
-  for (int i = 0; i < new_detect_result_group.count; i++) {
-      strncpy(detect_result_group.results[i].name, new_detect_result_group.results[i].name, OBJ_NAME_MAX_SIZE-1);
-      detect_result_group.results[i].name[OBJ_NAME_MAX_SIZE-1] = '\0';
-      detect_result_group.results[i].box.left = new_detect_result_group.results[i].box.left;
-      detect_result_group.results[i].box.top = new_detect_result_group.results[i].box.top;
-      detect_result_group.results[i].box.right = new_detect_result_group.results[i].box.right;
-      detect_result_group.results[i].box.bottom = new_detect_result_group.results[i].box.bottom;
-      detect_result_group.results[i].prop = new_detect_result_group.results[i].prop;
+  for (int i = 0; i < new_detect_result_group.count; i++)
+  {
+    strncpy(detect_result_group.results[i].name, new_detect_result_group.results[i].name, OBJ_NAME_MAX_SIZE - 1);
+    detect_result_group.results[i].name[OBJ_NAME_MAX_SIZE - 1] = '\0';
+    detect_result_group.results[i].box.left = new_detect_result_group.results[i].box.left;
+    detect_result_group.results[i].box.top = new_detect_result_group.results[i].box.top;
+    detect_result_group.results[i].box.right = new_detect_result_group.results[i].box.right;
+    detect_result_group.results[i].box.bottom = new_detect_result_group.results[i].box.bottom;
+    detect_result_group.results[i].prop = new_detect_result_group.results[i].prop;
   }
-  
 
   // 画框和概率
   char text[256];
@@ -374,41 +251,11 @@ int main()
     rknn_inputs_set(ctx, io_num.n_input, inputs);
     ret = rknn_run(ctx, NULL);
     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
-#if PERF_WITH_POST
-    // 使用YoloV5DetectPostProcess类进行后处理
-    deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post_test;
-    params_post_test.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
-    params_post_test.nms_threshold = NMS_THRESH;
-    
-    deploy_percept::post_process::YoloV5DetectPostProcess processor_test(params_post_test);
-    
-    processor_test.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
-                  height, width, pads, scale_w, scale_h, out_zps, out_scales);
-    
-    // 获取结果用于验证
-    const auto& result_wrapper_test = processor_test.getResult();
-    const auto& new_detect_result_group_test = result_wrapper_test.group;
-    
-    // 验证结果一致性
-    printf("Processor: %d detections\n", new_detect_result_group_test.count);
-    for (int j = 0; j < new_detect_result_group_test.count; j++) {
-        printf("Result[%d]: %s (%d, %d, %d, %d) conf=%.3f\n", j,
-               new_detect_result_group_test.results[j].name,
-               new_detect_result_group_test.results[j].box.left, new_detect_result_group_test.results[j].box.top,
-               new_detect_result_group_test.results[j].box.right, new_detect_result_group_test.results[j].box.bottom,
-               new_detect_result_group_test.results[j].prop);
-    }
-#endif
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
   }
   gettimeofday(&stop_time, NULL);
   printf("loop count = %d , average run  %f ms\n", test_count,
          (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
-
-  deinitPostProcess();
-
-  // release
-  ret = rknn_destroy(ctx);
 
   return 0;
 }
