@@ -107,7 +107,7 @@ namespace deploy_percept
 
                 result_.group.results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
                 result_.group.results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
-                result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_h);
+                result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_w);
                 result_.group.results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
                 result_.group.results[last_count].prop = obj_conf;
 
@@ -142,12 +142,8 @@ namespace deploy_percept
                 sprintf(text, "%s %.1f%%", det_result.name, det_result.prop * 100);
                 printf("%s @ (%d %d %d %d) %f\n", det_result.name, det_result.box.left, det_result.box.top,
                        det_result.box.right, det_result.box.bottom, det_result.prop);
-                int x1 = det_result.box.left;
-                int y1 = det_result.box.top;
-                int x2 = det_result.box.right;
-                int y2 = det_result.box.bottom;
-                cv::rectangle(image, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), line_thickness);
-                cv::putText(image, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, font_scale, cv::Scalar(255, 255, 255));
+                cv::rectangle(image, cv::Point(det_result.box.left, det_result.box.top), cv::Point(det_result.box.right, det_result.box.bottom), cv::Scalar(256, 0, 0, 256), line_thickness);
+                cv::putText(image, text, cv::Point(det_result.box.left, det_result.box.top + 12), cv::FONT_HERSHEY_SIMPLEX, font_scale, cv::Scalar(255, 255, 255));
             }
         }
 
