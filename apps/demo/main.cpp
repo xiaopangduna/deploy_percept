@@ -15,11 +15,13 @@
 #include <chrono>
 #include <yaml-cpp/yaml.h>
 #include <memory>
+#include <vector>
 
 // 添加deploy_percept相关头文件
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/BaseEngine.hpp"  // 添加BaseEngine头文件
+#include "deploy_percept/engine/RknnEngine.hpp"  // 添加RknnEngine头文件
 
 #define PERF_WITH_POST 1
 #define OBJ_NAME_MAX_SIZE 16
@@ -134,81 +136,7 @@ int loadLabelName(const char *locationFilename, char *label[])
   readLines(locationFilename, label, OBJ_CLASS_NUM);
   return 0;
 }
-// 保存参数到YAML文件
-void saveParamsToYaml(const std::string& filename,
-                     int model_h, int model_w,
-                     float box_conf_threshold, float nms_threshold,
-                     deploy_percept::post_process::BoxRect pads,
-                     float scale_w, float scale_h,
-                     std::vector<int32_t> qnt_zps,
-                     std::vector<float> qnt_scales) {
-    YAML::Node params;
-    
-    params["model_h"] = model_h;
-    params["model_w"] = model_w;
-    params["box_conf_threshold"] = box_conf_threshold;
-    params["nms_threshold"] = nms_threshold;
-    
-    YAML::Node pads_node;
-    pads_node["left"] = pads.left;
-    pads_node["top"] = pads.top;
-    pads_node["right"] = pads.right;
-    pads_node["bottom"] = pads.bottom;
-    params["pads"] = pads_node;
-    
-    params["scale_w"] = scale_w;
-    params["scale_h"] = scale_h;
-    params["qnt_zps"] = qnt_zps;
-    params["qnt_scales"] = qnt_scales;
-    
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open file for writing: " << filename << std::endl;
-        return;
-    }
-    
-    file << params;
-    file.close();
-    std::cout << "Saved parameters to YAML file: " << filename << std::endl;
-}
 
-// 保存检测结果到YAML文件
-void saveDetectionResultsToYaml(const std::string& filename, deploy_percept::post_process::DetectResultGroup* group) {
-    YAML::Node results;
-    
-    results["detection_count"] = group->count;
-    
-    YAML::Node detections;
-    for (int i = 0; i < group->count; i++) {
-        deploy_percept::post_process::DetectResult* det_result = &(group->results[i]);
-        
-        YAML::Node detection;
-        detection["id"] = i;
-        detection["name"] = det_result->name;
-        
-        YAML::Node box;
-        box["left"] = det_result->box.left;
-        box["top"] = det_result->box.top;
-        box["right"] = det_result->box.right;
-        box["bottom"] = det_result->box.bottom;
-        detection["box"] = box;
-        
-        detection["prop"] = det_result->prop;
-        
-        detections.push_back(detection);
-    }
-    results["detections"] = detections;
-    
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Cannot open file for writing: " << filename << std::endl;
-        return;
-    }
-    
-    file << results;
-    file.close();
-    std::cout << "Saved detection results to YAML file: " << filename << std::endl;
-}
 
 // 添加deinitPostProcess函数定义
 void deinitPostProcess()
@@ -226,71 +154,34 @@ void deinitPostProcess()
 int main()
 {
   const char *model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
-  deploy_percept::engine::BaseEngine engine;
-  std::vector<unsigned char> model_data;
-  size_t model_data_size;
   
-  if (!engine.get_binary_file_size(std::string(model_name), model_data_size)) {
-      printf("Failed to get model file size\n");
-      return -1;
-  }
+  // 使用RknnEngine来加载模型和初始化
+  deploy_percept::engine::RknnEngine::Params params;
+  params.model_path = std::string(model_name);
   
-  if (!engine.load_binary_file_data(std::string(model_name), model_data)) {
-      printf("Failed to load model\n");
-      return -1;
-  }
-
-  rknn_context ctx;
-  auto ret = rknn_init(&ctx, model_data.data(), model_data_size, 0, NULL);
+  deploy_percept::engine::RknnEngine engine(params);
+  rknn_context ctx = engine.ctx_;
 
   rknn_input_output_num io_num;
-  ret = rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num));
-  if (ret < 0)
-  {
-    printf("rknn_init error ret=%d\n", ret);
-    return -1;
-  }
-  printf("model input num: %d, output num: %d\n", io_num.n_input, io_num.n_output);
-
-  rknn_tensor_attr input_attrs[io_num.n_input];
-  memset(input_attrs, 0, sizeof(input_attrs));
-  for (int i = 0; i < io_num.n_input; i++)
-  {
-    input_attrs[i].index = i;
-    ret = rknn_query(ctx, RKNN_QUERY_INPUT_ATTR, &(input_attrs[i]), sizeof(rknn_tensor_attr));
-    if (ret < 0)
-    {
-      printf("rknn_init error ret=%d\n", ret);
-      return -1;
-    }
-    dump_tensor_attr(&(input_attrs[i]));
-  }
-
-  rknn_tensor_attr output_attrs[io_num.n_output];
-  memset(output_attrs, 0, sizeof(output_attrs));
-  for (int i = 0; i < io_num.n_output; i++)
-  {
-    output_attrs[i].index = i;
-    ret = rknn_query(ctx, RKNN_QUERY_OUTPUT_ATTR, &(output_attrs[i]), sizeof(rknn_tensor_attr));
-    dump_tensor_attr(&(output_attrs[i]));
-  }
+  io_num = engine.model_io_num_;
+  int ret;
 
   int channel = 3;
   int width = 0;
   int height = 0;
-  if (input_attrs[0].fmt == RKNN_TENSOR_NCHW)
+  if (engine.model_input_attrs_[0].fmt == RKNN_TENSOR_NCHW)
   {
     printf("model is NCHW input fmt\n");
-    channel = input_attrs[0].dims[1];
-    height = input_attrs[0].dims[2];
-    width = input_attrs[0].dims[3];
+    channel = engine.model_input_attrs_[0].dims[1];
+    height = engine.model_input_attrs_[0].dims[2];
+    width = engine.model_input_attrs_[0].dims[3];
   }
   else
   {
     printf("model is NHWC input fmt\n");
-    height = input_attrs[0].dims[1];
-    width = input_attrs[0].dims[2];
-    channel = input_attrs[0].dims[3];
+    height = engine.model_input_attrs_[0].dims[1];
+    width = engine.model_input_attrs_[0].dims[2];
+    channel = engine.model_input_attrs_[0].dims[3];
   }
   printf("model input height=%d, width=%d, channel=%d\n", height, width, channel);
 
@@ -298,7 +189,7 @@ int main()
   memset(inputs, 0, sizeof(inputs));
   inputs[0].index = 0;
   inputs[0].type = RKNN_TENSOR_UINT8;
-  inputs[0].size = width * height * channel;
+  inputs[0].size = engine.model_input_attrs_[0].dims[1] * engine.model_input_attrs_[0].dims[2] * engine.model_input_attrs_[0].dims[3];
   inputs[0].fmt = RKNN_TENSOR_NHWC;
   inputs[0].pass_through = 0;
   // 读取图片
@@ -387,8 +278,8 @@ int main()
   std::vector<int32_t> out_zps;
   for (int i = 0; i < io_num.n_output; ++i)
   {
-    out_scales.push_back(output_attrs[i].scale);
-    out_zps.push_back(output_attrs[i].zp);
+    out_scales.push_back(engine.model_output_attrs_[i].scale);
+    out_zps.push_back(engine.model_output_attrs_[i].zp);
   }
   const float nms_threshold = NMS_THRESH;      // 默认的NMS阈值
   const float box_conf_threshold = BOX_THRESH; // 默认的置信度阈值
@@ -418,20 +309,17 @@ int main()
   
   std::cout << "Saved YOLOv5 outputs to NPZ file: " << npz_filename << std::endl;
   
-  // 保存参数到YAML文件
-  saveParamsToYaml("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_params.yaml",
-                   height, width, box_conf_threshold, nms_threshold,
-                   pads, scale_w, scale_h, out_zps, out_scales);
+
   
   // 使用YoloV5DetectPostProcess类进行后处理
-  deploy_percept::post_process::YoloV5DetectPostProcess::Params params;
-  params.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
-  params.nms_threshold = NMS_THRESH;
-  params.obj_class_num = OBJ_CLASS_NUM;
-  params.obj_name_max_size = OBJ_NAME_MAX_SIZE;
-  params.obj_numb_max_size = OBJ_NUMB_MAX_SIZE;
+  deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
+  params_post.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
+  params_post.nms_threshold = NMS_THRESH;
+  params_post.obj_class_num = OBJ_CLASS_NUM;
+  params_post.obj_name_max_size = OBJ_NAME_MAX_SIZE;
+  params_post.obj_numb_max_size = OBJ_NUMB_MAX_SIZE;
   
-  deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
+  deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
   
   deploy_percept::post_process::BoxRect new_pads;
   new_pads.left = pads.left;
@@ -457,7 +345,6 @@ int main()
       detect_result_group.results[i].prop = new_detect_result_group.results[i].prop;
   }
   
-  saveDetectionResultsToYaml("/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_detect_results.yaml", &detect_result_group);
 
   // 画框和概率
   char text[256];
@@ -489,27 +376,27 @@ int main()
     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
 #if PERF_WITH_POST
     // 使用YoloV5DetectPostProcess类进行后处理
-    deploy_percept::post_process::YoloV5DetectPostProcess::Params params;
-    params.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
-    params.nms_threshold = NMS_THRESH;
+    deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post_test;
+    params_post_test.conf_threshold = BOX_THRESH;  // 使用与原始函数相同的阈值
+    params_post_test.nms_threshold = NMS_THRESH;
     
-    deploy_percept::post_process::YoloV5DetectPostProcess processor(params);
+    deploy_percept::post_process::YoloV5DetectPostProcess processor_test(params_post_test);
     
-    processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
+    processor_test.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, 
                   height, width, pads, scale_w, scale_h, out_zps, out_scales);
     
     // 获取结果用于验证
-    const auto& result_wrapper = processor.getResult();
-    const auto& new_detect_result_group = result_wrapper.group;
+    const auto& result_wrapper_test = processor_test.getResult();
+    const auto& new_detect_result_group_test = result_wrapper_test.group;
     
     // 验证结果一致性
-    printf("Processor: %d detections\n", new_detect_result_group.count);
-    for (int j = 0; j < new_detect_result_group.count; j++) {
+    printf("Processor: %d detections\n", new_detect_result_group_test.count);
+    for (int j = 0; j < new_detect_result_group_test.count; j++) {
         printf("Result[%d]: %s (%d, %d, %d, %d) conf=%.3f\n", j,
-               new_detect_result_group.results[j].name,
-               new_detect_result_group.results[j].box.left, new_detect_result_group.results[j].box.top,
-               new_detect_result_group.results[j].box.right, new_detect_result_group.results[j].box.bottom,
-               new_detect_result_group.results[j].prop);
+               new_detect_result_group_test.results[j].name,
+               new_detect_result_group_test.results[j].box.left, new_detect_result_group_test.results[j].box.top,
+               new_detect_result_group_test.results[j].box.right, new_detect_result_group_test.results[j].box.bottom,
+               new_detect_result_group_test.results[j].prop);
     }
 #endif
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);

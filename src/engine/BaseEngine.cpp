@@ -1,9 +1,6 @@
 #include "deploy_percept/engine/BaseEngine.hpp"
-#include <memory>
 #include <fstream>
 #include <vector>
-#include <filesystem>
-#include <string>
 
 namespace deploy_percept
 {
@@ -12,16 +9,13 @@ namespace deploy_percept
 
         bool BaseEngine::get_binary_file_size(const std::string& filepath, size_t& size)
         {
-            // 使用RAII管理文件资源
-            std::ifstream file(filepath, std::ios::binary);
+            std::ifstream file(filepath, std::ios::binary | std::ios::ate);
             if (!file) {
                 return false;
             }
 
-            // 获取文件大小
-            file.seekg(0, std::ios::end);
             std::streamsize file_size = file.tellg();
-            if (file_size <= 0) {
+            if (file_size < 0) {
                 return false;
             }
 
@@ -31,26 +25,25 @@ namespace deploy_percept
 
         bool BaseEngine::load_binary_file_data(const std::string& filepath, std::vector<unsigned char>& data)
         {
-            // 使用RAII管理文件资源
-            std::ifstream file(filepath, std::ios::binary);
+            std::ifstream file(filepath, std::ios::binary | std::ios::ate);
             if (!file) {
                 return false;
             }
 
-            // 获取文件大小
-            file.seekg(0, std::ios::end);
             std::streamsize file_size = file.tellg();
-            if (file_size <= 0) {
+            if (file_size < 0) {
                 return false;
             }
 
-            // 移动到文件开头
+            // 重置文件指针到开头
             file.seekg(0, std::ios::beg);
 
-            // 分配内存并读取文件内容
+            // 调整vector大小以容纳整个文件
             data.resize(file_size);
+
+            // 读取文件内容
             if (!file.read(reinterpret_cast<char*>(data.data()), file_size)) {
-                return false; // 读取失败
+                return false;
             }
 
             return true;
