@@ -23,51 +23,17 @@
 #include "deploy_percept/engine/BaseEngine.hpp" // 添加BaseEngine头文件
 #include "deploy_percept/engine/RknnEngine.hpp" // 添加RknnEngine头文件
 
-#define PERF_WITH_POST 1
-#define OBJ_NAME_MAX_SIZE 16
-#define OBJ_NUMB_MAX_SIZE 64
-#define OBJ_CLASS_NUM 80
+// #define PERF_WITH_POST 1
+// #define OBJ_NAME_MAX_SIZE 16
+// #define OBJ_NUMB_MAX_SIZE 64
+// #define OBJ_CLASS_NUM 80
 
-#define PROP_BOX_SIZE (5 + OBJ_CLASS_NUM)
+// #define PROP_BOX_SIZE (5 + OBJ_CLASS_NUM)
 
 #define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/demo/coco_80_labels_list.txt"
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
-void letterbox(const cv::Mat &image, cv::Mat &padded_image, deploy_percept::post_process::BoxRect &pads, const float scale, const cv::Size &target_size, const cv::Scalar &pad_color)
-{
-  // 调整图像大小
-  cv::Mat resized_image;
-  cv::resize(image, resized_image, cv::Size(), scale, scale);
-
-  // 计算填充大小
-  int pad_width = target_size.width - resized_image.cols;
-  int pad_height = target_size.height - resized_image.rows;
-
-  pads.left = pad_width / 2;
-  pads.right = pad_width - pads.left;
-  pads.top = pad_height / 2;
-  pads.bottom = pad_height - pads.top;
-
-  // 在图像周围添加填充
-  cv::copyMakeBorder(resized_image, padded_image, pads.top, pads.bottom, pads.left, pads.right, cv::BORDER_CONSTANT, pad_color);
-}
-
-static void dump_tensor_attr(rknn_tensor_attr *attr)
-{
-  std::string shape_str = attr->n_dims < 1 ? "" : std::to_string(attr->dims[0]);
-  for (int i = 1; i < attr->n_dims; ++i)
-  {
-    shape_str += ", " + std::to_string(attr->dims[i]);
-  }
-
-  printf("  index=%d, name=%s, n_dims=%d, dims=[%s], n_elems=%d, size=%d, w_stride = %d, size_with_stride=%d, fmt=%s, "
-         "type=%s, qnt_type=%s, "
-         "zp=%d, scale=%f\n",
-         attr->index, attr->name, attr->n_dims, shape_str.c_str(), attr->n_elems, attr->size, attr->w_stride,
-         attr->size_with_stride, get_format_string(attr->fmt), get_type_string(attr->type),
-         get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
-}
 
 int main()
 {
@@ -134,46 +100,10 @@ int main()
   // 计算缩放比例
   float scale_w = (float)target_size.width / img.cols;
   float scale_h = (float)target_size.height / img.rows;
-  std::string option = "letterbox";
-  if (img_width != width || img_height != height)
-  {
-    // 直接缩放采用RGA加速
-    if (option == "resize")
-    {
-      // printf("resize image by rga\n");
-      // ret = resize_rga(src, dst, img, resized_img, target_size);
-      // if (ret != 0)
-      // {
-      //   fprintf(stderr, "resize with rga error\n");
-      //   return -1;
-      // }
-      // // 保存预处理图片
-      // cv::imwrite("resize_input.jpg", resized_img);
-    }
-    else if (option == "letterbox")
-    {
-      printf("resize image with letterbox\n");
-      float min_scale = std::min(scale_w, scale_h);
-      scale_w = min_scale;
-      scale_h = min_scale;
-      letterbox(img, resized_img, pads, min_scale, target_size, cv::Scalar(128, 128, 128));
-      // 保存预处理图片
-      cv::imwrite("/home/orangepi/HectorHuang/deploy_percept/tmp/letterbox_input.jpg", resized_img);
-    }
-    else
-    {
-      fprintf(stderr, "Invalid resize option. Use 'resize' or 'letterbox'.\n");
-      return -1;
-    }
-    inputs[0].buf = resized_img.data;
-  }
-  else
-  {
-    inputs[0].buf = img.data;
-  }
-  struct timeval start_time, stop_time;
-  gettimeofday(&start_time, NULL);
 
+  inputs[0].buf = img.data;
+
+  struct timeval start_time, stop_time;
   rknn_output outputs[io_num.n_output];
   memset(outputs, 0, sizeof(outputs));
   for (int i = 0; i < io_num.n_output; i++)
@@ -182,9 +112,10 @@ int main()
     outputs[i].want_float = 0;
   }
 
-
+  gettimeofday(&start_time, NULL);
   engine.run(inputs, outputs);
   gettimeofday(&stop_time, NULL);
+
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
   // 后处理 - 使用YoloV5DetectPostProcess类
@@ -207,7 +138,7 @@ int main()
   std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
   printf("save detect result to %s\n", out_path.c_str());
   imwrite(out_path, orig_img);
-  
+
   ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
 
   // 耗时统计

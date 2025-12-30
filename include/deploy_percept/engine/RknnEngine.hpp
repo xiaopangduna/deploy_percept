@@ -38,6 +38,9 @@ namespace deploy_percept
             std::vector<rknn_tensor_attr> model_input_attrs_;
             std::vector<rknn_tensor_attr> model_output_attrs_;
 
+            // 添加dump_tensor_attr函数
+            static void dump_tensor_attr(rknn_tensor_attr *attr);
+
         private:
             Params params_;
             Result result_{};

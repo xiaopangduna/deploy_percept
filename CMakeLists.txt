@@ -25,6 +25,7 @@ add_library(deploy_percept STATIC
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
     src/post_process/PostProcessFactory.cpp
+    src/pre_process/ImagePreProcess.cpp
     src/engine/RknnEngine.cpp
     src/engine/EngineFactory.cpp
     src/engine/BaseEngine.cpp
