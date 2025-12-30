@@ -32,7 +32,7 @@ namespace deploy_percept
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }
 
-            bool run(const rknn_input inputs[], rknn_output outputs[]);
+            bool run(rknn_input inputs[], rknn_output outputs[]);
             rknn_context ctx_;
             rknn_input_output_num model_io_num_;
             std::vector<rknn_tensor_attr> model_input_attrs_;

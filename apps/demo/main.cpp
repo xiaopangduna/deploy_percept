@@ -76,7 +76,7 @@ int main()
   deploy_percept::engine::RknnEngine::Params params;
   params.model_path = std::string(model_name);
   deploy_percept::engine::RknnEngine engine(params);
-  
+
   rknn_context ctx = engine.ctx_;
 
   rknn_input_output_num io_num;
@@ -173,7 +173,6 @@ int main()
   }
   struct timeval start_time, stop_time;
   gettimeofday(&start_time, NULL);
-  rknn_inputs_set(ctx, io_num.n_input, inputs);
 
   rknn_output outputs[io_num.n_output];
   memset(outputs, 0, sizeof(outputs));
@@ -183,9 +182,8 @@ int main()
     outputs[i].want_float = 0;
   }
 
-  // 执行推理
-  ret = rknn_run(ctx, NULL);
-  ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
+
+  engine.run(inputs, outputs);
   gettimeofday(&stop_time, NULL);
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
@@ -209,6 +207,7 @@ int main()
   std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
   printf("save detect result to %s\n", out_path.c_str());
   imwrite(out_path, orig_img);
+  
   ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
 
   // 耗时统计

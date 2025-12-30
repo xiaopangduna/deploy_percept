@@ -49,10 +49,11 @@ namespace deploy_percept
         {
             rknn_destroy(ctx_);
         }
-        bool RknnEngine::run(const rknn_input inputs[], rknn_output outputs[])
+        bool RknnEngine::run(rknn_input inputs[], rknn_output outputs[])
         {
-            // 重置结果
-
+            rknn_inputs_set(ctx_, model_io_num_.n_input, inputs);
+            rknn_run(ctx_, NULL);
+            rknn_outputs_get(ctx_, model_io_num_.n_output, outputs, NULL);
             return true;
         }
 
