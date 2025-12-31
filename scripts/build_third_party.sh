@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             echo "未知选项: $1"
             echo "用法: $0 <platform> [--libs <libraries>]"
             echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog,cnpy"
+            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog,cnpy,rga"
             echo "             默认构建所有支持的库"
             exit 1
             ;;
@@ -40,7 +40,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "用法: $0 <platform> [--libs <libraries>]"
     echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy"
+    echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy, rga"
     exit 1
 fi
 
@@ -118,6 +118,7 @@ if [ "$LIBS_TO_BUILD" = "all" ]; then
     BUILD_SPDLOG=yes
     BUILD_RKNPU=yes
     BUILD_CNPY=yes
+    BUILD_RGA=yes
 
 else
     BUILD_GTEST=no
@@ -125,6 +126,7 @@ else
     BUILD_RKNPU=no
     BUILD_SPDLOG=no
     BUILD_CNPY=no
+    BUILD_RGA=no
 
     IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
     for lib in "${LIBS[@]}"; do
@@ -143,6 +145,9 @@ else
                 ;;
             cnpy)
                 BUILD_CNPY=yes
+                ;;
+            rga)
+                BUILD_RGA=yes
                 ;;
             *)
                 echo "警告: 忽略未知的库 '$lib'"
@@ -324,6 +329,39 @@ if [ "$BUILD_RKNPU" = "yes" ]; then
     fi
     
     echo "RKNPU库处理完成"
+fi
+
+# ======================
+# 新增：处理 RGA库
+# ======================
+
+# 编译RGA（如果需要）
+if [ "$BUILD_RGA" = "yes" ]; then
+    echo "开始处理RGA库..."
+    cd ${PROJECT_ROOT}/tmp
+
+    if [ ! -d "librga" ]; then
+        echo "克隆librga仓库..."
+        git clone https://github.com/airockchip/librga.git
+    else
+        echo "librga目录已存在，跳过克隆"
+    fi
+
+    cd ${PROJECT_ROOT}/tmp/librga
+    echo "开始拷贝librga库文件到third_party目录..."
+    
+    # 如果目标目录已存在，则先删除再拷贝
+    if [ -d "${INSTALL_DIR}/rga" ]; then
+        echo "删除已存在的${INSTALL_DIR}/rga目录..."
+        rm -rf ${INSTALL_DIR}/rga
+    fi
+    
+    # 拷贝整个librga目录到third_party
+    cp -r . ${INSTALL_DIR}/rga/
+    
+    echo "RGA库处理完成，已安装到 ${INSTALL_DIR}/rga"
+else
+    echo "跳过RGA库处理"
 fi
 
 echo "为${PLATFORM}平台的第三方库构建任务已完成"

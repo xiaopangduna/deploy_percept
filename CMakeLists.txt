@@ -32,13 +32,14 @@ add_library(deploy_percept STATIC
 )
 
 # 链接OpenCV库、spdlog、RKNN、cnpy和zlib库到我们的库
-target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z)
+target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z ${LIBRGA})
 
 # 设置库的包含目录
 target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${LIBRKNNRT_INCLUDES}>
+    $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>
     $<BUILD_INTERFACE:${CNPY_INCLUDE_DIRS}>
     ${YAML_CPP_INCLUDE_DIR}
 )
