@@ -1,5 +1,7 @@
 #pragma once
 
+#if RGA_FOUND
+
 #include <opencv2/opencv.hpp>
 #include <string>
 #include "im2d.h"
@@ -13,3 +15,5 @@ namespace deploy_percept
 
     } // namespace pre_process
 } // namespace deploy_percept
+
+#endif // RGA_FOUND

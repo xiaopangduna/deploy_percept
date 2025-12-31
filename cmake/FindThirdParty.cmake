@@ -17,6 +17,6 @@ include(FindYamlCppCustom)
 include(FindCnpyCustom)
 
 include(FindRknn)
-# include(FindRgaCustom)
+include(FindRgaCustom)
 
 message(STATUS "已完成第三方库配置")
