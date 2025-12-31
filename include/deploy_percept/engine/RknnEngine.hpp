@@ -1,5 +1,6 @@
 #pragma once
 
+#if RKNN_FOUND
 #include <vector>
 #include <cstring>
 #include <string>
@@ -49,5 +50,7 @@ namespace deploy_percept
             size_t model_binary_size_;
         };
 
-    } // namespace post_process
+    } // namespace engine
 } // namespace deploy_percept
+
+#endif

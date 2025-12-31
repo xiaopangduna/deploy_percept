@@ -1,6 +1,7 @@
 #include "deploy_percept/engine/EngineFactory.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
 
+
 namespace deploy_percept
 {
     namespace engine
@@ -10,12 +11,14 @@ namespace deploy_percept
         {
             switch (type)
             {
+#if RKNN_FOUND
             case EngineType::RKNN:
                 return std::make_unique<RknnEngine>(RknnEngine::Params());
+#endif
             default:
                 return nullptr;
             }
         }
 
-    } // namespace post_process
+    } // namespace engine
 } // namespace deploy_percept

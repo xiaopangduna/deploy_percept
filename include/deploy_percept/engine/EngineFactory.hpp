@@ -16,6 +16,5 @@ public:
     static std::unique_ptr<BaseEngine> create(EngineType type);
 };
 
-} // namespace post_process
+} // namespace engine
 } // namespace deploy_percept
-
