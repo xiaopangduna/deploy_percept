@@ -32,14 +32,17 @@ endif()
 # 设置RGA库的包含目录
 set(LIBRGA_INCLUDES ${RGA_PATH}/include)
 
-message(STATUS "==============================================================================")
+# 检查RGA库是否存在并设置RGA_FOUND变量
 if(EXISTS ${LIBRGA})
+    set(RGA_FOUND TRUE)
     message(STATUS "RGA library found successfully")
     message(STATUS "RGA path: ${RGA_PATH}")
     message(STATUS "RGA library: ${LIBRGA}")
     message(STATUS "RGA includes: ${LIBRGA_INCLUDES}")
 else()
+    set(RGA_FOUND FALSE)
     message(WARNING "RGA library not found or not exists")
     message(WARNING "Expected library path: ${LIBRGA}")
 endif()
+
 message(STATUS "==============================================================================")

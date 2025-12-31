@@ -8,9 +8,6 @@
 #include <chrono>
 
 #include "rknn_api.h"
-#include "im2d.h"
-#include "rga.h"
-
 
 #include <opencv2/opencv.hpp>
 #include "opencv2/core/core.hpp"

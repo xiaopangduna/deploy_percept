@@ -18,32 +18,46 @@ include_directories(include)
 
 # 添加子目录
 
-# 创建库目标
-add_library(deploy_percept STATIC
+# 定义基础源文件列表（不包含RGA相关文件）
+set(DEPLOY_PERCEPT_SOURCES
     src/calculator/Calculator.cpp
     src/utils/logger_factory.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
     src/post_process/PostProcessFactory.cpp
     src/pre_process/image_pre_process.cpp
-    src/pre_process/image_pre_process_rga.cpp
     src/engine/RknnEngine.cpp
     src/engine/EngineFactory.cpp
     src/engine/BaseEngine.cpp
 )
 
+# 创建库目标
+add_library(deploy_percept STATIC ${DEPLOY_PERCEPT_SOURCES})
+
+
 # 链接OpenCV库、spdlog、RKNN、cnpy和zlib库到我们的库
-target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z ${LIBRGA})
+
+target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z )
+
 
 # 设置库的包含目录
 target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${LIBRKNNRT_INCLUDES}>
-    $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>
     $<BUILD_INTERFACE:${CNPY_INCLUDE_DIRS}>
     ${YAML_CPP_INCLUDE_DIR}
 )
+
+# RGA
+if(RGA_FOUND)
+    target_sources(deploy_percept PRIVATE src/pre_process/image_pre_process_rga.cpp)
+    target_link_libraries(deploy_percept PUBLIC ${LIBRGA})
+    target_include_directories(deploy_percept PUBLIC
+    $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>
+)
+endif()
+
 
 # 安装规则
 install(TARGETS deploy_percept
