@@ -77,7 +77,7 @@ install(EXPORT deploy_perceptTargets
 )
 
 # 添加子目录
-add_subdirectory(apps)
+# add_subdirectory(apps)
 # 启用测试
 enable_testing()
 add_subdirectory(tests)
