@@ -1,34 +1,88 @@
 #!/bin/bash
-# bash scripts/build_third_party.sh x86_64 --libs gtest,opencv,cnpy
-# bash scripts/build_third_party.sh aarch64 --libs gtest,opencv,cnpy
-# 为不同平台编译第三方库的通用脚本
+# 第三方库构建调度脚本
+# 用法: bash scripts/build_third_party.sh <platform> --libs <libraries>
 
-set -e  # 遇到错误时停止执行
+set -e
+
+# 显示帮助信息
+show_help() {
+    echo "第三方库构建系统 - 调度脚本"
+    echo ""
+    echo "用法:"
+    echo "  $0 <platform> --libs <libraries>"
+    echo "  $0 --help"
+    echo ""
+    echo "必需参数:"
+    echo "  <platform>                 目标平台 (aarch64, x86_64)"
+    echo "  --libs <libraries>         逗号分隔的库列表"
+    echo ""
+    echo "支持的库:"
+    echo "  cnpy       - C++ NumPy 文件读写库"
+    echo "  gtest      - Google Test 测试框架"
+    echo "  opencv     - OpenCV 计算机视觉库"
+    echo "  rga        - Rockchip 2D 图形加速库"
+    echo "  rknpu      - Rockchip NPU 库"
+    echo "  spdlog     - 快速C++日志库"
+    echo ""
+    echo "示例:"
+    echo "  bash scripts/build_third_party.sh aarch64 --libs all"
+    echo "  bash scripts/build_third_party.sh x86_64 --libs gtest,opencv"
+    echo "  bash scripts/build_third_party.sh aarch64 --libs spdlog,cnpy"
+    echo ""
+    echo "目录结构:"
+    echo "  scripts/"
+    echo "    ├── build_third_party.sh          # 本调度脚本"
+    echo "    └── third_party_builders/         # 各个库的构建器脚本"
+    echo ""
+    echo "注意:"
+    echo "  1. 必须在项目根目录下运行，或者通过--project-root指定项目根目录"
+    echo "  2. 构建过程中会下载源代码到tmp目录，请确保有足够的磁盘空间"
+    echo "  3. 构建的库将安装到third_party/<库名>/<平台>/目录"
+    echo ""
+}
 
 # 初始化变量
-LIBS_TO_BUILD="all"
+LIBS_TO_BUILD=""
+PLATFORM=""
+
+# 特殊处理 --help 参数
+# 检查是否有 --help 或 -h 参数
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+    esac
+done
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         --libs)
+            if [ -z "$2" ] || [[ "$2" == -* ]]; then
+                echo "错误: --libs 参数需要一个值"
+                echo "请使用 $0 --help 查看完整用法"
+                exit 1
+            fi
             LIBS_TO_BUILD="$2"
             shift 2
             ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
         -*)
-            echo "未知选项: $1"
-            echo "用法: $0 <platform> [--libs <libraries>]"
-            echo "  platform: 目标平台 (aarch64, x86_64)"
-            echo "  libraries: 逗号分隔的库列表 (例如: gtest,opencv,rknpu,spdlog,cnpy,rga"
-            echo "             默认构建所有支持的库"
+            echo "错误: 未知选项: $1"
+            echo "请使用 $0 --help 查看完整用法"
             exit 1
             ;;
         *)
             if [ -z "$PLATFORM" ]; then
                 PLATFORM="$1"
             else
-                echo "未知参数: $1"
-                echo "用法: $0 <platform> [--libs <libraries>]"
+                echo "错误: 未知参数: $1"
+                echo "请使用 $0 --help 查看完整用法"
                 exit 1
             fi
             shift
@@ -36,333 +90,156 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 检查平台参数
+# 检查必需参数
 if [ -z "$PLATFORM" ]; then
-    echo "用法: $0 <platform> [--libs <libraries>]"
-    echo "支持的平台: aarch64, x86_64"
-    echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy, rga"
+    echo "错误: 必须指定目标平台"
+    echo "请使用 $0 --help 查看完整用法"
+    exit 1
+fi
+
+if [ -z "$LIBS_TO_BUILD" ]; then
+    echo "错误: 必须指定要构建的库"
+    echo "请使用 $0 --help 查看完整用法"
     exit 1
 fi
 
 # 获取项目根目录
-PROJECT_ROOT=$(realpath "$(dirname "$0")/..")
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+PROJECT_ROOT=$(realpath "$SCRIPT_DIR/..")
 echo "项目根目录: $PROJECT_ROOT"
+
+# 第三方构建器目录
+THIRD_PARTY_BUILDERS_DIR="$SCRIPT_DIR/third_party_builders"
+
+# 检查第三方构建器目录是否存在
+if [ ! -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
+    echo "错误: 找不到第三方构建器目录: $THIRD_PARTY_BUILDERS_DIR"
+    echo "请确保 scripts/third_party_builders 目录存在"
+    exit 1
+fi
+
+echo "================================================================"
+echo "第三方库构建系统"
+echo "================================================================"
+echo "平台: $PLATFORM"
+echo "要构建的库: $LIBS_TO_BUILD"
+echo "构建器目录: $THIRD_PARTY_BUILDERS_DIR"
+echo "================================================================"
 
 # 根据平台设置相关变量
 case "${PLATFORM}" in
     aarch64)
-        # 设置交叉编译工具链
-        CROSS_COMPILE_PREFIX=aarch64-linux-gnu
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/aarch64-toolchain.cmake
         ;;
     x86_64)
-        CROSS_COMPILE_PREFIX=x86_64-linux-gnu
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/x86_64-toolchain.cmake
         ;;
     *)
         echo "错误: 不支持的平台 '${PLATFORM}'"
         echo "支持的平台: aarch64, x86_64"
+        echo "请使用 $0 --help 查看完整用法"
         exit 1
         ;;
 esac
 
 # 创建平台对应的第三方库目录
 mkdir -p ${PROJECT_ROOT}/tmp
+mkdir -p ${PROJECT_ROOT}/third_party
 INSTALL_DIR=${PROJECT_ROOT}/third_party/
 
-echo "开始为${PLATFORM}平台编译第三方库..."
 echo "安装目录: $INSTALL_DIR"
-echo "使用交叉编译工具链: $CROSS_COMPILE_PREFIX"
 echo "使用工具链文件: $TOOLCHAIN_FILE"
-echo "构建的库: $LIBS_TO_BUILD"
 
-# 设置编译器变量
-export CC=${CROSS_COMPILE_PREFIX}-gcc
-export CXX=${CROSS_COMPILE_PREFIX}-g++
-
-# 检查交叉编译工具是否安装
-if ! command -v ${CXX} &> /dev/null
-then
-    echo "错误: 未找到交叉编译工具链 $CXX"
-    case "${PLATFORM}" in
-        aarch64)
-            echo "请先安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
-            ;;
-        x86_64)
-            echo "请先安装: sudo apt install gcc-x86-64-linux-gnu g++-x86-64-linux-gnu"
-            ;;
-    esac
-    exit 1
-fi
-
-echo "交叉编译工具链检查通过"
-
-# 检查zlib开发库是否安装
-if [ "${PLATFORM}" = "x86_64" ]; then
-    if ! pkg-config --exists zlib; then
-        echo "错误: 未找到zlib开发库"
-        echo "请先安装: sudo apt install zlib1g-dev"
+# 特殊处理 "all" 参数
+if [ "$LIBS_TO_BUILD" = "all" ]; then
+    echo "检测到 'all' 参数，将构建所有支持的库"
+    # 获取所有可用的构建器
+    if [ -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
+        # 提取所有builder_*.sh文件的库名
+        ALL_LIBS=$(ls "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null | 
+                   sed 's|.*/builder_||;s|\.sh||' | 
+                   tr '\n' ',' | 
+                   sed 's/,$//')
+        
+        if [ -z "$ALL_LIBS" ]; then
+            echo "错误: 在 $THIRD_PARTY_BUILDERS_DIR 中找不到任何构建器脚本"
+            exit 1
+        fi
+        
+        echo "将构建的库: $ALL_LIBS"
+        LIBS_TO_BUILD="$ALL_LIBS"
+    else
+        echo "错误: 构建器目录不存在: $THIRD_PARTY_BUILDERS_DIR"
         exit 1
-    fi
-else
-    # 对于aarch64交叉编译，检查aarch64版本的zlib
-    if [ ! -f "/usr/lib/$(uname -m)-linux-gnu/aarch64-linux-gnu/libz.a" ] && [ ! -f "/usr/aarch64-linux-gnu/lib/libz.a" ]; then
-        echo "警告: 可能缺少aarch64的zlib库，如果编译失败请确认已安装aarch64的zlib开发包"
     fi
 fi
 
 # 解析要构建的库列表
-if [ "$LIBS_TO_BUILD" = "all" ]; then
-    BUILD_GTEST=yes
-    BUILD_OPENCV=yes
-    BUILD_SPDLOG=yes
-    BUILD_RKNPU=yes
-    BUILD_CNPY=yes
-    BUILD_RGA=yes
+IFS=',' read -ra LIBS_ARRAY <<< "$LIBS_TO_BUILD"
 
-else
-    BUILD_GTEST=no
-    BUILD_OPENCV=no
-    BUILD_RKNPU=no
-    BUILD_SPDLOG=no
-    BUILD_CNPY=no
-    BUILD_RGA=no
-
-    IFS=',' read -ra LIBS <<< "$LIBS_TO_BUILD"
-    for lib in "${LIBS[@]}"; do
-        case "$lib" in
-            gtest)
-                BUILD_GTEST=yes
-                ;;
-            opencv)
-                BUILD_OPENCV=yes
-                ;;
-            spdlog)
-                BUILD_SPDLOG=yes
-                ;;
-            rknpu)
-                BUILD_RKNPU=yes
-                ;;
-            cnpy)
-                BUILD_CNPY=yes
-                ;;
-            rga)
-                BUILD_RGA=yes
-                ;;
-            *)
-                echo "警告: 忽略未知的库 '$lib'"
-                ;;
-        esac
-    done
-fi
-
-# 编译GTest（如果需要）
-if [ "$BUILD_GTEST" = "yes" ]; then
-    echo "开始编译GTest..."
-    cd ${PROJECT_ROOT}/tmp
-    if [ ! -d "googletest" ]; then
-        git clone https://gitee.com/mirrors/googletest.git -b v1.14.0
-    else
-        echo "googletest目录已存在，跳过克隆"
+# 遍历所有需要构建的库
+for lib in "${LIBS_ARRAY[@]}"; do
+    # 去除可能的空格
+    lib=$(echo "$lib" | xargs)
+    
+    # 检查库名是否为空
+    if [ -z "$lib" ]; then
+        echo "警告: 跳过空的库名"
+        continue
     fi
-    cd ${PROJECT_ROOT}/tmp/googletest
-    rm -rf build_${PLATFORM}
-    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/gtest/${PLATFORM} \
-        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
-    make -j$(nproc)
-    make install
-
-    echo "GTest编译完成"
-else
-    echo "跳过GTest编译"
-fi
-
-# 编译OpenCV（如果需要）
-if [ "$BUILD_OPENCV" = "yes" ]; then
-    echo "开始编译OpenCV..."
-    cd ${PROJECT_ROOT}/tmp
-    if [ ! -d "opencv" ]; then
-        git clone https://gitee.com/opencv/opencv.git
-    else
-        echo "opencv目录已存在，跳过克隆"
+    
+    # 检查对应的构建脚本是否存在
+    build_script="${THIRD_PARTY_BUILDERS_DIR}/builder_${lib}.sh"
+    
+    if [ ! -f "$build_script" ]; then
+        echo "错误: 库 '$lib' 的构建脚本不存在: $build_script"
+        echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy, rga"
+        echo "可用构建器:"
+        ls -1 "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null | 
+            sed 's|.*/builder_||;s|\.sh||' | 
+            tr '\n' ' ' | 
+            sed 's/ $//'
+        echo ""
+        echo "请使用 $0 --help 查看完整用法"
+        exit 1
     fi
-    cd ${PROJECT_ROOT}/tmp/opencv
-    git checkout 4.5.4
-    rm -rf build_${PLATFORM}
-    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
-    # 当系统libpng异常才开启opencv自带的libpng
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/opencv/${PLATFORM} \
-        -DOPENCV_DOWNLOAD_PATH=../../opencv_${PLATFORM}_cache \
-        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DBUILD_PNG=ON \
-        -DPNG_LIBRARY="" \
-        -DPNG_PNG_INCLUDE_DIR=""
-    make -j4  
-    make install
-
-    echo "OpenCV编译完成"
-else
-    echo "跳过OpenCV编译"
-fi
-
-# 编译spdlog（如果需要）
-if [ "$BUILD_SPDLOG" = "yes" ]; then
-    echo "开始编译spdlog..."
-    cd ${PROJECT_ROOT}/tmp
-    if [ ! -d "spdlog" ]; then
-        git clone https://gitee.com/mirror-luyi/spdlog.git
-        cd ${PROJECT_ROOT}/tmp/spdlog
-        git checkout v1.14.1
-    else
-        echo "spdlog目录已存在，跳过git clone步骤"
+    
+    echo ""
+    echo "===================================================================="
+    echo "开始构建: $lib"
+    echo "使用构建器: $(basename "$build_script")"
+    echo "===================================================================="
+    
+    # 调用具体的库构建脚本，传递所需参数
+    if ! bash "$build_script" \
+        --platform "$PLATFORM" \
+        --project-root "$PROJECT_ROOT" \
+        --install-dir "$INSTALL_DIR" \
+        --toolchain-file "$TOOLCHAIN_FILE"
+    then
+        echo "错误: 构建 $lib 失败"
+        echo "请检查构建日志以获取更多信息"
+        exit 1
     fi
-    cd ${PROJECT_ROOT}/tmp/spdlog
-    rm -rf build_${PLATFORM}
-    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
+    
+    echo "完成构建: $lib"
+done
 
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/spdlog/${PLATFORM} \
-        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} 
-
-    make -j4
-    make install
-
-    echo "spdlog编译完成"
-else
-    echo "跳过spdlog编译"
-fi
-
-# 编译cnpy（如果需要）
-if [ "$BUILD_CNPY" = "yes" ]; then
-    echo "开始编译cnpy..."
-    cd ${PROJECT_ROOT}/tmp
-    if [ ! -d "cnpy" ]; then
-        echo "克隆cnpy仓库..."
-        git clone https://github.com/rogersce/cnpy.git
-    else
-        echo "cnpy目录已存在，跳过克隆"
-    fi
-
-    cd ${PROJECT_ROOT}/tmp/cnpy
-    rm -rf build_${PLATFORM}
-    mkdir -p build_${PLATFORM} && cd build_${PLATFORM}
-
-    echo "配置cmake..."
-    # 配置cmake并编译
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/cnpy/${PLATFORM} \
-        -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-        -DBUILD_SHARED_LIBS=OFF
-
-    echo "开始编译..."
-    make -j$(nproc)
-    echo "编译完成，开始安装..."
-    make install
-
-    echo "cnpy编译完成，已安装到 ${INSTALL_DIR}/cnpy/${PLATFORM}"
-else
-    echo "跳过cnpy编译"
-fi
-
-# ======================
-# 新增：处理 RKNPU1/RKNPU2（仅 aarch64）
-# ======================
-
-if [ "${PLATFORM}" = "aarch64" ] && [ "${BUILD_RKNPU}" = "yes" ]; then
-    echo "开始编译RKNPU..."
-    BUILD_RKNPU=yes
-else
-    echo "跳过RKNPU编译"
-    BUILD_RKNPU=no
-fi
-
-if [ "$BUILD_RKNPU" = "yes" ]; then
-    echo "开始处理RKNPU库..."
-    cd ${PROJECT_ROOT}/tmp
-
-    if [ ! -d "rknn_model_zoo" ]; then
-        echo "初始化rknn_model_zoo仓库..."
-        git init rknn_model_zoo
-        cd rknn_model_zoo
-        echo "添加远程仓库..."
-        git remote add origin https://github.com/airockchip/rknn_model_zoo.git
-        echo "初始化sparse-checkout..."
-        git sparse-checkout init --cone
-        echo "设置要检出的目录..."
-        git sparse-checkout set 3rdparty/rknpu2 3rdparty/rknpu1
-        echo "拉取main分支..."
-        git pull origin main
-        echo "仓库克隆完成"
-    else
-        echo "rknn_model_zoo目录已存在，跳过克隆"
-    fi
-
-    cd ${PROJECT_ROOT}/tmp/rknn_model_zoo
-    echo "开始拷贝RKNPU库文件到third_party目录..."
-    # 拷贝rknpu2和rknpu1目录到third_party
-    if [ -d "3rdparty/rknpu2" ]; then
-        echo "拷贝rknpu2目录..."
-        # 如果目标目录已存在，则先删除再拷贝
-        if [ -d "${INSTALL_DIR}/rknpu2" ]; then
-            echo "删除已存在的${INSTALL_DIR}/rknpu2目录..."
-            rm -rf ${INSTALL_DIR}/rknpu2
+echo ""
+echo "===================================================================="
+echo "第三方库构建完成！"
+echo "===================================================================="
+echo "所有指定的库已成功构建并安装到:"
+echo "$INSTALL_DIR"
+echo ""
+echo "各个库的安装位置:"
+for lib in "${LIBS_ARRAY[@]}"; do
+    lib=$(echo "$lib" | xargs)
+    if [ -n "$lib" ]; then
+        lib_dir="$INSTALL_DIR/$lib/$PLATFORM"
+        if [ -d "$lib_dir" ]; then
+            echo "  - $lib: $lib_dir"
         fi
-        cp -r 3rdparty/rknpu2 ${INSTALL_DIR}/
     fi
-    
-    if [ -d "3rdparty/rknpu1" ]; then
-        echo "拷贝rknpu1目录..."
-        # 如果目标目录已存在，则先删除再拷贝
-        if [ -d "${INSTALL_DIR}/rknpu1" ]; then
-            echo "删除已存在的${INSTALL_DIR}/rknpu1目录..."
-            rm -rf ${INSTALL_DIR}/rknpu1
-        fi
-        cp -r 3rdparty/rknpu1 ${INSTALL_DIR}/
-    fi
-    
-    echo "RKNPU库处理完成"
-fi
-
-# ======================
-# 新增：处理 RGA库
-# ======================
-
-# 编译RGA（如果需要）
-if [ "$BUILD_RGA" = "yes" ]; then
-    echo "开始处理RGA库..."
-    cd ${PROJECT_ROOT}/tmp
-
-    if [ ! -d "librga" ]; then
-        echo "克隆librga仓库..."
-        git clone https://github.com/airockchip/librga.git
-    else
-        echo "librga目录已存在，跳过克隆"
-    fi
-
-    cd ${PROJECT_ROOT}/tmp/librga
-    echo "开始拷贝librga库文件到third_party目录..."
-    
-    # 如果目标目录已存在，则先删除再拷贝
-    if [ -d "${INSTALL_DIR}/rga" ]; then
-        echo "删除已存在的${INSTALL_DIR}/rga目录..."
-        rm -rf ${INSTALL_DIR}/rga
-    fi
-    
-    # 拷贝整个librga目录到third_party
-    cp -r . ${INSTALL_DIR}/rga/
-    
-    echo "RGA库处理完成，已安装到 ${INSTALL_DIR}/rga"
-else
-    echo "跳过RGA库处理"
-fi
-
-echo "为${PLATFORM}平台的第三方库构建任务已完成"
-echo "已安装到 ${INSTALL_DIR}"
+done
+echo "===================================================================="
