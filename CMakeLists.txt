@@ -20,7 +20,6 @@ include_directories(include)
 
 # 定义基础源文件列表（不包含RGA相关文件）
 set(DEPLOY_PERCEPT_SOURCES
-    src/utils/logger_factory.cpp
     src/pre_process/image_pre_process.cpp
     src/engine/RknnEngine.cpp
     src/engine/EngineFactory.cpp
@@ -28,13 +27,17 @@ set(DEPLOY_PERCEPT_SOURCES
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
     src/post_process/PostProcessFactory.cpp
+    src/utils/logger_factory.cpp
 )
 
 # 创建库目标
 add_library(deploy_percept STATIC ${DEPLOY_PERCEPT_SOURCES})
 
+
 # 链接OpenCV库、spdlog、RKNN、cnpy和zlib库到我们的库
-target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z)
+
+target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog ${LIBRKNNRT} ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z )
+
 
 # 设置库的包含目录
 target_include_directories(deploy_percept PUBLIC
@@ -45,15 +48,16 @@ target_include_directories(deploy_percept PUBLIC
     ${YAML_CPP_INCLUDE_DIR}
 )
 
-# 检查RGA库是否存在
+# RGA
 if(RGA_FOUND)
     target_sources(deploy_percept PRIVATE src/pre_process/image_pre_process_rga.cpp)
     target_link_libraries(deploy_percept PUBLIC ${LIBRGA})
     target_include_directories(deploy_percept PUBLIC
-        $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>
-    )
+    $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>
+)    
     target_compile_definitions(deploy_percept PUBLIC RGA_FOUND=1)
 endif()
+
 
 # 安装规则
 install(TARGETS deploy_percept

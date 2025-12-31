@@ -1,7 +1,6 @@
 #include "deploy_percept/pre_process/image_pre_process_rga.hpp"
 #include <algorithm>
 
-
 namespace deploy_percept
 {
     namespace pre_process
