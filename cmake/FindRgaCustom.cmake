@@ -15,18 +15,30 @@
 # 设置RGA库路径
 set(RGA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rga)
 
-# 根据平台设置RGA库路径
+# 第一级：根据系统类型判断
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+  # Android平台
   set(LIBRGA ${RGA_PATH}/libs/AndroidNdk/${CMAKE_ANDROID_ARCH_ABI}/librga.so)
-else()
-  # 根据编译器架构选择对应的库文件
-  if(CMAKE_C_COMPILER MATCHES "aarch64")
-    set(LIB_ARCH aarch64)
+  
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Linux平台
+  # 第二级：根据处理器架构判断
+  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    # x86_64架构 - RGA不支持
+    set(LIBRGA "")
+  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    # aarch64架构
+    set(LIBRGA ${RGA_PATH}/libs/Linux/gcc-${CMAKE_SYSTEM_PROCESSORH}/librga.a)
   else()
-    set(LIB_ARCH armhf)
+    # 其他架构
+    message(WARNING "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    set(LIBRGA "")
   endif()
-
-  set(LIBRGA ${RGA_PATH}/libs/Linux/gcc-${LIB_ARCH}/librga.a)
+  
+else()
+  # 其他平台（Windows、macOS等）
+  message(WARNING "RGA is not supported on ${CMAKE_SYSTEM_NAME} platform")
+  set(LIBRGA "")
 endif()
 
 # 设置RGA库的包含目录
@@ -41,8 +53,8 @@ if(EXISTS ${LIBRGA})
     message(STATUS "RGA includes: ${LIBRGA_INCLUDES}")
 else()
     set(RGA_FOUND FALSE)
-    message(WARNING "RGA library not found or not exists")
-    message(WARNING "Expected library path: ${LIBRGA}")
+    message(STATUS "WARNING RGA library not found !!!")
+
 endif()
 
 message(STATUS "==============================================================================")
