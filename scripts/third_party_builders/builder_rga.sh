@@ -83,17 +83,11 @@ if [ -z "$PLATFORM" ]; then
     exit 1
 fi
 
-# 验证平台参数
-case "${PLATFORM}" in
-    aarch64|x86_64)
-        # 平台有效
-        ;;
-    *)
-        echo "错误: 不支持的平台 '$PLATFORM'"
-        echo "支持的平台: aarch64, x86_64"
-        exit 1
-        ;;
-esac
+# 检查平台：x86_64跳过，其他平台正常安装
+if [ "$PLATFORM" = "x86_64" ]; then
+    echo "[RGA构建器] 平台为 x86_64，跳过 RKNPU 库的安装（RGA 主要用于 ARM 平台）"
+    exit 0
+fi
 
 echo "[RGA构建器] 平台: $PLATFORM"
 

@@ -1,7 +1,6 @@
 #!/bin/bash
 # 第三方库构建器：RKNPU (Rockchip NPU)
 # 可以单独运行，也可以由 build_third_party.sh 调用
-# 注意：RKNPU仅支持aarch64平台
 
 set -e
 
@@ -11,13 +10,12 @@ show_help() {
     echo ""
     echo "用途:"
     echo "  获取和安装Rockchip NPU库 (RKNPU1/RKNPU2)"
-    echo "  注意: RKNPU仅支持aarch64平台"
     echo ""
     echo "用法:"
     echo "  $0 [选项]"
     echo ""
     echo "必需选项:"
-    echo "  --platform <平台>          目标平台 (必须是 aarch64)"
+    echo "  --platform <平台>          目标平台 (aarch64, x86_64 等)"
     echo ""
     echo "可选选项:"
     echo "  --project-root <路径>      项目根目录 (默认: 当前目录)"
@@ -27,7 +25,9 @@ show_help() {
     echo ""
     echo "注意:"
     echo "  - RKNPU不是编译的库，而是从Rockchip官方仓库获取预编译库"
-    echo "  - 仅支持aarch64平台 (Rockchip ARM平台)"
+    echo "  - RKNPU主要用于Rockchip ARM平台"
+    echo "  - x86_64平台会自动跳过（无需使用RKNPU）"
+    echo "  - 其他平台将尝试安装，但可能需要自行验证兼容性"
     echo "  - 使用sparse-checkout只下载rknn_model_zoo仓库的3rdparty/rknpu2和3rdparty/rknpu1目录"
     echo "  - --toolchain-file 参数在此脚本中不被使用，仅为接口统一而接受"
     echo ""
@@ -86,15 +86,14 @@ if [ -z "$PLATFORM" ]; then
     exit 1
 fi
 
-# RKNPU仅支持aarch64平台
-if [ "$PLATFORM" != "aarch64" ]; then
-    echo "错误: RKNPU仅支持aarch64平台，当前平台: $PLATFORM"
-    echo "      请使用 --platform aarch64"
-    exit 1
+# 检查平台：x86_64跳过，其他平台正常安装
+if [ "$PLATFORM" = "x86_64" ]; then
+    echo "[RKNPU构建器] 平台为 x86_64，跳过 RKNPU 库的安装（RKNPU 主要用于 ARM 平台）"
+    exit 0
 fi
 
 echo "[RKNPU构建器] 平台: $PLATFORM"
-echo "[RKNPU构建器] 注意: RKNPU仅支持aarch64平台"
+echo "[RKNPU构建器] 注意: RKNPU 是 Rockchip 平台的预编译库"
 
 # 设置项目根目录默认值（当前工作目录）
 PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
@@ -273,3 +272,4 @@ if [ -d "${INSTALL_DIR}/rknpu1" ]; then
     echo "[RKNPU构建器]   - rknpu1: ${INSTALL_DIR}/rknpu1"
 fi
 echo "[RKNPU构建器] 注意: RKNPU是预编译库，无需编译，直接使用即可"
+echo "[RKNPU构建器]       兼容性需根据具体平台验证"

@@ -1,8 +1,11 @@
 #!/bin/bash
 # 第三方库构建调度脚本
-# 用法: bash scripts/build_third_party.sh <platform> --libs <libraries>
+# 用法: bash scripts/third_party_builder.sh <platform> --libs <libraries>
 
 set -e
+
+# 记录开始时间
+START_TIME=$(date +%s)
 
 # 显示帮助信息
 show_help() {
@@ -14,30 +17,26 @@ show_help() {
     echo ""
     echo "必需参数:"
     echo "  <platform>                 目标平台 (aarch64, x86_64)"
-    echo "  --libs <libraries>         逗号分隔的库列表"
+    echo "  --libs <libraries>         逗号分隔的库列表，或使用 'all' 构建所有库"
     echo ""
     echo "支持的库:"
     echo "  cnpy       - C++ NumPy 文件读写库"
-    echo "  gtest      - Google Test 测试框架"
-    echo "  opencv     - OpenCV 计算机视觉库"
+    echo "  gtest      - Google Test 测试框架 (v1.14.0)"
+    echo "  opencv     - OpenCV 计算机视觉库 (4.5.4)"
     echo "  rga        - Rockchip 2D 图形加速库"
-    echo "  rknpu      - Rockchip NPU 库"
-    echo "  spdlog     - 快速C++日志库"
+    echo "  rknpu      - Rockchip NPU 库 (仅 aarch64 平台)"
+    echo "  spdlog     - 快速C++日志库 (v1.14.1)"
     echo ""
     echo "示例:"
-    echo "  bash scripts/build_third_party.sh aarch64 --libs all"
-    echo "  bash scripts/build_third_party.sh x86_64 --libs gtest,opencv"
-    echo "  bash scripts/build_third_party.sh aarch64 --libs spdlog,cnpy"
-    echo ""
-    echo "目录结构:"
-    echo "  scripts/"
-    echo "    ├── build_third_party.sh          # 本调度脚本"
-    echo "    └── third_party_builders/         # 各个库的构建器脚本"
+    echo "  bash scripts/third_party_builder.sh aarch64 --libs all"
+    echo "  bash scripts/third_party_builder.sh x86_64 --libs gtest,opencv"
+    echo "  bash scripts/third_party_builder.sh aarch64 --libs spdlog,cnpy,rknpu"
     echo ""
     echo "注意:"
     echo "  1. 必须在项目根目录下运行，或者通过--project-root指定项目根目录"
     echo "  2. 构建过程中会下载源代码到tmp目录，请确保有足够的磁盘空间"
     echo "  3. 构建的库将安装到third_party/<库名>/<平台>/目录"
+    echo "  4. 具体每个库的平台支持由各个库的构建器脚本决定"
     echo ""
 }
 
@@ -126,7 +125,7 @@ echo "要构建的库: $LIBS_TO_BUILD"
 echo "构建器目录: $THIRD_PARTY_BUILDERS_DIR"
 echo "================================================================"
 
-# 根据平台设置相关变量
+# 根据平台设置工具链文件（可选，构建器脚本可能会忽略）
 case "${PLATFORM}" in
     aarch64)
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/aarch64-toolchain.cmake
@@ -150,7 +149,7 @@ INSTALL_DIR=${PROJECT_ROOT}/third_party/
 echo "安装目录: $INSTALL_DIR"
 echo "使用工具链文件: $TOOLCHAIN_FILE"
 
-# 特殊处理 "all" 参数
+# 处理 "all" 参数
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     echo "检测到 'all' 参数，将构建所有支持的库"
     # 获取所有可用的构建器
@@ -211,6 +210,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     echo "===================================================================="
     
     # 调用具体的库构建脚本，传递所需参数
+    # 调度脚本不管理具体编译逻辑，只负责传递参数
     if ! bash "$build_script" \
         --platform "$PLATFORM" \
         --project-root "$PROJECT_ROOT" \
@@ -225,10 +225,15 @@ for lib in "${LIBS_ARRAY[@]}"; do
     echo "完成构建: $lib"
 done
 
+# 计算并显示总耗时
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+
 echo ""
 echo "===================================================================="
 echo "第三方库构建完成！"
 echo "===================================================================="
+echo "总耗时: ${DURATION}秒"
 echo "所有指定的库已成功构建并安装到:"
 echo "$INSTALL_DIR"
 echo ""
@@ -236,9 +241,13 @@ echo "各个库的安装位置:"
 for lib in "${LIBS_ARRAY[@]}"; do
     lib=$(echo "$lib" | xargs)
     if [ -n "$lib" ]; then
-        lib_dir="$INSTALL_DIR/$lib/$PLATFORM"
-        if [ -d "$lib_dir" ]; then
-            echo "  - $lib: $lib_dir"
+        # 尝试查找安装目录（不同库可能有不同的安装结构）
+        if [ -d "${INSTALL_DIR}/${lib}" ]; then
+            echo "  - ${lib}: ${INSTALL_DIR}/${lib}"
+        elif [ -d "${INSTALL_DIR}/${lib}/${PLATFORM}" ]; then
+            echo "  - ${lib}: ${INSTALL_DIR}/${lib}/${PLATFORM}"
+        else
+            echo "  - ${lib}: 已安装，具体位置请查看对应构建器的输出"
         fi
     fi
 done
