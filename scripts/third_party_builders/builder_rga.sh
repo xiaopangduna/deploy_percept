@@ -131,19 +131,7 @@ if [ ! -d "librga" ]; then
     fi
 else
     echo "[RGA构建器] librga目录已存在，跳过克隆"
-    
-    # 如果目录已存在，尝试更新
-    echo "[RGA构建器] 尝试更新仓库..."
-    cd librga
-    if [ -d ".git" ]; then
-        git pull origin master
-        if [ $? -ne 0 ]; then
-            echo "[RGA构建器] 警告: 更新仓库失败，使用现有版本"
-        fi
-        cd ..
-    else
-        echo "[RGA构建器] 警告: 不是git仓库，使用现有版本"
-    fi
+
 fi
 
 cd ${PROJECT_ROOT}/tmp/librga

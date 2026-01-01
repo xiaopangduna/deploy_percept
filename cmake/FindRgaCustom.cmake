@@ -28,7 +28,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(LIBRGA "")
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     # aarch64架构
-    set(LIBRGA ${RGA_PATH}/libs/Linux/gcc-${CMAKE_SYSTEM_PROCESSORH}/librga.a)
+    set(LIBRGA ${RGA_PATH}/libs/Linux/gcc-${CMAKE_SYSTEM_PROCESSOR}/librga.a)
   else()
     # 其他架构
     message(WARNING "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}")
@@ -53,6 +53,7 @@ if(EXISTS ${LIBRGA})
     message(STATUS "RGA includes: ${LIBRGA_INCLUDES}")
 else()
     set(RGA_FOUND FALSE)
+    
     message(STATUS "WARNING RGA library not found !!!")
 
 endif()

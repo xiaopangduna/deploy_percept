@@ -165,22 +165,9 @@ if [ ! -d "rknn_model_zoo" ]; then
             exit 1
         fi
     fi
-    
-    echo "[RKNPU构建器] 仓库克隆完成"
-else
-    echo "[RKNPU构建器] rknn_model_zoo目录已存在，跳过克隆"
-    cd rknn_model_zoo
-    
-    # 如果目录已存在，尝试更新
-    echo "[RKNPU构建器] 尝试更新仓库..."
-    if [ -d ".git" ]; then
-        git pull origin main
-        if [ $? -ne 0 ]; then
-            echo "[RKNPU构建器] 警告: 更新仓库失败，使用现有版本"
-        fi
-    else
-        echo "[RKNPU构建器] 警告: 不是git仓库，使用现有版本"
-    fi
+    echo "[RKNPU构建器] 仓库克隆完成"  
+else    
+    echo "[RGA构建器] librga目录已存在，跳过克隆"
 fi
 
 cd ${PROJECT_ROOT}/tmp/rknn_model_zoo

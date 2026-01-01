@@ -1,14 +1,12 @@
 #!/bin/bash
-# 第三方库构建器：cnpy
+# 第三方库构建器：yaml-cpp
 # 可以单独运行，也可以由 build_third_party.sh 调用
 
 set -e
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
 # 显示帮助信息
 show_help() {
-    echo "cnpy 构建器脚本"
+    echo "yaml-cpp 构建器脚本"
     echo ""
     echo "用法:"
     echo "  $0 [选项]"
@@ -22,18 +20,18 @@ show_help() {
     echo "  --toolchain-file <文件>    CMake工具链文件 (默认: \$PROJECT_ROOT/cmake/\$PLATFORM-toolchain.cmake)"
     echo "  --help                    显示此帮助信息"
     echo ""
-    echo "cnpy 信息:"
-    echo "  cnpy 是一个用于读取和写入 NumPy .npy 和 .npz 文件的 C++ 库"
-    echo "  源代码: https://github.com/rogersce/cnpy.git"
-    echo "  安装位置: \$INSTALL_DIR/cnpy/\$PLATFORM"
+    echo "yaml-cpp 信息:"
+    echo "  yaml-cpp 是一个用于解析和生成YAML文件的C++库"
+    echo "  源代码: https://github.com/jbeder/yaml-cpp.git"
+    echo "  安装位置: \$INSTALL_DIR/yaml-cpp/\$PLATFORM"
     echo ""
     echo "示例:"
     echo "  # 在项目根目录下运行"
     echo "  cd /path/to/project"
-    echo "  bash scripts/third_party_builders/builder_cnpy.sh --platform x86_64"
+    echo "  bash scripts/third_party_builders/builder_yaml-cpp.sh --platform x86_64"
     echo ""
     echo "  # 从任何位置运行"
-    echo "  bash /path/to/project/scripts/third_party_builders/builder_cnpy.sh \\"
+    echo "  bash /path/to/project/scripts/third_party_builders/builder_yaml-cpp.sh \\"
     echo "    --platform aarch64 \\"
     echo "    --project-root /path/to/project"
 }
@@ -97,12 +95,12 @@ case "${PLATFORM}" in
         ;;
 esac
 
-echo "[cnpy构建器] 平台: $PLATFORM"
-echo "[cnpy构建器] 交叉编译前缀: $CROSS_COMPILE_PREFIX"
+echo "[yaml-cpp构建器] 平台: $PLATFORM"
+echo "[yaml-cpp构建器] 交叉编译前缀: $CROSS_COMPILE_PREFIX"
 
 # 设置项目根目录默认值（当前工作目录）
 PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
-echo "[cnpy构建器] 项目根目录: $PROJECT_ROOT"
+echo "[yaml-cpp构建器] 项目根目录: $PROJECT_ROOT"
 
 # 检查项目根目录是否合理
 if [ ! -d "$PROJECT_ROOT" ]; then
@@ -116,7 +114,7 @@ INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
 # 设置工具链文件默认值
 if [ -z "$TOOLCHAIN_FILE" ]; then
     TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/${PLATFORM}-toolchain.cmake"
-    echo "[cnpy构建器] 使用默认工具链文件: $TOOLCHAIN_FILE"
+    echo "[yaml-cpp构建器] 使用默认工具链文件: $TOOLCHAIN_FILE"
 fi
 
 # 检查工具链文件是否存在
@@ -137,104 +135,92 @@ if ! command -v ${CXX} &> /dev/null; then
     echo "       aarch64平台请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
 fi
 
-echo "[cnpy构建器] 开始构建cnpy库"
+echo "[yaml-cpp构建器] 开始构建yaml-cpp库"
 echo "  平台: $PLATFORM"
-echo "  安装路径: $INSTALL_DIR/cnpy/$PLATFORM"
+echo "  安装路径: $INSTALL_DIR/yaml-cpp/$PLATFORM"
 echo "  工具链文件: $TOOLCHAIN_FILE"
 
-echo "[cnpy构建器] 构建依赖 zlib..."
-bash ${SCRIPT_DIR}/builder_zlib.sh \
-    --platform ${PLATFORM} \
-    --project-root ${PROJECT_ROOT} \
-    --install-dir ${INSTALL_DIR}
-
-ZLIB_ROOT=${INSTALL_DIR}/zlib/${PLATFORM}
-
-# 下载和构建cnpy
+# 下载和构建yaml-cpp
 mkdir -p ${PROJECT_ROOT}/tmp
 mkdir -p ${PROJECT_ROOT}/third_party
 
 cd ${PROJECT_ROOT}/tmp
 
 # 克隆或更新代码
-if [ ! -d "cnpy" ]; then
-    echo "[cnpy构建器] 克隆cnpy仓库..."
-    git clone https://github.com/rogersce/cnpy.git
+if [ ! -d "yaml-cpp" ]; then
+    echo "[yaml-cpp构建器] 克隆yaml-cpp代码..."
+    git clone https://github.com/jbeder/yaml-cpp.git
     if [ $? -ne 0 ]; then
-        echo "[cnpy构建器] 错误: 克隆cnpy仓库失败"
-        echo "      请检查网络连接或git配置"
+        echo "[yaml-cpp构建器] 错误: 克隆yaml-cpp代码失败"
         exit 1
     fi
 else
-    echo "[cnpy构建器] cnpy目录已存在，跳过克隆"
+    echo "[yaml-cpp构建器] yaml-cpp目录已存在，跳过克隆"
 fi
 
-cd cnpy
+cd yaml-cpp
 
 # 清理旧的构建目录
 rm -rf build_${PLATFORM}
 mkdir -p build_${PLATFORM}
 cd build_${PLATFORM}
 
-# 配置和构建cnpy
-echo "[cnpy构建器] 配置cmake..."
+# 配置和构建
+echo "[yaml-cpp构建器] 配置CMake..."
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/cnpy/${PLATFORM} \
+    -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/yaml-cpp/${PLATFORM} \
     -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DZLIB_ROOT=${ZLIB_ROOT} \
-    -DZLIB_LIBRARY=${ZLIB_ROOT}/lib/libz.a \
-    -DZLIB_INCLUDE_DIR=${ZLIB_ROOT}/include
+    -DYAML_CPP_BUILD_TESTS=OFF \
+    -DYAML_BUILD_SHARED_LIBS=OFF \
+    -DYAML_CPP_BUILD_TOOLS=OFF
 
 if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy配置失败"
-    echo "      请检查工具链文件和编译器设置"
+    echo "[yaml-cpp构建器] 错误: yaml-cpp配置失败"
     exit 1
 fi
 
-echo "[cnpy构建器] 开始编译..."
+echo "[yaml-cpp构建器] 编译yaml-cpp..."
 CPU_CORES=$(nproc 2>/dev/null || echo 4)
-echo "[cnpy构建器] 使用 $CPU_CORES 个CPU核心进行编译"
+echo "[yaml-cpp构建器] 使用 $CPU_CORES 个CPU核心进行编译"
 make -j$CPU_CORES
 
 if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy编译失败"
-    echo "      请检查依赖和编译器错误"
+    echo "[yaml-cpp构建器] 错误: yaml-cpp编译失败"
     exit 1
 fi
 
-echo "[cnpy构建器] 编译完成，开始安装..."
+echo "[yaml-cpp构建器] 安装yaml-cpp..."
 make install
 
 if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy安装失败"
+    echo "[yaml-cpp构建器] 错误: yaml-cpp安装失败"
     exit 1
 fi
 
 # 验证安装
-if [ -f "${INSTALL_DIR}/cnpy/${PLATFORM}/lib/libcnpy.a" ] || \
-   [ -f "${INSTALL_DIR}/cnpy/${PLATFORM}/lib64/libcnpy.a" ]; then
-    echo "[cnpy构建器] ✓ cnpy静态库安装成功"
-    echo "[cnpy构建器]   库文件位置: $(find "${INSTALL_DIR}/cnpy/${PLATFORM}" -name "*.a" -type f 2>/dev/null | head -1)"
-elif [ -f "${INSTALL_DIR}/cnpy/${PLATFORM}/lib/libcnpy.so" ] || \
-     [ -f "${INSTALL_DIR}/cnpy/${PLATFORM}/lib64/libcnpy.so" ]; then
-    echo "[cnpy构建器] ✓ cnpy动态库安装成功"
-    echo "[cnpy构建器]   库文件位置: $(find "${INSTALL_DIR}/cnpy/${PLATFORM}" -name "*.so" -type f 2>/dev/null | head -1)"
-elif [ -f "${INSTALL_DIR}/cnpy/${PLATFORM}/include/cnpy.h" ]; then
-    echo "[cnpy构建器] ✓ cnpy头文件安装成功"
+if [ -f "${INSTALL_DIR}/yaml-cpp/${PLATFORM}/lib/libyaml-cpp.a" ] || \
+   [ -f "${INSTALL_DIR}/yaml-cpp/${PLATFORM}/lib64/libyaml-cpp.a" ]; then
+    echo "[yaml-cpp构建器] ✓ yaml-cpp静态库安装成功"
+    echo "[yaml-cpp构建器]   库文件位置: $(find "${INSTALL_DIR}/yaml-cpp/${PLATFORM}" -name "libyaml-cpp.a" -type f 2>/dev/null | head -1)"
+elif [ -f "${INSTALL_DIR}/yaml-cpp/${PLATFORM}/lib/libyaml-cpp.so" ] || \
+     [ -f "${INSTALL_DIR}/yaml-cpp/${PLATFORM}/lib64/libyaml-cpp.so" ]; then
+    echo "[yaml-cpp构建器] ✓ yaml-cpp动态库安装成功"
+    echo "[yaml-cpp构建器]   库文件位置: $(find "${INSTALL_DIR}/yaml-cpp/${PLATFORM}" -name "libyaml-cpp.so" -type f 2>/dev/null | head -1)"
+elif [ -f "${INSTALL_DIR}/yaml-cpp/${PLATFORM}/include/yaml-cpp/yaml.h" ]; then
+    echo "[yaml-cpp构建器] ✓ yaml-cpp头文件安装成功"
 else
-    echo "[cnpy构建器] ⚠ 警告: 找不到cnpy库文件或头文件，但安装命令已成功执行"
-    echo "[cnpy构建器]   请检查安装目录: ${INSTALL_DIR}/cnpy/${PLATFORM}"
+    echo "[yaml-cpp构建器] ⚠ 警告: 找不到yaml-cpp库文件或头文件，但安装命令已成功执行"
+    echo "[yaml-cpp构建器]   请检查安装目录: ${INSTALL_DIR}/yaml-cpp/${PLATFORM}"
     
     # 尝试查找文件
-    echo "[cnpy构建器]   正在搜索文件..."
-    find "${INSTALL_DIR}/cnpy/${PLATFORM}" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | head -10
-    if [ $? -eq 0 ] && [ $(find "${INSTALL_DIR}/cnpy/${PLATFORM}" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | wc -l) -gt 0 ]; then
-        echo "[cnpy构建器]   找到一些文件，安装可能成功"
+    echo "[yaml-cpp构建器]   正在搜索文件..."
+    find "${INSTALL_DIR}/yaml-cpp/${PLATFORM}" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | head -10
+    if [ $? -eq 0 ] && [ $(find "${INSTALL_DIR}/yaml-cpp/${PLATFORM}" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | wc -l) -gt 0 ]; then
+        echo "[yaml-cpp构建器]   找到一些文件，安装可能成功"
     else
-        echo "[cnpy构建器]   未找到任何文件，安装可能失败"
+        echo "[yaml-cpp构建器]   未找到任何文件，安装可能失败"
     fi
 fi
 
-echo "[cnpy构建器] cnpy编译完成，已安装到 ${INSTALL_DIR}/cnpy/${PLATFORM}"
+echo "[yaml-cpp构建器] yaml-cpp编译完成，已安装到 ${INSTALL_DIR}/yaml-cpp/${PLATFORM}"

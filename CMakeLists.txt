@@ -11,6 +11,9 @@ message(STATUS "  - CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 message(STATUS "  - CMAKE_SYSROOT: ${CMAKE_SYSROOT}")
 message(STATUS "  - CMAKE_CROSSCOMPILING: ${CMAKE_CROSSCOMPILING}")
 
+
+
+
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +26,8 @@ include(FindThirdParty)
 
 # 添加包含目录
 include_directories(include)
+
+
 
 # 定义基础源文件列表（不包含RGA相关文件）
 set(DEPLOY_PERCEPT_SOURCES
@@ -38,7 +43,6 @@ set(DEPLOY_PERCEPT_SOURCES
 # 创建库目标
 add_library(deploy_percept STATIC ${DEPLOY_PERCEPT_SOURCES})
 
-# 链接OpenCV库、spdlog、RKNN、cnpy和zlib库到我们的库
 
 target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog  ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z ) 
 
@@ -83,6 +87,7 @@ install(EXPORT deploy_perceptTargets
     NAMESPACE deploy_percept::
     DESTINATION lib/cmake/deploy_percept
 )
+
 
 # 添加子目录
 # add_subdirectory(apps)
