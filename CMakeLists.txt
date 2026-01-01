@@ -51,7 +51,7 @@ target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     $<BUILD_INTERFACE:${CNPY_INCLUDE_DIRS}>
-    ${YAML_CPP_INCLUDE_DIR}
+    $<BUILD_INTERFACE:${YAML_CPP_INCLUDE_DIR}>
 )
 
 # RGA
