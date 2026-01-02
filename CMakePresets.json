@@ -10,6 +10,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/x86_64-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/x86_64",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -21,6 +22,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     }

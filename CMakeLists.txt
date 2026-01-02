@@ -88,9 +88,23 @@ install(EXPORT deploy_perceptTargets
     DESTINATION lib/cmake/deploy_percept
 )
 
+# 安装RKNN运行时库（如果找到）
+if(RKNN_FOUND AND LIBRKNNRT AND EXISTS ${LIBRKNNRT})
+    # 复制RKNN运行时库到安装目录
+    install(FILES ${LIBRKNNRT} DESTINATION lib)
+    
+    # 安装RKNN头文件
+    install(DIRECTORY ${LIBRKNNRT_INCLUDES}/
+        DESTINATION include
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+    )
+endif()
+
 
 # 添加子目录
-# add_subdirectory(apps)
+add_subdirectory(apps)
 # 启用测试
 enable_testing()
 add_subdirectory(tests)
