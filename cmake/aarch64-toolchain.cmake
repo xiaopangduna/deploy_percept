@@ -1,4 +1,14 @@
 message(STATUS "=== 正在使用aarch64交叉编译器 ===")
+# 查看编译器是否安装
+# aarch64-linux-gnu-gcc --version
+# sudo apt install -y \
+#   gcc-aarch64-linux-gnu \
+#   g++-aarch64-linux-gnu \
+#   binutils-aarch64-linux-gnu
+# xiaopangdun@lovelyboy:~/project/deploy_percept$ aarch64-linux-gnu-gcc -dumpmachine
+# aarch64-linux-gnu
+# file build/aarch64-release/tests/test_YoloV5DetectPostProcess
+
 # 设置目标系统
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)

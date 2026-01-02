@@ -2,6 +2,8 @@
 # 第三方库构建器：OpenCV
 # 可以单独运行，也可以由 build_third_party.sh 调用
 
+# 查看下载地址
+# /home/xiaopangdun/project/deploy_percept/tmp/opencv/build_x86_64/CMakeDownloadLog.txt
 set -e
 
 # 显示帮助信息

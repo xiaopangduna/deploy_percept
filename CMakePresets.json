@@ -1,0 +1,41 @@
+{
+  "version": 3,
+
+  "configurePresets": [
+    {
+      "name": "x86_64-debug",
+      "displayName": "x86_64 Debug (Host)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/x86_64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/x86_64-toolchain.cmake",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "aarch64-release",
+      "displayName": "aarch64 Release (Cross)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/aarch64-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-toolchain.cmake",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "x86_64-debug",
+      "configurePreset": "x86_64-debug",
+      "jobs": 16
+    },
+    {
+      "name": "aarch64-release",
+      "configurePreset": "aarch64-release",
+      "jobs": 16
+    }
+  ]
+}

@@ -44,7 +44,7 @@ set(DEPLOY_PERCEPT_SOURCES
 add_library(deploy_percept STATIC ${DEPLOY_PERCEPT_SOURCES})
 
 
-target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog  ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} z ) 
+target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog  ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} ZLIB::ZLIB ) 
 
 
 target_include_directories(deploy_percept PUBLIC

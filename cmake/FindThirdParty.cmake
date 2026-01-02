@@ -12,6 +12,7 @@ include(FindOpenCVCustom)
 include(FindSpdlogCustom)
 include(FindYamlCppCustom)
 include(FindCnpyCustom)
+include(FindZlibCustom)
 
 include(FindRknn)
 include(FindRgaCustom)

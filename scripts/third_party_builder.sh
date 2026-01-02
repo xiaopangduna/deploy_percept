@@ -1,6 +1,7 @@
 #!/bin/bash
 # 第三方库构建调度脚本
 # 用法: bash scripts/third_party_builder.sh <platform> --libs <libraries>
+# curl -I https://github.com 
 
 set -e
 
@@ -211,7 +212,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     
     # 调用具体的库构建脚本，传递所需参数
     # 调度脚本不管理具体编译逻辑，只负责传递参数
-    if ! bash "$build_script" \
+    if ! source "$build_script" \
         --platform "$PLATFORM" \
         --project-root "$PROJECT_ROOT" \
         --install-dir "$INSTALL_DIR" \
