@@ -1,74 +1,20 @@
-#.rst:
-# FindCnpy
-# --------
-#
-# Find cnpy library
-#
-# Result Variables
-# ^^^^^^^^^^^^^^^^
-#
-# This module defines the following variables:
-#
-# ``CNPY_FOUND``
-#     True if cnpy library found
-# ``CNPY_VERSION``
-#     The version of cnpy library
-# ``CNPY_INCLUDE_DIRS``
-#     The include directories for cnpy library
-# ``CNPY_LIBRARIES``
-#     The libraries needed to use cnpy
-#
-# Hints
-# ^^^^^
-# A user may set ``CNPY_ROOT`` to an installation root to tell this module where to look.
+# FindCnpyCustom.cmake - 自定义Cnpy库查找模块
 
-unset(CNPY_FOUND)
-
-# Set default values for CNPY variables
-set(CNPY_ROOT "${THIRD_PARTY_DIR}/cnpy/${CMAKE_SYSTEM_PROCESSOR}" CACHE PATH "CNPY root directory")
-
-set(CNPY_INCLUDE_DIR "${CNPY_ROOT}/include" CACHE PATH "CNPY include directory")
-set(CNPY_LIBRARY_DIR "${CNPY_ROOT}/lib" CACHE PATH "CNPY library directory")
-
-# Find header
-find_path(CNPY_INCLUDE_DIR
-    NAMES cnpy.h
-    PATHS ${CNPY_ROOT}/include
-    PATH_SUFFIXES cnpy
-    NO_DEFAULT_PATH
-)
-
-# Find library
-find_library(CNPY_LIBRARY
-    NAMES cnpy
-    PATHS ${CNPY_ROOT}/lib
-    NO_DEFAULT_PATH
-)
-
-# Check if both header and library are found
-if(CNPY_INCLUDE_DIR AND CNPY_LIBRARY)
-    set(CNPY_FOUND TRUE)
-    set(CNPY_INCLUDE_DIRS ${CNPY_INCLUDE_DIR})
-    set(CNPY_LIBRARIES ${CNPY_LIBRARY})
-    message(STATUS "Found CNPY: ${CNPY_ROOT}")
-else()
-    message(STATUS "CNPY not found, expected path: ${CNPY_ROOT}")
-endif()
-
-mark_as_advanced(CNPY_INCLUDE_DIR CNPY_LIBRARY)
-
-# FindCnpyCustom.cmake - 自定义cnpy库查找模块
-
+# 设置cnpy路径，基于当前架构
 set(CNPY_PATH ${THIRD_PARTY_DIR}/cnpy/${CMAKE_SYSTEM_PROCESSOR})
-set(CNPY_LIBRARY ${CNPY_PATH}/lib/libcnpy.a)
-set(CNPY_INCLUDE_DIRS ${CNPY_PATH}/include)
 
-# 检查库文件是否存在
-if(EXISTS ${CNPY_LIBRARY})
-    set(CNPY_LIBRARIES ${CNPY_LIBRARY})
+# 直接指定cnpy的头文件和库路径
+set(CNPY_INCLUDE_DIRS ${CNPY_PATH}/include)
+set(CNPY_LIBRARY ${CNPY_PATH}/lib/libcnpy.a)
+
+# 检查头文件和库文件是否存在
+if(EXISTS ${CNPY_LIBRARY} AND EXISTS ${CNPY_INCLUDE_DIRS}/cnpy.h)
     set(CNPY_FOUND TRUE)
+    set(CNPY_LIBRARIES ${CNPY_LIBRARY})
+    message(STATUS "CNPY found: ${CNPY_PATH}")
 else()
     set(CNPY_FOUND FALSE)
+    message(WARNING "CNPY not found, expected path: ${CNPY_PATH}")
 endif()
 
 message(STATUS "==============================================================================")
