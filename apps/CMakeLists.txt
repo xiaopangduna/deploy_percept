@@ -1,1 +1,2 @@
-add_subdirectory(demo)
+add_subdirectory(yolov5_detect_rknn)
+add_subdirectory(yolov5_seg_rknn)

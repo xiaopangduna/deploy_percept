@@ -21,7 +21,7 @@
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
 
-#define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/demo/coco_80_labels_list.txt"
+#define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/yolov5_detect_rknn/coco_80_labels_list.txt"
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
@@ -35,7 +35,7 @@ int main()
   deploy_percept::engine::RknnEngine engine(params);
 
   // 读取图片
-  std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/demo/bus.jpg";
+  std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov5_detect_rknn/bus.jpg";
   printf("Read %s ...\n", input_path.c_str());
   cv::Mat orig_img = cv::imread(input_path, 1);
 
