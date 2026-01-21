@@ -25,6 +25,62 @@
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
+// 比较img.data和examples/data/yolov5_seg/input_image.bin内容是否一致的函数
+bool compareImageData(const cv::Mat& img, const std::string& binFilePath) {
+    // 读取二进制文件
+    std::ifstream file(binFilePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::cerr << "无法打开二进制文件: " << binFilePath << std::endl;
+        return false;
+    }
+    
+    // 获取文件大小
+    std::streamsize fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    // 验证图像数据大小是否匹配
+    size_t imageDataSize = img.total() * img.elemSize();
+    if (imageDataSize != static_cast<size_t>(fileSize)) {
+        std::cerr << "图像数据大小不匹配!" << std::endl;
+        std::cerr << "图像数据大小: " << imageDataSize << std::endl;
+        std::cerr << "二进制文件大小: " << fileSize << std::endl;
+        file.close();
+        return false;
+    }
+    
+    // 分配内存并读取二进制文件内容
+    char* binData = new char[fileSize];
+    if (!file.read(binData, fileSize)) {
+        std::cerr << "读取二进制文件失败!" << std::endl;
+        delete[] binData;
+        file.close();
+        return false;
+    }
+    file.close();
+    
+    // 比较图像数据和二进制文件内容
+    bool isEqual = memcmp(img.data, binData, fileSize) == 0;
+    
+    if (isEqual) {
+        std::cout << "图像数据与二进制文件内容完全一致！" << std::endl;
+    } else {
+        std::cout << "图像数据与二进制文件内容不一致！" << std::endl;
+        
+        // 找出第一个不同的字节位置
+        for (size_t i = 0; i < fileSize; ++i) {
+            if (reinterpret_cast<unsigned char*>(img.data)[i] != reinterpret_cast<unsigned char*>(binData)[i]) {
+                std::cout << "第一个不同字节的位置: " << i << std::endl;
+                std::cout << "图像数据中的值: " << static_cast<int>(reinterpret_cast<unsigned char*>(img.data)[i]) << std::endl;
+                std::cout << "二进制文件中的值: " << static_cast<int>(reinterpret_cast<unsigned char*>(binData)[i]) << std::endl;
+                break;
+            }
+        }
+    }
+    
+    delete[] binData;
+    return isEqual;
+}
+
 int main()
 {
   std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s_seg.rknn";
@@ -58,21 +114,24 @@ int main()
   inputs[0].pass_through = 0;
   inputs[0].buf = img.data;
 
-  
+  // // 比较图像数据与二进制文件内容
+  // std::string binFilePath = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_seg/input_image.bin";
+  // bool isMatch = compareImageData(img, binFilePath);
+  // std::cout << "图像数据与二进制文件匹配结果: " << (isMatch ? "一致" : "不一致") << std::endl;
 
-  // rknn_output outputs[engine.model_io_num_.n_output];
-  // memset(outputs, 0, sizeof(outputs));
-  // for (int i = 0; i < engine.model_io_num_.n_output; i++)
-  // {
-  //   outputs[i].index = i;
-  //   outputs[i].want_float = 0;
-  // }
+  rknn_output outputs[engine.model_io_num_.n_output];
+  memset(outputs, 0, sizeof(outputs));
+  for (int i = 0; i < engine.model_io_num_.n_output; i++)
+  {
+    outputs[i].index = i;
+    outputs[i].want_float = 0;
+  }
 
-  // struct timeval start_time, stop_time;
-  // gettimeofday(&start_time, NULL);
-  // engine.run(inputs, outputs);
-  // gettimeofday(&stop_time, NULL);
-  // printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
+  struct timeval start_time, stop_time;
+  gettimeofday(&start_time, NULL);
+  engine.run(inputs, outputs);
+  gettimeofday(&stop_time, NULL);
+  printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
   // std::vector<float> out_scales;
   // std::vector<int32_t> out_zps;
