@@ -1,0 +1,63 @@
+# YOLOv5 Segmentation Results
+results:
+  id: 0
+  count: 5
+  image_dimensions:
+    width: 640
+    height: 640
+  objects:
+    - object_0:
+        box:
+          left: 213
+          top: 239
+          right: 284
+          bottom: 516
+        confidence: 0.882318
+        class_id: 0
+        segmentation_mask_file: "seg_mask_0.bin"
+        segmentation_mask_size: [640, 640]
+        segmentation_mask_written_bytes: 409600
+    - object_1:
+        box:
+          left: 109
+          top: 239
+          right: 224
+          bottom: 536
+        confidence: 0.865064
+        class_id: 0
+        segmentation_mask_file: "none"
+        segmentation_mask_size: [0, 0]
+        segmentation_mask_data_type: "none"
+    - object_2:
+        box:
+          left: 473
+          top: 230
+          right: 559
+          bottom: 522
+        confidence: 0.841578
+        class_id: 0
+        segmentation_mask_file: "none"
+        segmentation_mask_size: [0, 0]
+        segmentation_mask_data_type: "none"
+    - object_3:
+        box:
+          left: 97
+          top: 134
+          right: 548
+          bottom: 461
+        confidence: 0.823941
+        class_id: 5
+        segmentation_mask_file: "none"
+        segmentation_mask_size: [0, 0]
+        segmentation_mask_data_type: "none"
+    - object_4:
+        box:
+          left: 79
+          top: 325
+          right: 124
+          bottom: 520
+        confidence: 0.500710
+        class_id: 0
+        segmentation_mask_file: "none"
+        segmentation_mask_size: [0, 0]
+        segmentation_mask_data_type: "none"
