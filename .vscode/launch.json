@@ -46,7 +46,7 @@
             "type": "cppdbg",
             "request": "launch",
             // "program": "${workspaceFolder}/build/tests/test_YoloV5DetectPostProcess",
-            "program": "${workspaceFolder}/build/apps/demo/demo_app",
+            "program": "${workspaceFolder}/build/aarch64-release/apps/yolov5_seg_rknn/demo_app",
             "MIMode": "gdb",
             "cwd": "${workspaceFolder}",
             "setupCommands": [

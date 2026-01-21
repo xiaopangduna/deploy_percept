@@ -27,7 +27,7 @@ double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
 int main()
 {
-  std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
+  std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s_seg.rknn";
 
   deploy_percept::engine::RknnEngine::Params params;
   params.model_path = model_name;
@@ -58,52 +58,54 @@ int main()
   inputs[0].pass_through = 0;
   inputs[0].buf = img.data;
 
-  rknn_output outputs[engine.model_io_num_.n_output];
-  memset(outputs, 0, sizeof(outputs));
-  for (int i = 0; i < engine.model_io_num_.n_output; i++)
-  {
-    outputs[i].index = i;
-    outputs[i].want_float = 0;
-  }
+  
 
-  struct timeval start_time, stop_time;
-  gettimeofday(&start_time, NULL);
-  engine.run(inputs, outputs);
-  gettimeofday(&stop_time, NULL);
-  printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
+  // rknn_output outputs[engine.model_io_num_.n_output];
+  // memset(outputs, 0, sizeof(outputs));
+  // for (int i = 0; i < engine.model_io_num_.n_output; i++)
+  // {
+  //   outputs[i].index = i;
+  //   outputs[i].want_float = 0;
+  // }
 
-  std::vector<float> out_scales;
-  std::vector<int32_t> out_zps;
-  for (int i = 0; i < engine.model_io_num_.n_output; ++i)
-  {
-    out_scales.push_back(engine.model_output_attrs_[i].scale);
-    out_zps.push_back(engine.model_output_attrs_[i].zp);
-  }
+  // struct timeval start_time, stop_time;
+  // gettimeofday(&start_time, NULL);
+  // engine.run(inputs, outputs);
+  // gettimeofday(&stop_time, NULL);
+  // printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-  // 使用YoloV5DetectPostProcess类进行后处理
-  deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
-  deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
+  // std::vector<float> out_scales;
+  // std::vector<int32_t> out_zps;
+  // for (int i = 0; i < engine.model_io_num_.n_output; ++i)
+  // {
+  //   out_scales.push_back(engine.model_output_attrs_[i].scale);
+  //   out_zps.push_back(engine.model_output_attrs_[i].zp);
+  // }
 
-  processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
-                target_size.height, target_size.width, pads, scale_w, scale_h, out_zps, out_scales);
-  processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
+  // // 使用YoloV5DetectPostProcess类进行后处理
+  // deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
+  // deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
 
-  std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
-  printf("save detect result to %s\n", out_path.c_str());
-  imwrite(out_path, orig_img);
+  // processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
+  //               target_size.height, target_size.width, pads, scale_w, scale_h, out_zps, out_scales);
+  // processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
 
-  rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
+  // std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
+  // printf("save detect result to %s\n", out_path.c_str());
+  // imwrite(out_path, orig_img);
 
-  int test_count = 10;
-  gettimeofday(&start_time, NULL);
-  for (int i = 0; i < test_count; ++i)
-  {
-    engine.run(inputs, outputs);
-    rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
-  }
-  gettimeofday(&stop_time, NULL);
-  printf("loop count = %d , average run  %f ms\n", test_count,
-         (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
+  // rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
+
+  // int test_count = 10;
+  // gettimeofday(&start_time, NULL);
+  // for (int i = 0; i < test_count; ++i)
+  // {
+  //   engine.run(inputs, outputs);
+  //   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
+  // }
+  // gettimeofday(&stop_time, NULL);
+  // printf("loop count = %d , average run  %f ms\n", test_count,
+  //        (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
 
   return 0;
 }

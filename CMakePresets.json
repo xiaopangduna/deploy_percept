@@ -20,7 +20,7 @@
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/aarch64-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
