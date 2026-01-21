@@ -426,147 +426,430 @@ static int read_detection_and_segmentation_results(const char *yaml_path, const 
 
   return 0;
 }
+const int anchor[3][6] = {{10, 13, 16, 30, 33, 23},
+                          {30, 61, 62, 45, 59, 119},
+                          {116, 90, 156, 198, 373, 326}};
 
-int post_process(int model_in_width, int model_in_height, rknn_output *outputs, letterbox_t *letter_box, float conf_threshold, float nms_threshold, object_detect_result_list *od_results)
+static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { return ((float)qnt - (float)zp) * scale; }
+inline static int32_t __clip(float val, float min, float max)
 {
-  // std::vector<float> filterBoxes;
-  // std::vector<float> objProbs;
-  // std::vector<int> classId;
+  float f = val <= min ? min : (val >= max ? max : val);
+  return f;
+}
+static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
+{
+  float dst_val = (f32 / scale) + zp;
+  int8_t res = (int8_t)__clip(dst_val, -128, 127);
+  return res;
+}
+static int process_i8(rknn_output *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
+                      std::vector<float> &boxes, std::vector<float> &segments, float *proto, std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                      rknn_app_context_t *app_ctx)
+{
 
-  // std::vector<float> filterSegments;
-  // float proto[PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT];
-  // std::vector<float> filterSegments_by_nms;
+  int validCount = 0;
+  int grid_len = grid_h * grid_w;
 
-  // int validCount = 0;
-  // int stride = 0;
-  // int grid_h = 0;
-  // int grid_w = 0;
+  if (input_id % 2 == 1)
+  {
+    return validCount;
+  }
 
-  // memset(od_results, 0, sizeof(object_detect_result_list));
+  if (input_id == 6)
+  {
+    int8_t *input_proto = (int8_t *)all_input[input_id].buf;
+    int32_t zp_proto = app_ctx->output_attrs[input_id].zp;
+    float scale_proto = app_ctx->output_attrs[input_id].scale;
+    for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
+    {
+      proto[i] = deqnt_affine_to_f32(input_proto[i], zp_proto, scale_proto);
+    }
+    return validCount;
+  }
 
-  // // process the outputs of rknn
-  // for (int i = 0; i < 7; i++)
-  // {
-  //   grid_h = app_ctx->output_attrs[i].dims[2];
-  //   grid_w = app_ctx->output_attrs[i].dims[3];
-  //   stride = model_in_height / grid_h;
+  int8_t *input = (int8_t *)all_input[input_id].buf;
+  int8_t *input_seg = (int8_t *)all_input[input_id + 1].buf;
+  int32_t zp = app_ctx->output_attrs[input_id].zp;
+  float scale = app_ctx->output_attrs[input_id].scale;
+  int32_t zp_seg = app_ctx->output_attrs[input_id + 1].zp;
+  float scale_seg = app_ctx->output_attrs[input_id + 1].scale;
 
-  //   if (app_ctx->is_quant)
-  //   {
-  //     validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, filterBoxes, filterSegments, proto, objProbs,
-  //                              classId, conf_threshold, app_ctx);
-  //   }
-  //   else
-  //   {
-  //     validCount += process_fp32(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, filterBoxes, filterSegments, proto, objProbs,
-  //                                classId, conf_threshold);
-  //   }
-  // }
+  int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
 
-  // // nms
-  // if (validCount <= 0)
-  // {
-  //   return 0;
-  // }
-  // std::vector<int> indexArray;
-  // for (int i = 0; i < validCount; ++i)
-  // {
-  //   indexArray.push_back(i);
-  // }
+  for (int a = 0; a < 3; a++)
+  {
+    for (int i = 0; i < grid_h; i++)
+    {
+      for (int j = 0; j < grid_w; j++)
+      {
+        int8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+        if (box_confidence >= thres_i8)
+        {
+          int offset = (PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
+          int offset_seg = (PROTO_CHANNEL * a) * grid_len + i * grid_w + j;
+          int8_t *in_ptr = input + offset;
+          int8_t *in_ptr_seg = input_seg + offset_seg;
 
-  // quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+          float box_x = (deqnt_affine_to_f32(*in_ptr, zp, scale)) * 2.0 - 0.5;
+          float box_y = (deqnt_affine_to_f32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
+          float box_w = (deqnt_affine_to_f32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
+          float box_h = (deqnt_affine_to_f32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
+          box_x = (box_x + j) * (float)stride;
+          box_y = (box_y + i) * (float)stride;
+          box_w = box_w * box_w * (float)anchor[a * 2];
+          box_h = box_h * box_h * (float)anchor[a * 2 + 1];
+          box_x -= (box_w / 2.0);
+          box_y -= (box_h / 2.0);
 
-  // std::set<int> class_set(std::begin(classId), std::end(classId));
+          int8_t maxClassProbs = in_ptr[5 * grid_len];
+          int maxClassId = 0;
+          for (int k = 1; k < OBJ_CLASS_NUM; ++k)
+          {
+            int8_t prob = in_ptr[(5 + k) * grid_len];
+            if (prob > maxClassProbs)
+            {
+              maxClassId = k;
+              maxClassProbs = prob;
+            }
+          }
 
-  // for (auto c : class_set)
-  // {
-  //   nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
-  // }
+          float box_conf_f32 = deqnt_affine_to_f32(box_confidence, zp, scale);
+          float class_prob_f32 = deqnt_affine_to_f32(maxClassProbs, zp, scale);
+          float limit_score = box_conf_f32 * class_prob_f32;
+          // if (maxClassProbs > thres_i8)
+          if (limit_score > threshold)
+          {
+            for (int k = 0; k < PROTO_CHANNEL; k++)
+            {
+              float seg_element_fp = deqnt_affine_to_f32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
+              segments.push_back(seg_element_fp);
+            }
 
-  // int last_count = 0;
-  // od_results->count = 0;
+            objProbs.push_back((deqnt_affine_to_f32(maxClassProbs, zp, scale)) * (deqnt_affine_to_f32(box_confidence, zp, scale)));
+            classId.push_back(maxClassId);
+            validCount++;
+            boxes.push_back(box_x);
+            boxes.push_back(box_y);
+            boxes.push_back(box_w);
+            boxes.push_back(box_h);
+          }
+        }
+      }
+    }
+  }
+  return validCount;
+}
+static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
+{
+  float key;
+  int key_index;
+  int low = left;
+  int high = right;
+  if (left < right)
+  {
+    key_index = indices[left];
+    key = input[left];
+    while (low < high)
+    {
+      while (low < high && input[high] <= key)
+      {
+        high--;
+      }
+      input[low] = input[high];
+      indices[low] = indices[high];
+      while (low < high && input[low] >= key)
+      {
+        low++;
+      }
+      input[high] = input[low];
+      indices[high] = indices[low];
+    }
+    input[low] = key;
+    indices[low] = key_index;
+    quick_sort_indice_inverse(input, left, low - 1, indices);
+    quick_sort_indice_inverse(input, low + 1, right, indices);
+  }
+  return low;
+}
+static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
+                              float ymax1)
+{
+  float w = fmax(0.f, fmin(xmax0, xmax1) - fmax(xmin0, xmin1) + 1.0);
+  float h = fmax(0.f, fmin(ymax0, ymax1) - fmax(ymin0, ymin1) + 1.0);
+  float i = w * h;
+  float u = (xmax0 - xmin0 + 1.0) * (ymax0 - ymin0 + 1.0) + (xmax1 - xmin1 + 1.0) * (ymax1 - ymin1 + 1.0) - i;
+  return u <= 0.f ? 0.f : (i / u);
+}
+static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
+               int filterId, float threshold)
+{
+  for (int i = 0; i < validCount; ++i)
+  {
+    if (order[i] == -1 || classIds[i] != filterId)
+    {
+      continue;
+    }
+    int n = order[i];
+    for (int j = i + 1; j < validCount; ++j)
+    {
+      int m = order[j];
+      if (m == -1 || classIds[i] != filterId)
+      {
+        continue;
+      }
+      float xmin0 = outputLocations[n * 4 + 0];
+      float ymin0 = outputLocations[n * 4 + 1];
+      float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
+      float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
 
-  // for (int i = 0; i < validCount; ++i)
-  // {
-  //   if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
-  //   {
-  //     continue;
-  //   }
-  //   int n = indexArray[i];
+      float xmin1 = outputLocations[m * 4 + 0];
+      float ymin1 = outputLocations[m * 4 + 1];
+      float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
+      float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
 
-  //   float x1 = filterBoxes[n * 4 + 0];
-  //   float y1 = filterBoxes[n * 4 + 1];
-  //   float x2 = x1 + filterBoxes[n * 4 + 2];
-  //   float y2 = y1 + filterBoxes[n * 4 + 3];
-  //   int id = classId[n];
-  //   float obj_conf = objProbs[i];
+      float iou = CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
 
-  //   for (int k = 0; k < PROTO_CHANNEL; k++)
-  //   {
-  //     filterSegments_by_nms.push_back(filterSegments[n * PROTO_CHANNEL + k]);
-  //   }
+      if (iou > threshold)
+      {
+        order[j] = -1;
+      }
+    }
+  }
+  return 0;
+}
+int clamp(float val, int min, int max)
+{
+  return val > min ? (val < max ? val : max) : min;
+}
+int box_reverse(int position, int boundary, int pad, float scale)
+{
+  return (int)((clamp(position, 0, boundary) - pad) / scale);
+}
+void matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
+{
 
-  //   od_results->results[last_count].box.left = x1;
-  //   od_results->results[last_count].box.top = y1;
-  //   od_results->results[last_count].box.right = x2;
-  //   od_results->results[last_count].box.bottom = y2;
+  float temp = 0;
+  for (int i = 0; i < ROWS_A; i++)
+  {
+    for (int j = 0; j < COLS_B; j++)
+    {
+      temp = 0;
+      for (int k = 0; k < COLS_A; k++)
+      {
+        temp += A[i * COLS_A + k] * B[k * COLS_B + j];
+      }
+      if (temp > 0)
+      {
+        C[i * COLS_B + j] = 4;
+      }
+      else
+      {
+        C[i * COLS_B + j] = 0;
+      }
+    }
+  }
+}
+void resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num, uint8_t *output_image, int target_width, int target_height)
+{
+  for (int b = 0; b < boxes_num; b++)
+  {
+    cv::Mat src_image(input_height, input_width, CV_8U, &input_image[b * input_width * input_height]);
+    cv::Mat dst_image;
+    cv::resize(src_image, dst_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
+    memcpy(&output_image[b * target_width * target_height], dst_image.data, target_width * target_height * sizeof(uint8_t));
+  }
+}
+void crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num, int *cls_id, int height, int width)
+{
+  for (int b = 0; b < boxes_num; b++)
+  {
+    float x1 = boxes[b * 4 + 0];
+    float y1 = boxes[b * 4 + 1];
+    float x2 = boxes[b * 4 + 2];
+    float y2 = boxes[b * 4 + 3];
 
-  //   od_results->results[last_count].prop = obj_conf;
-  //   od_results->results[last_count].cls_id = id;
-  //   last_count++;
-  // }
-  // od_results->count = last_count;
-  // int boxes_num = od_results->count;
+    for (int i = 0; i < height; i++)
+    {
+      for (int j = 0; j < width; j++)
+      {
+        if (j >= x1 && j < x2 && i >= y1 && i < y2)
+        {
+          if (all_mask_in_one[i * width + j] == 0)
+          {
+            if (seg_mask[b * width * height + i * width + j] > 0)
+            {
+              all_mask_in_one[i * width + j] = (cls_id[b] + 1);
+            }
+            else
+            {
+              all_mask_in_one[i * width + j] = 0;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
+                 int model_in_height, int model_in_width, int cropped_height, int cropped_width, int ori_in_height, int ori_in_width, int y_pad, int x_pad)
+{
 
-  // float filterBoxes_by_nms[boxes_num * 4];
-  // int cls_id[boxes_num];
-  // for (int i = 0; i < boxes_num; i++)
-  // {
-  //   // for crop_mask
-  //   filterBoxes_by_nms[i * 4 + 0] = od_results->results[i].box.left;   // x1;
-  //   filterBoxes_by_nms[i * 4 + 1] = od_results->results[i].box.top;    // y1;
-  //   filterBoxes_by_nms[i * 4 + 2] = od_results->results[i].box.right;  // x2;
-  //   filterBoxes_by_nms[i * 4 + 3] = od_results->results[i].box.bottom; // y2;
-  //   cls_id[i] = od_results->results[i].cls_id;
+  if (y_pad == 0 && x_pad == 0 && ori_in_height == model_in_height && ori_in_width == model_in_width)
+  {
+    memcpy(seg_mask_real, seg_mask, ori_in_height * ori_in_width);
+    return;
+  }
 
-  //   // get real box
-  //   od_results->results[i].box.left = box_reverse(od_results->results[i].box.left, model_in_width, letter_box->x_pad, letter_box->scale);
-  //   od_results->results[i].box.top = box_reverse(od_results->results[i].box.top, model_in_height, letter_box->y_pad, letter_box->scale);
-  //   od_results->results[i].box.right = box_reverse(od_results->results[i].box.right, model_in_width, letter_box->x_pad, letter_box->scale);
-  //   od_results->results[i].box.bottom = box_reverse(od_results->results[i].box.bottom, model_in_height, letter_box->y_pad, letter_box->scale);
-  // }
+  int cropped_index = 0;
+  for (int i = 0; i < model_in_height; i++)
+  {
+    for (int j = 0; j < model_in_width; j++)
+    {
+      if (i >= y_pad && i < model_in_height - y_pad && j >= x_pad && j < model_in_width - x_pad)
+      {
+        int seg_index = i * model_in_width + j;
+        cropped_seg[cropped_index] = seg_mask[seg_index];
+        cropped_index++;
+      }
+    }
+  }
+  // Note: Here are different methods provided for implementing single-channel image scaling.
+  //       The method of using rga to resize the image requires that the image size is 2 aligned.
+  resize_by_opencv_uint8(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
+  // resize_by_rga_rk356x(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
+  // resize_by_rga_rk3588(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
+}
+int post_process(int model_in_width, int model_in_height, rknn_tensor_attr *output_attrs, rknn_output *outputs, letterbox_t *letter_box, float conf_threshold, float nms_threshold, object_detect_result_list *od_results, rknn_app_context_t *app_ctx)
+{
+  std::vector<float> filterBoxes;
+  std::vector<float> objProbs;
+  std::vector<int> classId;
 
-  // // compute the mask through Matmul
-  // int ROWS_A = boxes_num;
-  // int COLS_A = PROTO_CHANNEL;
-  // int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
-  // uint8_t *matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
-  // matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
+  std::vector<float> filterSegments;
+  float proto[PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT];
+  std::vector<float> filterSegments_by_nms;
 
-  // uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * model_in_height * model_in_width * sizeof(uint8_t));
-  // resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, model_in_width, model_in_height);
+  int validCount = 0;
+  int stride = 0;
+  int grid_h = 0;
+  int grid_w = 0;
 
-  // // crop mask
-  // uint8_t *all_mask_in_one = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
-  // memset(all_mask_in_one, 0, model_in_height * model_in_width * sizeof(uint8_t));
-  // crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, model_in_height, model_in_width);
+  memset(od_results, 0, sizeof(object_detect_result_list));
 
-  // // get real mask
-  // int cropped_height = model_in_height - letter_box->y_pad * 2;
-  // int cropped_width = model_in_width - letter_box->x_pad * 2;
-  // int ori_in_height = app_ctx->input_image_height;
-  // int ori_in_width = app_ctx->input_image_width;
-  // int y_pad = letter_box->y_pad;
-  // int x_pad = letter_box->x_pad;
-  // uint8_t *cropped_seg_mask = (uint8_t *)malloc(cropped_height * cropped_width * sizeof(uint8_t));
-  // uint8_t *real_seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
-  // seg_reverse(all_mask_in_one, cropped_seg_mask, real_seg_mask,
-  //             model_in_height, model_in_width, cropped_height, cropped_width, ori_in_height, ori_in_width, y_pad, x_pad);
-  // od_results->results_seg[0].seg_mask = real_seg_mask;
-  // free(all_mask_in_one);
-  // free(cropped_seg_mask);
-  // free(seg_mask);
-  // free(matmul_out);
+  // process the outputs of rknn
+  for (int i = 0; i < 7; i++)
+  {
+    grid_h = output_attrs[i].dims[2];
+    grid_w = output_attrs[i].dims[3];
+    stride = model_in_height / grid_h;
+    validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, filterBoxes, filterSegments, proto, objProbs,
+                             classId, conf_threshold, app_ctx);
+  }
+
+  // nms
+  if (validCount <= 0)
+  {
+    return 0;
+  }
+  std::vector<int> indexArray;
+  for (int i = 0; i < validCount; ++i)
+  {
+    indexArray.push_back(i);
+  }
+
+  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+
+  std::set<int> class_set(std::begin(classId), std::end(classId));
+
+  for (auto c : class_set)
+  {
+    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
+  }
+
+  int last_count = 0;
+  od_results->count = 0;
+
+  for (int i = 0; i < validCount; ++i)
+  {
+    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
+    {
+      continue;
+    }
+    int n = indexArray[i];
+
+    float x1 = filterBoxes[n * 4 + 0];
+    float y1 = filterBoxes[n * 4 + 1];
+    float x2 = x1 + filterBoxes[n * 4 + 2];
+    float y2 = y1 + filterBoxes[n * 4 + 3];
+    int id = classId[n];
+    float obj_conf = objProbs[i];
+
+    for (int k = 0; k < PROTO_CHANNEL; k++)
+    {
+      filterSegments_by_nms.push_back(filterSegments[n * PROTO_CHANNEL + k]);
+    }
+
+    od_results->results[last_count].box.left = x1;
+    od_results->results[last_count].box.top = y1;
+    od_results->results[last_count].box.right = x2;
+    od_results->results[last_count].box.bottom = y2;
+
+    od_results->results[last_count].prop = obj_conf;
+    od_results->results[last_count].cls_id = id;
+    last_count++;
+  }
+  od_results->count = last_count;
+  int boxes_num = od_results->count;
+
+  float filterBoxes_by_nms[boxes_num * 4];
+  int cls_id[boxes_num];
+  for (int i = 0; i < boxes_num; i++)
+  {
+    // for crop_mask
+    filterBoxes_by_nms[i * 4 + 0] = od_results->results[i].box.left;   // x1;
+    filterBoxes_by_nms[i * 4 + 1] = od_results->results[i].box.top;    // y1;
+    filterBoxes_by_nms[i * 4 + 2] = od_results->results[i].box.right;  // x2;
+    filterBoxes_by_nms[i * 4 + 3] = od_results->results[i].box.bottom; // y2;
+    cls_id[i] = od_results->results[i].cls_id;
+
+    // get real box
+    od_results->results[i].box.left = box_reverse(od_results->results[i].box.left, model_in_width, letter_box->x_pad, letter_box->scale);
+    od_results->results[i].box.top = box_reverse(od_results->results[i].box.top, model_in_height, letter_box->y_pad, letter_box->scale);
+    od_results->results[i].box.right = box_reverse(od_results->results[i].box.right, model_in_width, letter_box->x_pad, letter_box->scale);
+    od_results->results[i].box.bottom = box_reverse(od_results->results[i].box.bottom, model_in_height, letter_box->y_pad, letter_box->scale);
+  }
+
+  // compute the mask through Matmul
+  int ROWS_A = boxes_num;
+  int COLS_A = PROTO_CHANNEL;
+  int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
+  uint8_t *matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
+  matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
+
+  uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * model_in_height * model_in_width * sizeof(uint8_t));
+  resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, model_in_width, model_in_height);
+
+  // crop mask
+  uint8_t *all_mask_in_one = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
+  memset(all_mask_in_one, 0, model_in_height * model_in_width * sizeof(uint8_t));
+  crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, model_in_height, model_in_width);
+
+  // get real mask
+  int cropped_height = model_in_height - letter_box->y_pad * 2;
+  int cropped_width = model_in_width - letter_box->x_pad * 2;
+  int ori_in_height = app_ctx->input_image_height;
+  int ori_in_width = app_ctx->input_image_width;
+  int y_pad = letter_box->y_pad;
+  int x_pad = letter_box->x_pad;
+  uint8_t *cropped_seg_mask = (uint8_t *)malloc(cropped_height * cropped_width * sizeof(uint8_t));
+  uint8_t *real_seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
+  seg_reverse(all_mask_in_one, cropped_seg_mask, real_seg_mask,
+              model_in_height, model_in_width, cropped_height, cropped_width, ori_in_height, ori_in_width, y_pad, x_pad);
+  od_results->results_seg[0].seg_mask = real_seg_mask;
+  free(all_mask_in_one);
+  free(cropped_seg_mask);
+  free(seg_mask);
+  free(matmul_out);
 
   return 0;
 };
@@ -642,9 +925,20 @@ int main()
   }
 
   printf("Successfully loaded %d objects from YAML file\n", loaded_results.count);
+  
 
   rknn_app_context_t rknn_app_ctx;
   memset(&rknn_app_ctx, 0, sizeof(rknn_app_context_t));
+  rknn_app_ctx.rknn_ctx = engine.ctx_; // 使用引擎上下文
+  rknn_app_ctx.io_num.n_input = 1;
+  rknn_app_ctx.io_num.n_output = 7;
+  rknn_app_ctx.model_channel = 3;
+  rknn_app_ctx.model_width = 640;
+  rknn_app_ctx.model_height = 640;
+  rknn_app_ctx.input_image_width = orig_img.cols;  // 使用实际图像宽度
+  rknn_app_ctx.input_image_height = orig_img.rows; // 使用实际图像高度
+  rknn_app_ctx.is_quant = 1;
+
   int model_in_width;
   int model_in_height;
   model_in_height = engine.model_input_attrs_[0].dims[1];
@@ -658,7 +952,7 @@ int main()
   const float box_conf_threshold = BOX_THRESH;
   object_detect_result_list od_results;
   memset(&od_results, 0x00, sizeof(od_results));
-  post_process(model_in_width, model_in_height, outputs, &letter_box, box_conf_threshold, nms_threshold, &od_results);
+  post_process(model_in_width, model_in_height, engine.model_output_attrs_.data(), outputs, &letter_box, box_conf_threshold, nms_threshold, &od_results, &rknn_app_ctx);
 
   // std::vector<float> out_scales;
   // std::vector<int32_t> out_zps;
