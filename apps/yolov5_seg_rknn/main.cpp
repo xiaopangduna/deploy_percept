@@ -83,6 +83,209 @@ typedef struct
   int y_pad;
   float scale;
 } letterbox_t;
+
+static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
+{
+  float key;
+  int key_index;
+  int low = left;
+  int high = right;
+  if (left < right)
+  {
+    key_index = indices[left];
+    key = input[left];
+    while (low < high)
+    {
+      while (low < high && input[high] <= key)
+      {
+        high--;
+      }
+      input[low] = input[high];
+      indices[low] = indices[high];
+      while (low < high && input[low] >= key)
+      {
+        low++;
+      }
+      input[high] = input[low];
+      indices[high] = indices[low];
+    }
+    input[low] = key;
+    indices[low] = key_index;
+    quick_sort_indice_inverse(input, left, low - 1, indices);
+    quick_sort_indice_inverse(input, low + 1, right, indices);
+  }
+  return low;
+}
+
+// 比较两个检测结果列表是否一致
+bool compareDetectionResults(const object_detect_result_list& loaded, const object_detect_result_list& computed, int img_width, int img_height) {
+    if (loaded.count != computed.count) {
+        printf("Object counts differ: loaded=%d, computed=%d\n", loaded.count, computed.count);
+        return false;
+    }
+
+    printf("Comparing %d objects...\n", loaded.count);
+
+    for (int i = 0; i < loaded.count; i++) {
+        const object_detect_result& loaded_result = loaded.results[i];
+        const object_detect_result& computed_result = computed.results[i];
+
+        // 比较边界框
+        if (loaded_result.box.left != computed_result.box.left ||
+            loaded_result.box.top != computed_result.box.top ||
+            loaded_result.box.right != computed_result.box.right ||
+            loaded_result.box.bottom != computed_result.box.bottom) {
+            printf("Bounding box mismatch for object %d: loaded=(%d,%d,%d,%d), computed=(%d,%d,%d,%d)\n", 
+                   i, 
+                   loaded_result.box.left, loaded_result.box.top, loaded_result.box.right, loaded_result.box.bottom,
+                   computed_result.box.left, computed_result.box.top, computed_result.box.right, computed_result.box.bottom);
+            return false;
+        }
+
+        // 比较置信度（允许一定误差）
+        if (abs(loaded_result.prop - computed_result.prop) > 0.01f) {
+            printf("Confidence mismatch for object %d: loaded=%.4f, computed=%.4f\n", 
+                   i, loaded_result.prop, computed_result.prop);
+            return false;
+        }
+
+        // 比较类别ID
+        if (loaded_result.cls_id != computed_result.cls_id) {
+            printf("Class ID mismatch for object %d: loaded=%d, computed=%d\n", 
+                   i, loaded_result.cls_id, computed_result.cls_id);
+            return false;
+        }
+
+        // 比较分割掩码（如果存在）
+        if (loaded.results_seg[i].seg_mask != nullptr && computed.results_seg[i].seg_mask != nullptr) {
+            // 比较整个掩码
+            bool masks_match = true;
+            int total_pixels = img_width * img_height;
+            for (int j = 0; j < total_pixels; j++) {
+                if (loaded.results_seg[i].seg_mask[j] != computed.results_seg[i].seg_mask[j]) {
+                    masks_match = false;
+                    break;
+                }
+            }
+            if (!masks_match) {
+                printf("Segmentation mask mismatch for object %d\n", i);
+                return false;
+            }
+        } else if ((loaded.results_seg[i].seg_mask != nullptr) != (computed.results_seg[i].seg_mask != nullptr)) {
+            printf("One segmentation mask exists but the other doesn't for object %d\n", i);
+            return false;
+        }
+    }
+
+    printf("All results match!\n");
+    return true;
+}
+
+// 绘制检测和分割结果
+void drawDetectionResults(cv::Mat& image, const object_detect_result_list& results)
+{
+    // 定义类别颜色
+    unsigned char class_colors[][3] = {
+        {255, 56, 56},   // 'FF3838'
+        {255, 157, 151}, // 'FF9D97'
+        {255, 112, 31},  // 'FF701F'
+        {255, 178, 29},  // 'FFB21D'
+        {207, 210, 49},  // 'CFD231'
+        {72, 249, 10},   // '48F90A'
+        {146, 204, 23},  // '92CC17'
+        {61, 219, 134},  // '3DDB86'
+        {26, 147, 52},   // '1A9334'
+        {0, 212, 187},   // '00D4BB'
+        {44, 153, 168},  // '2C99A8'
+        {0, 194, 255},   // '00C2FF'
+        {52, 69, 147},   // '344593'
+        {100, 115, 255}, // '6473FF'
+        {0, 24, 236},    // '0018EC'
+        {132, 56, 255},  // '8438FF'
+        {82, 0, 133},    // '520085'
+        {203, 56, 255},  // 'CB38FF'
+        {255, 149, 200}, // 'FF95C8'
+        {255, 55, 199}   // 'FF37C7'
+    };
+
+    int width = image.cols;
+    int height = image.rows;
+    float alpha = 0.5f; // 透明度
+
+    // 首先绘制分割掩码
+    if (results.count >= 1)
+    {
+        for (int i = 0; i < results.count; i++)
+        {
+            object_detect_result *det_result = (object_detect_result *)&results.results[i];
+
+            // 获取对应类别的颜色
+            cv::Vec3b color = cv::Vec3b(class_colors[det_result->cls_id % 20][0],
+                                        class_colors[det_result->cls_id % 20][1],
+                                        class_colors[det_result->cls_id % 20][2]); // RGB格式
+
+            // 绘制分割掩码
+            if (results.results_seg[i].seg_mask != nullptr)
+            {
+                // 直接修改原图的像素值
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        // 获取掩码值
+                        int mask_value = results.results_seg[i].seg_mask[h * width + w];
+
+                        if (mask_value != 0)
+                        {
+                            // 使用掩码值来索引颜色
+                            cv::Vec3b color = cv::Vec3b(class_colors[mask_value % 20][0],
+                                                        class_colors[mask_value % 20][1],
+                                                        class_colors[mask_value % 20][2]); // RGB格式
+
+                            cv::Vec3b &pixel = image.at<cv::Vec3b>(h, w);
+
+                            // 使用对象的类别颜色来绘制掩码
+                            pixel[0] = (unsigned char)(color[0] * (1 - alpha) + pixel[0] * alpha); // B
+                            pixel[1] = (unsigned char)(color[1] * (1 - alpha) + pixel[1] * alpha); // G
+                            pixel[2] = (unsigned char)(color[2] * (1 - alpha) + pixel[2] * alpha); // R
+                        }
+                    }
+                }
+            }
+        }
+
+        // 然后绘制边界框和标签
+        for (int i = 0; i < results.count; i++)
+        {
+            object_detect_result *det_result = (object_detect_result *)&results.results[i];
+
+            // 获取对应类别的颜色
+            cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
+                                          class_colors[det_result->cls_id % 20][1],
+                                          class_colors[det_result->cls_id % 20][0]); // BGR格式
+
+            // 绘制边界框
+            cv::rectangle(image,
+                          cv::Point(det_result->box.left, det_result->box.top),
+                          cv::Point(det_result->box.right, det_result->box.bottom),
+                          color, 2);
+
+            // 添加标签文本
+            std::string label = "Class " + std::to_string(det_result->cls_id) + " " +
+                                std::to_string(det_result->prop * 100) + "%";
+            int baseline;
+            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            cv::rectangle(image,
+                          cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
+                          cv::Point(det_result->box.left + textSize.width, det_result->box.top),
+                          color, -1);
+            cv::putText(image, label,
+                        cv::Point(det_result->box.left, det_result->box.top - 5),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+        }
+    }
+}
+
 // 比较img.data和examples/data/yolov5_seg/input_image.bin内容是否一致的函数
 bool compareImageData(const cv::Mat &img, const std::string &binFilePath)
 {
@@ -539,38 +742,7 @@ static int process_i8(rknn_output *all_input, int input_id, int *anchor, int gri
   }
   return validCount;
 }
-static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
-{
-  float key;
-  int key_index;
-  int low = left;
-  int high = right;
-  if (left < right)
-  {
-    key_index = indices[left];
-    key = input[left];
-    while (low < high)
-    {
-      while (low < high && input[high] <= key)
-      {
-        high--;
-      }
-      input[low] = input[high];
-      indices[low] = indices[high];
-      while (low < high && input[low] >= key)
-      {
-        low++;
-      }
-      input[high] = input[low];
-      indices[high] = indices[low];
-    }
-    input[low] = key;
-    indices[low] = key_index;
-    quick_sort_indice_inverse(input, left, low - 1, indices);
-    quick_sort_indice_inverse(input, low + 1, right, indices);
-  }
-  return low;
-}
+
 static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
                               float ymax1)
 {
@@ -925,7 +1097,6 @@ int main()
   }
 
   printf("Successfully loaded %d objects from YAML file\n", loaded_results.count);
-  
 
   rknn_app_context_t rknn_app_ctx;
   memset(&rknn_app_ctx, 0, sizeof(rknn_app_context_t));
@@ -938,6 +1109,8 @@ int main()
   rknn_app_ctx.input_image_width = orig_img.cols;  // 使用实际图像宽度
   rknn_app_ctx.input_image_height = orig_img.rows; // 使用实际图像高度
   rknn_app_ctx.is_quant = 1;
+  rknn_app_ctx.output_attrs = engine.model_output_attrs_.data(); // 使用.data()获取指针
+  rknn_app_ctx.input_attrs = engine.model_input_attrs_.data(); // 使用.data()获取指针
 
   int model_in_width;
   int model_in_height;
@@ -953,6 +1126,19 @@ int main()
   object_detect_result_list od_results;
   memset(&od_results, 0x00, sizeof(od_results));
   post_process(model_in_width, model_in_height, engine.model_output_attrs_.data(), outputs, &letter_box, box_conf_threshold, nms_threshold, &od_results, &rknn_app_ctx);
+
+  // 比较加载的结果和计算的结果
+  printf("Comparing loaded results with computed results...\n");
+  bool results_match = compareDetectionResults(loaded_results, od_results, orig_img.cols, orig_img.rows);
+  printf("Results match: %s\n", results_match ? "YES" : "NO");
+
+  // 绘制计算得到的检测结果
+  cv::Mat result_img = orig_img.clone();
+  drawDetectionResults(result_img, od_results);
+  
+  std::string computed_out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/computed_out.jpg";
+  printf("Save computed detect result to %s\n", computed_out_path.c_str());
+  cv::imwrite(computed_out_path, result_img);
 
   // std::vector<float> out_scales;
   // std::vector<int32_t> out_zps;
