@@ -36,6 +36,7 @@ set(DEPLOY_PERCEPT_SOURCES
     src/engine/BaseEngine.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
+    src/post_process/YoloV5SegPostProcess.cpp
     src/post_process/PostProcessFactory.cpp
     src/utils/logger_factory.cpp
 )

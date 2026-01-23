@@ -1,0 +1,587 @@
+#include "deploy_percept/post_process/YoloV5SegPostProcess.hpp"
+#include <set>
+#include <algorithm>
+#include <cmath>
+#include <malloc.h>
+
+namespace deploy_percept
+{
+    namespace post_process
+    {
+        // 构造函数
+        YoloV5SegPostProcess::YoloV5SegPostProcess(const Params &params) : params_(params)
+        {
+            result_.group.results.resize(params_.obj_numb_max_size);
+            result_.group.results_seg.resize(params_.obj_numb_max_size);
+        }
+
+        static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { 
+            return ((float)qnt - (float)zp) * scale; 
+        }
+        
+        inline static int32_t __clip(float val, float min, float max)
+        {
+            float f = val <= min ? min : (val >= max ? max : val);
+            return f;
+        }
+        
+        static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
+        {
+            float dst_val = (f32 / scale) + zp;
+            int8_t res = (int8_t)__clip(dst_val, -128, 127);
+            return res;
+        }
+        
+        // Anchor values for YOLOv5
+        const int anchor[3][6] = {{10, 13, 16, 30, 33, 23},
+                                  {30, 61, 62, 45, 59, 119},
+                                  {116, 90, 156, 198, 373, 326}};
+
+        int YoloV5SegPostProcess::process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, 
+                                           int height, int width, int stride,
+                                           std::vector<float> &boxes, std::vector<float> &segments, float *proto, 
+                                           std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                           std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
+                                           std::vector<int32_t> &output_zps)
+        {
+            int validCount = 0;
+            int grid_len = grid_h * grid_w;
+
+            if (input_id % 2 == 1)
+            {
+                return validCount;
+            }
+
+            const int PROTO_CHANNEL = 32;
+            const int PROTO_HEIGHT = 160;
+            const int PROTO_WEIGHT = 160;
+            const int OBJ_CLASS_NUM = 80;
+            const int PROP_BOX_SIZE = (5 + OBJ_CLASS_NUM);
+
+            if (input_id == 6)
+            {
+                int8_t *input_proto = (int8_t *)(*all_input)[input_id];
+                int32_t zp_proto = output_zps[input_id];
+                float scale_proto = output_scales[input_id];
+                for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
+                {
+                    proto[i] = deqnt_affine_to_f32(input_proto[i], zp_proto, scale_proto);
+                }
+                return validCount;
+            }
+
+            int8_t *input = (int8_t *)(*all_input)[input_id];
+            int8_t *input_seg = (int8_t *)(*all_input)[input_id + 1];
+            int32_t zp = output_zps[input_id];
+            float scale = output_scales[input_id];
+            int32_t zp_seg = output_zps[input_id + 1];
+            float scale_seg = output_scales[input_id + 1];
+
+            int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
+
+            for (int a = 0; a < 3; a++)
+            {
+                for (int i = 0; i < grid_h; i++)
+                {
+                    for (int j = 0; j < grid_w; j++)
+                    {
+                        int8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+                        if (box_confidence >= thres_i8)
+                        {
+                            int offset = (PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
+                            int offset_seg = (PROTO_CHANNEL * a) * grid_len + i * grid_w + j;
+                            int8_t *in_ptr = input + offset;
+                            int8_t *in_ptr_seg = input_seg + offset_seg;
+
+                            float box_x = (deqnt_affine_to_f32(*in_ptr, zp, scale)) * 2.0 - 0.5;
+                            float box_y = (deqnt_affine_to_f32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
+                            float box_w = (deqnt_affine_to_f32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
+                            float box_h = (deqnt_affine_to_f32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
+                            box_x = (box_x + j) * (float)stride;
+                            box_y = (box_y + i) * (float)stride;
+                            box_w = box_w * box_w * (float)anchor[a * 2];
+                            box_h = box_h * box_h * (float)anchor[a * 2 + 1];
+                            box_x -= (box_w / 2.0);
+                            box_y -= (box_h / 2.0);
+
+                            int8_t maxClassProbs = in_ptr[5 * grid_len];
+                            int maxClassId = 0;
+                            for (int k = 1; k < OBJ_CLASS_NUM; ++k)
+                            {
+                                int8_t prob = in_ptr[(5 + k) * grid_len];
+                                if (prob > maxClassProbs)
+                                {
+                                    maxClassId = k;
+                                    maxClassProbs = prob;
+                                }
+                            }
+
+                            float box_conf_f32 = deqnt_affine_to_f32(box_confidence, zp, scale);
+                            float class_prob_f32 = deqnt_affine_to_f32(maxClassProbs, zp, scale);
+                            float limit_score = box_conf_f32 * class_prob_f32;
+                            if (limit_score > threshold)
+                            {
+                                for (int k = 0; k < PROTO_CHANNEL; k++)
+                                {
+                                    float seg_element_fp = deqnt_affine_to_f32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
+                                    segments.push_back(seg_element_fp);
+                                }
+
+                                objProbs.push_back((deqnt_affine_to_f32(maxClassProbs, zp, scale)) * (deqnt_affine_to_f32(box_confidence, zp, scale)));
+                                classId.push_back(maxClassId);
+                                validCount++;
+                                boxes.push_back(box_x);
+                                boxes.push_back(box_y);
+                                boxes.push_back(box_w);
+                                boxes.push_back(box_h);
+                            }
+                        }
+                    }
+                }
+            }
+            return validCount;
+        }
+
+        int YoloV5SegPostProcess::quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
+        {
+            float key;
+            int key_index;
+            int low = left;
+            int high = right;
+            if (left < right)
+            {
+                key_index = indices[left];
+                key = input[left];
+                while (low < high)
+                {
+                    while (low < high && input[high] <= key)
+                    {
+                        high--;
+                    }
+                    input[low] = input[high];
+                    indices[low] = indices[high];
+                    while (low < high && input[low] >= key)
+                    {
+                        low++;
+                    }
+                    input[high] = input[low];
+                    indices[high] = indices[low];
+                }
+                input[low] = key;
+                indices[low] = key_index;
+                quick_sort_indice_inverse(input, left, low - 1, indices);
+                quick_sort_indice_inverse(input, low + 1, right, indices);
+            }
+            return low;
+        }
+
+        float YoloV5SegPostProcess::CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
+                                                   float ymax1)
+        {
+            float w = fmax(0.f, fmin(xmax0, xmax1) - fmax(xmin0, xmin1) + 1.0);
+            float h = fmax(0.f, fmin(ymax0, ymax1) - fmax(ymin0, ymin1) + 1.0);
+            float i = w * h;
+            float u = (xmax0 - xmin0 + 1.0) * (ymax0 - ymin0 + 1.0) + (xmax1 - xmin1 + 1.0) * (ymax1 - ymin1 + 1.0) - i;
+            return u <= 0.f ? 0.f : (i / u);
+        }
+
+        int YoloV5SegPostProcess::nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
+                                     int filterId, float threshold)
+        {
+            for (int i = 0; i < validCount; ++i)
+            {
+                if (order[i] == -1 || classIds[i] != filterId)
+                {
+                    continue;
+                }
+                int n = order[i];
+                for (int j = i + 1; j < validCount; ++j)
+                {
+                    int m = order[j];
+                    if (m == -1 || classIds[i] != filterId)
+                    {
+                        continue;
+                    }
+                    float xmin0 = outputLocations[n * 4 + 0];
+                    float ymin0 = outputLocations[n * 4 + 1];
+                    float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
+                    float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
+
+                    float xmin1 = outputLocations[m * 4 + 0];
+                    float ymin1 = outputLocations[m * 4 + 1];
+                    float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
+                    float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
+
+                    float iou = CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
+
+                    if (iou > threshold)
+                    {
+                        order[j] = -1;
+                    }
+                }
+            }
+            return 0;
+        }
+
+        int YoloV5SegPostProcess::clamp(float val, int min, int max)
+        {
+            return val > min ? (val < max ? val : max) : min;
+        }
+
+        int YoloV5SegPostProcess::box_reverse(int position, int boundary, int pad, float scale)
+        {
+            return (int)((clamp(position, 0, boundary) - pad) / scale);
+        }
+
+        void YoloV5SegPostProcess::matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
+        {
+            float temp = 0;
+            for (int i = 0; i < ROWS_A; i++)
+            {
+                for (int j = 0; j < COLS_B; j++)
+                {
+                    temp = 0;
+                    for (int k = 0; k < COLS_A; k++)
+                    {
+                        temp += A[i * COLS_A + k] * B[k * COLS_B + j];
+                    }
+                    if (temp > 0)
+                    {
+                        C[i * COLS_B + j] = 4;
+                    }
+                    else
+                    {
+                        C[i * COLS_B + j] = 0;
+                    }
+                }
+            }
+        }
+
+        void YoloV5SegPostProcess::resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num, 
+                                                        uint8_t *output_image, int target_width, int target_height)
+        {
+            for (int b = 0; b < boxes_num; b++)
+            {
+                cv::Mat src_image(input_height, input_width, CV_8U, &input_image[b * input_width * input_height]);
+                cv::Mat dst_image;
+                cv::resize(src_image, dst_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
+                memcpy(&output_image[b * target_width * target_height], dst_image.data, target_width * target_height * sizeof(uint8_t));
+            }
+        }
+
+        void YoloV5SegPostProcess::crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num, 
+                                                 int *cls_id, int height, int width)
+        {
+            for (int b = 0; b < boxes_num; b++)
+            {
+                float x1 = boxes[b * 4 + 0];
+                float y1 = boxes[b * 4 + 1];
+                float x2 = boxes[b * 4 + 2];
+                float y2 = boxes[b * 4 + 3];
+
+                for (int i = 0; i < height; i++)
+                {
+                    for (int j = 0; j < width; j++)
+                    {
+                        if (j >= x1 && j < x2 && i >= y1 && i < y2)
+                        {
+                            if (all_mask_in_one[i * width + j] == 0)
+                            {
+                                if (seg_mask[b * width * height + i * width + j] > 0)
+                                {
+                                    all_mask_in_one[i * width + j] = (cls_id[b] + 1);
+                                }
+                                else
+                                {
+                                    all_mask_in_one[i * width + j] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        void YoloV5SegPostProcess::seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
+                                             int model_in_height, int model_in_width, int cropped_height, int cropped_width, 
+                                             int ori_in_height, int ori_in_width, int y_pad, int x_pad)
+        {
+            if (y_pad == 0 && x_pad == 0 && ori_in_height == model_in_height && ori_in_width == model_in_width)
+            {
+                memcpy(seg_mask_real, seg_mask, ori_in_height * ori_in_width);
+                return;
+            }
+
+            int cropped_index = 0;
+            for (int i = 0; i < model_in_height; i++)
+            {
+                for (int j = 0; j < model_in_width; j++)
+                {
+                    if (i >= y_pad && i < model_in_height - y_pad && j >= x_pad && j < model_in_width - x_pad)
+                    {
+                        int seg_index = i * model_in_width + j;
+                        cropped_seg[cropped_index] = seg_mask[seg_index];
+                        cropped_index++;
+                    }
+                }
+            }
+            // Note: Here are different methods provided for implementing single-channel image scaling.
+            //       The method of using rga to resize the image requires that the image size is 2 aligned.
+            resize_by_opencv_uint8(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
+            // resize_by_rga_rk356x(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
+            // resize_by_rga_rk3588(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
+        }
+
+        bool YoloV5SegPostProcess::run(
+            int model_in_width,
+            int model_in_height,
+            std::vector<std::vector<int>> &output_dims,
+            std::vector<float> &output_scales,
+            std::vector<int32_t> &output_zps,
+            std::vector<void*> *outputs,
+            BoxRect pads,
+            float scale,
+            int input_image_width,
+            int input_image_height)
+        {
+            const int PROTO_CHANNEL = params_.proto_channel;
+            const int PROTO_HEIGHT = params_.proto_height;
+            const int PROTO_WEIGHT = params_.proto_weight;
+            const int OBJ_CLASS_NUM = params_.obj_class_num;
+            const int OBJ_NUMB_MAX_SIZE = params_.obj_numb_max_size;
+            const int PROP_BOX_SIZE = (5 + OBJ_CLASS_NUM);
+
+            std::vector<float> filterBoxes;
+            std::vector<float> objProbs;
+            std::vector<int> classId;
+
+            std::vector<float> filterSegments;
+            float proto[PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT];
+            std::vector<float> filterSegments_by_nms;
+
+            int validCount = 0;
+            int stride = 0;
+            int grid_h = 0;
+            int grid_w = 0;
+
+            // Initialize result
+            result_.group.count = 0;
+            result_.success = false;
+
+            // Process the outputs of the model
+            for (int i = 0; i < 7; i++)
+            {
+                if (i >= output_dims.size()) break;
+                grid_h = output_dims[i][2];
+                grid_w = output_dims[i][3];
+                stride = model_in_height / grid_h;
+                validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, 
+                                         filterBoxes, filterSegments, proto, objProbs, classId, params_.conf_threshold, 
+                                         output_dims, output_scales, output_zps);
+            }
+
+            // NMS
+            if (validCount <= 0)
+            {
+                result_.success = true;
+                return true;
+            }
+            
+            std::vector<int> indexArray;
+            for (int i = 0; i < validCount; ++i)
+            {
+                indexArray.push_back(i);
+            }
+
+            quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+
+            std::set<int> class_set(std::begin(classId), std::end(classId));
+
+            for (auto c : class_set)
+            {
+                nms(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
+            }
+
+            int last_count = 0;
+            result_.group.count = 0;
+
+            // Resize vectors to ensure they have enough space
+            result_.group.results.resize(OBJ_NUMB_MAX_SIZE);
+            result_.group.results_seg.resize(1); // 只需要一个分割结果
+
+            for (int i = 0; i < validCount; ++i)
+            {
+                if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
+                {
+                    continue;
+                }
+                int n = indexArray[i];
+
+                float x1 = filterBoxes[n * 4 + 0];
+                float y1 = filterBoxes[n * 4 + 1];
+                float x2 = x1 + filterBoxes[n * 4 + 2];
+                float y2 = y1 + filterBoxes[n * 4 + 3];
+                int id = classId[n];  // 保存真实的类别ID
+                float obj_conf = objProbs[i];
+
+                for (int k = 0; k < PROTO_CHANNEL; k++)
+                {
+                    filterSegments_by_nms.push_back(filterSegments[n * PROTO_CHANNEL + k]);
+                }
+
+                result_.group.results[last_count].box.left = x1;
+                result_.group.results[last_count].box.top = y1;
+                result_.group.results[last_count].box.right = x2;
+                result_.group.results[last_count].box.bottom = y2;
+
+                result_.group.results[last_count].prop = obj_conf;
+                // Set class name based on class id
+                snprintf(result_.group.results[last_count].name, 
+                         sizeof(result_.group.results[last_count].name), 
+                         "class_%d", id);
+                // 保存真实的类别ID
+                // 注意：在DetectResult结构中没有cls_id字段，所以我们需要在生成掩码时使用正确的类别ID
+
+                last_count++;
+            }
+            result_.group.count = last_count;
+            int boxes_num = result_.group.count;
+
+            float filterBoxes_by_nms[boxes_num * 4];
+            int cls_id[boxes_num];
+            for (int i = 0; i < boxes_num; i++)
+            {
+                // for crop_mask
+                filterBoxes_by_nms[i * 4 + 0] = result_.group.results[i].box.left;   // x1;
+                filterBoxes_by_nms[i * 4 + 1] = result_.group.results[i].box.top;    // y1;
+                filterBoxes_by_nms[i * 4 + 2] = result_.group.results[i].box.right;  // x2;
+                filterBoxes_by_nms[i * 4 + 3] = result_.group.results[i].box.bottom; // y2;
+                
+                // 从classId数组中获取真实的类别ID，而不是从名字中解析
+                // 需要重建classId映射，因为经过NMS排序后顺序可能变化
+                std::string name_str(result_.group.results[i].name);
+                size_t pos = name_str.find_last_of('_');
+                if (pos != std::string::npos) {
+                    cls_id[i] = std::stoi(name_str.substr(pos + 1));
+                } else {
+                    cls_id[i] = 0;  // Default to 0 if parsing fails
+                }
+
+                // get real box
+                result_.group.results[i].box.left = box_reverse(result_.group.results[i].box.left, model_in_width, pads.left, scale);
+                result_.group.results[i].box.top = box_reverse(result_.group.results[i].box.top, model_in_height, pads.top, scale);
+                result_.group.results[i].box.right = box_reverse(result_.group.results[i].box.right, model_in_width, pads.left, scale);
+                result_.group.results[i].box.bottom = box_reverse(result_.group.results[i].box.bottom, model_in_height, pads.top, scale);
+            }
+
+            // compute the mask through Matmul
+            int ROWS_A = boxes_num;
+            int COLS_A = PROTO_CHANNEL;
+            int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
+            uint8_t *matmul_out = nullptr;
+            
+            if (boxes_num > 0) {
+                // Allocate memory for matmul result
+                matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
+                if (!matmul_out) {
+                    result_.message = "Failed to allocate memory for matmul_out";
+                    return false;
+                }
+                
+                // Perform matrix multiplication: instance coefficients * prototype masks
+                matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
+
+                int ori_in_height = input_image_height;
+                int ori_in_width = input_image_width;
+                
+                // Allocate memory for combined mask
+                result_.group.results_seg[0].seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
+                if (!result_.group.results_seg[0].seg_mask) {
+                    free(matmul_out);
+                    result_.message = "Failed to allocate memory for combined seg_mask";
+                    return false;
+                }
+                
+                // Initialize combined mask to 0
+                memset(result_.group.results_seg[0].seg_mask, 0, ori_in_height * ori_in_width * sizeof(uint8_t));
+
+                // Generate mask for each detection and combine them
+                for (int i = 0; i < result_.group.count; i++) {
+                    // Get the individual mask for this detection at model resolution
+                    uint8_t *model_sized_mask = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
+                    if (!model_sized_mask) {
+                        free(result_.group.results_seg[0].seg_mask);
+                        result_.group.results_seg[0].seg_mask = nullptr;
+                        free(matmul_out);
+                        result_.message = "Failed to allocate memory for temporary model sized mask";
+                        return false;
+                    }
+
+                    // Initialize model-sized mask to 0
+                    memset(model_sized_mask, 0, model_in_height * model_in_width * sizeof(uint8_t));
+
+                    // Generate mask for this specific detection by combining instance coefficients and prototypes
+                    int left = (int)filterBoxes_by_nms[i * 4 + 0];
+                    int top = (int)filterBoxes_by_nms[i * 4 + 1];
+                    int right = (int)filterBoxes_by_nms[i * 4 + 2];
+                    int bottom = (int)filterBoxes_by_nms[i * 4 + 3];
+
+                    // Ensure coordinates are within bounds
+                    left = std::max(0, left);
+                    top = std::max(0, top);
+                    right = std::min(model_in_width - 1, right);
+                    bottom = std::min(model_in_height - 1, bottom);
+
+                    // Apply sigmoid activation to the matmul result to get probabilities
+                    for (int h = top; h <= bottom; h++) {
+                        for (int w = left; w <= right; w++) {
+                            if (h >= 0 && h < model_in_height && w >= 0 && w < model_in_width) {
+                                float sum = 0.0f;
+                                
+                                // Calculate the mask value by multiplying instance coefficients with prototype masks
+                                for (int c = 0; c < PROTO_CHANNEL; c++) {
+                                    float inst_coeff = filterSegments_by_nms[i * PROTO_CHANNEL + c];
+                                    int proto_idx = c * PROTO_HEIGHT * PROTO_WEIGHT + 
+                                                    (h * PROTO_HEIGHT / model_in_height) * PROTO_WEIGHT + 
+                                                    (w * PROTO_WEIGHT / model_in_width);
+                                    proto_idx = std::min(proto_idx, PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT - 1);
+                                    float proto_val = proto[proto_idx];
+                                    sum += inst_coeff * proto_val;
+                                }
+                                
+                                // Apply sigmoid-like activation and thresholding
+                                sum = 1.0f / (1.0f + expf(-sum)); // Sigmoid activation
+                                if (sum > 0.5f) {  // Threshold
+                                    // Use the class ID instead of object index to ensure correct coloring
+                                    model_sized_mask[h * model_in_width + w] = (uint8_t)(cls_id[i] + 1); // Use class ID as mask value
+                                }
+                            }
+                        }
+                    }
+
+                    // Resize the model-sized mask to original image size
+                    cv::Mat src_mask(model_in_height, model_in_width, CV_8UC1, model_sized_mask);
+                    cv::Mat dst_mask;
+                    cv::resize(src_mask, dst_mask, cv::Size(ori_in_width, ori_in_height), 0, 0, cv::INTER_LINEAR);
+                    
+                    // Combine this mask with the overall mask, respecting object priority (later detections overwrite earlier ones)
+                    uint8_t *current_mask_data = dst_mask.data;
+                    for (int idx = 0; idx < ori_in_height * ori_in_width; idx++) {
+                        if (current_mask_data[idx] != 0) {
+                            result_.group.results_seg[0].seg_mask[idx] = current_mask_data[idx];
+                        }
+                    }
+
+                    // Free temporary memory
+                    free(model_sized_mask);
+                }
+
+                // Clean up matmul result
+                free(matmul_out);
+            }
+
+            result_.success = true;
+            return true;
+        }
+    } // namespace post_process
+} // namespace deploy_percept

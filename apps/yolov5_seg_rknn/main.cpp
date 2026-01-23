@@ -18,6 +18,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/post_process/YoloV5SegPostProcess.hpp" // 新增头文件
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
 
@@ -33,6 +34,17 @@
 #define PROTO_HEIGHT 160
 #define PROTO_WEIGHT 160
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
+
+/**
+ * @brief 通用张量属性结构体
+ */
+typedef struct
+{
+  int dims[4]; // 张量维度
+  float scale; // 量化参数scale
+  int32_t zp;  // 量化参数zero point
+} TensorAttr;
+
 /**
  * @brief Image rectangle
  *
@@ -63,6 +75,7 @@ typedef struct
   object_detect_result results[OBJ_NUMB_MAX_SIZE];
   object_segment_result results_seg[OBJ_NUMB_MAX_SIZE];
 } object_detect_result_list;
+
 typedef struct
 {
   rknn_context rknn_ctx;
@@ -193,6 +206,7 @@ bool compareDetectionResults(const object_detect_result_list &loaded, const obje
   return true;
 }
 
+// 绘制检测和分割结果
 // 绘制检测和分割结果
 void drawDetectionResults(cv::Mat &image, const object_detect_result_list &results)
 {
@@ -657,9 +671,9 @@ static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
   int8_t res = (int8_t)__clip(dst_val, -128, 127);
   return res;
 }
-static int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
+static int process_i8(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
                       std::vector<float> &boxes, std::vector<float> &segments, float *proto, std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                      rknn_app_context_t *app_ctx)
+                      std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, std::vector<int32_t> &output_zps)
 {
 
   int validCount = 0;
@@ -673,8 +687,8 @@ static int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, 
   if (input_id == 6)
   {
     int8_t *input_proto = (int8_t *)(*all_input)[input_id];
-    int32_t zp_proto = app_ctx->output_attrs[input_id].zp;
-    float scale_proto = app_ctx->output_attrs[input_id].scale;
+    int32_t zp_proto = output_zps[input_id];
+    float scale_proto = output_scales[input_id];
     for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
     {
       proto[i] = deqnt_affine_to_f32(input_proto[i], zp_proto, scale_proto);
@@ -684,10 +698,10 @@ static int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, 
 
   int8_t *input = (int8_t *)(*all_input)[input_id];
   int8_t *input_seg = (int8_t *)(*all_input)[input_id + 1];
-  int32_t zp = app_ctx->output_attrs[input_id].zp;
-  float scale = app_ctx->output_attrs[input_id].scale;
-  int32_t zp_seg = app_ctx->output_attrs[input_id + 1].zp;
-  float scale_seg = app_ctx->output_attrs[input_id + 1].scale;
+  int32_t zp = output_zps[input_id];
+  float scale = output_scales[input_id];
+  int32_t zp_seg = output_zps[input_id + 1];
+  float scale_seg = output_scales[input_id + 1];
 
   int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
 
@@ -874,169 +888,6 @@ void crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, 
     }
   }
 }
-void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                 int model_in_height, int model_in_width, int cropped_height, int cropped_width, int ori_in_height, int ori_in_width, int y_pad, int x_pad)
-{
-
-  if (y_pad == 0 && x_pad == 0 && ori_in_height == model_in_height && ori_in_width == model_in_width)
-  {
-    memcpy(seg_mask_real, seg_mask, ori_in_height * ori_in_width);
-    return;
-  }
-
-  int cropped_index = 0;
-  for (int i = 0; i < model_in_height; i++)
-  {
-    for (int j = 0; j < model_in_width; j++)
-    {
-      if (i >= y_pad && i < model_in_height - y_pad && j >= x_pad && j < model_in_width - x_pad)
-      {
-        int seg_index = i * model_in_width + j;
-        cropped_seg[cropped_index] = seg_mask[seg_index];
-        cropped_index++;
-      }
-    }
-  }
-  // Note: Here are different methods provided for implementing single-channel image scaling.
-  //       The method of using rga to resize the image requires that the image size is 2 aligned.
-  resize_by_opencv_uint8(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
-  // resize_by_rga_rk356x(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
-  // resize_by_rga_rk3588(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
-}
-int post_process(int model_in_width, int model_in_height, rknn_tensor_attr *output_attrs, std::vector<void*> *outputs, letterbox_t *letter_box, float conf_threshold, float nms_threshold, object_detect_result_list *od_results, rknn_app_context_t *app_ctx)
-{
-  std::vector<float> filterBoxes;
-  std::vector<float> objProbs;
-  std::vector<int> classId;
-
-  std::vector<float> filterSegments;
-  float proto[PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT];
-  std::vector<float> filterSegments_by_nms;
-
-  int validCount = 0;
-  int stride = 0;
-  int grid_h = 0;
-  int grid_w = 0;
-
-  memset(od_results, 0, sizeof(object_detect_result_list));
-
-  // process the outputs of rknn
-  for (int i = 0; i < 7; i++)
-  {
-    grid_h = output_attrs[i].dims[2];
-    grid_w = output_attrs[i].dims[3];
-    stride = model_in_height / grid_h;
-    validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, filterBoxes, filterSegments, proto, objProbs,
-                             classId, conf_threshold, app_ctx);
-  }
-
-  // nms
-  if (validCount <= 0)
-  {
-    return 0;
-  }
-  std::vector<int> indexArray;
-  for (int i = 0; i < validCount; ++i)
-  {
-    indexArray.push_back(i);
-  }
-
-  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
-
-  std::set<int> class_set(std::begin(classId), std::end(classId));
-
-  for (auto c : class_set)
-  {
-    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
-  }
-
-  int last_count = 0;
-  od_results->count = 0;
-
-  for (int i = 0; i < validCount; ++i)
-  {
-    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
-    {
-      continue;
-    }
-    int n = indexArray[i];
-
-    float x1 = filterBoxes[n * 4 + 0];
-    float y1 = filterBoxes[n * 4 + 1];
-    float x2 = x1 + filterBoxes[n * 4 + 2];
-    float y2 = y1 + filterBoxes[n * 4 + 3];
-    int id = classId[n];
-    float obj_conf = objProbs[i];
-
-    for (int k = 0; k < PROTO_CHANNEL; k++)
-    {
-      filterSegments_by_nms.push_back(filterSegments[n * PROTO_CHANNEL + k]);
-    }
-
-    od_results->results[last_count].box.left = x1;
-    od_results->results[last_count].box.top = y1;
-    od_results->results[last_count].box.right = x2;
-    od_results->results[last_count].box.bottom = y2;
-
-    od_results->results[last_count].prop = obj_conf;
-    od_results->results[last_count].cls_id = id;
-    last_count++;
-  }
-  od_results->count = last_count;
-  int boxes_num = od_results->count;
-
-  float filterBoxes_by_nms[boxes_num * 4];
-  int cls_id[boxes_num];
-  for (int i = 0; i < boxes_num; i++)
-  {
-    // for crop_mask
-    filterBoxes_by_nms[i * 4 + 0] = od_results->results[i].box.left;   // x1;
-    filterBoxes_by_nms[i * 4 + 1] = od_results->results[i].box.top;    // y1;
-    filterBoxes_by_nms[i * 4 + 2] = od_results->results[i].box.right;  // x2;
-    filterBoxes_by_nms[i * 4 + 3] = od_results->results[i].box.bottom; // y2;
-    cls_id[i] = od_results->results[i].cls_id;
-
-    // get real box
-    od_results->results[i].box.left = box_reverse(od_results->results[i].box.left, model_in_width, letter_box->x_pad, letter_box->scale);
-    od_results->results[i].box.top = box_reverse(od_results->results[i].box.top, model_in_height, letter_box->y_pad, letter_box->scale);
-    od_results->results[i].box.right = box_reverse(od_results->results[i].box.right, model_in_width, letter_box->x_pad, letter_box->scale);
-    od_results->results[i].box.bottom = box_reverse(od_results->results[i].box.bottom, model_in_height, letter_box->y_pad, letter_box->scale);
-  }
-
-  // compute the mask through Matmul
-  int ROWS_A = boxes_num;
-  int COLS_A = PROTO_CHANNEL;
-  int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
-  uint8_t *matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
-  matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
-
-  uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * model_in_height * model_in_width * sizeof(uint8_t));
-  resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, model_in_width, model_in_height);
-
-  // crop mask
-  uint8_t *all_mask_in_one = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
-  memset(all_mask_in_one, 0, model_in_height * model_in_width * sizeof(uint8_t));
-  crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, model_in_height, model_in_width);
-
-  // get real mask
-  int cropped_height = model_in_height - letter_box->y_pad * 2;
-  int cropped_width = model_in_width - letter_box->x_pad * 2;
-  int ori_in_height = app_ctx->input_image_height;
-  int ori_in_width = app_ctx->input_image_width;
-  int y_pad = letter_box->y_pad;
-  int x_pad = letter_box->x_pad;
-  uint8_t *cropped_seg_mask = (uint8_t *)malloc(cropped_height * cropped_width * sizeof(uint8_t));
-  uint8_t *real_seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
-  seg_reverse(all_mask_in_one, cropped_seg_mask, real_seg_mask,
-              model_in_height, model_in_width, cropped_height, cropped_width, ori_in_height, ori_in_width, y_pad, x_pad);
-  od_results->results_seg[0].seg_mask = real_seg_mask;
-  free(all_mask_in_one);
-  free(cropped_seg_mask);
-  free(seg_mask);
-  free(matmul_out);
-
-  return 0;
-};
 
 int main()
 {
@@ -1054,7 +905,7 @@ int main()
 
   cv::Mat img;
   cv::cvtColor(orig_img, img, cv::COLOR_BGR2RGB);
-  
+
   // 计算letterbox参数
   float scale = std::min((float)engine.model_input_attrs_[0].dims[2] / img.cols, (float)engine.model_input_attrs_[0].dims[1] / img.rows);
   int new_width = (int)(img.cols * scale);
@@ -1066,7 +917,7 @@ int main()
 
   cv::Mat resized_img;
   cv::resize(img, resized_img, cv::Size(new_width, new_height));
-  cv::copyMakeBorder(resized_img, resized_img, letter_box.y_pad, letter_box.y_pad, letter_box.x_pad, letter_box.x_pad, 
+  cv::copyMakeBorder(resized_img, resized_img, letter_box.y_pad, letter_box.y_pad, letter_box.x_pad, letter_box.x_pad,
                      cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
 
   rknn_input inputs[engine.model_io_num_.n_input];
@@ -1103,8 +954,9 @@ int main()
   std::cout << "模型输出与NPZ文件匹配结果: " << (outputsMatch ? "一致" : "不一致") << std::endl;
 
   // 为兼容新的post_process函数接口，创建std::vector<void*>
-  std::vector<void*> output_buffers;
-  for (int i = 0; i < engine.model_io_num_.n_output; i++) {
+  std::vector<void *> output_buffers;
+  for (int i = 0; i < engine.model_io_num_.n_output; i++)
+  {
     output_buffers.push_back(outputs[i].buf);
   }
 
@@ -1123,27 +975,97 @@ int main()
 
   printf("Successfully loaded %d objects from YAML file\n", loaded_results.count);
 
-  rknn_app_context_t rknn_app_ctx;
-  memset(&rknn_app_ctx, 0, sizeof(rknn_app_context_t));
-  rknn_app_ctx.rknn_ctx = engine.ctx_; // 使用引擎上下文
-  rknn_app_ctx.io_num.n_input = 1;
-  rknn_app_ctx.io_num.n_output = 7;
-  rknn_app_ctx.model_channel = 3;
-  rknn_app_ctx.model_width = 640;
-  rknn_app_ctx.model_height = 640;
-  rknn_app_ctx.input_image_width = orig_img.cols;  // 使用实际图像宽度
-  rknn_app_ctx.input_image_height = orig_img.rows; // 使用实际图像高度
-  rknn_app_ctx.is_quant = 1;
-  rknn_app_ctx.output_attrs = engine.model_output_attrs_.data(); // 使用.data()获取指针
-  rknn_app_ctx.input_attrs = engine.model_input_attrs_.data();   // 使用.data()获取指针
+  // 将rknn_tensor_attr转换为基本数据类型
+  std::vector<std::vector<int>> output_dims;
+  std::vector<float> output_scales;
+  std::vector<int32_t> output_zps;
+
+  for (int i = 0; i < engine.model_io_num_.n_output; i++)
+  {
+    std::vector<int> dims(4);
+    dims[0] = engine.model_output_attrs_[i].dims[0];
+    dims[1] = engine.model_output_attrs_[i].dims[1];
+    dims[2] = engine.model_output_attrs_[i].dims[2];
+    dims[3] = engine.model_output_attrs_[i].dims[3];
+    output_dims.push_back(dims);
+    output_scales.push_back(engine.model_output_attrs_[i].scale);
+    output_zps.push_back(engine.model_output_attrs_[i].zp);
+  }
 
   int model_in_width = engine.model_input_attrs_[0].dims[2]; // width comes second in NHWC
   int model_in_height = engine.model_input_attrs_[0].dims[1];
-  const float nms_threshold = NMS_THRESH;
-  const float box_conf_threshold = BOX_THRESH;
+
+  // 使用YoloV5SegPostProcess类进行后处理
+  deploy_percept::post_process::YoloV5SegPostProcess::Params params_post;
+  params_post.conf_threshold = BOX_THRESH;
+  params_post.nms_threshold = NMS_THRESH;
+  params_post.obj_class_num = 80;
+  params_post.obj_numb_max_size = 128;
+
+  deploy_percept::post_process::YoloV5SegPostProcess seg_processor(params_post);
+
+  // 创建BoxRect用于pads参数
+  deploy_percept::post_process::BoxRect pads;
+  pads.left = letter_box.x_pad;
+  pads.top = letter_box.y_pad;
+  pads.right = letter_box.x_pad;
+  pads.bottom = letter_box.y_pad;
+
+  // 调用新的后处理类
+  bool success = seg_processor.run(
+      model_in_width,
+      model_in_height,
+      output_dims,
+      output_scales,
+      output_zps,
+      &output_buffers,
+      pads,
+      letter_box.scale,
+      orig_img.rows,
+      orig_img.cols);
+
+  if (!success)
+  {
+    printf("Post-processing failed: %s\n", seg_processor.getResult().message.c_str());
+    return -1;
+  }
+
+  // 获取后处理结果
+  auto seg_results = seg_processor.getResult().group;
+
+  // 将 YoloV5SegPostProcess 的结果转换为 object_detect_result_list 格式以便比较和绘制
   object_detect_result_list od_results;
   memset(&od_results, 0x00, sizeof(od_results));
-  post_process(model_in_width, model_in_height, engine.model_output_attrs_.data(), &output_buffers, &letter_box, box_conf_threshold, nms_threshold, &od_results, &rknn_app_ctx);
+  od_results.count = seg_results.count > OBJ_NUMB_MAX_SIZE ? OBJ_NUMB_MAX_SIZE : seg_results.count;
+
+  for (int i = 0; i < od_results.count; ++i) {
+    od_results.results[i].box.left = seg_results.results[i].box.left;
+    od_results.results[i].box.top = seg_results.results[i].box.top;
+    od_results.results[i].box.right = seg_results.results[i].box.right;
+    od_results.results[i].box.bottom = seg_results.results[i].box.bottom;
+    od_results.results[i].prop = seg_results.results[i].prop;
+    
+    // 解析类别ID
+    std::string name_str(seg_results.results[i].name);
+    size_t pos = name_str.find_last_of('_');
+    if (pos != std::string::npos) {
+        od_results.results[i].cls_id = std::stoi(name_str.substr(pos + 1));
+    } else {
+        od_results.results[i].cls_id = 0;  // 默认为0
+    }
+
+    // 复制掩码数据
+    if (i < seg_results.results_seg.size() && seg_results.results_seg[0].seg_mask != nullptr) {
+      // 分配内存并复制掩码数据
+      int mask_size = orig_img.rows * orig_img.cols * sizeof(uint8_t);
+      od_results.results_seg[i].seg_mask = (uint8_t*)malloc(mask_size);
+      if (od_results.results_seg[i].seg_mask != nullptr) {
+        memcpy(od_results.results_seg[i].seg_mask, seg_results.results_seg[0].seg_mask, mask_size);
+      }
+    } else {
+      od_results.results_seg[i].seg_mask = nullptr;
+    }
+  }
 
   // 比较加载的结果和计算的结果
   printf("Comparing loaded results with computed results...\n");
@@ -1161,7 +1083,7 @@ int main()
   cv::Mat result_img_2 = orig_img.clone();
   drawDetectionResults(result_img_2, loaded_results);
   std::string computed_out_path_2 = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
-  printf("Save computed detect result to %s\n", computed_out_path_2.c_str());
+  printf("Save loaded detect result to %s\n", computed_out_path_2.c_str());
   cv::imwrite(computed_out_path_2, result_img_2);
 
   // std::vector<float> out_scales;
@@ -1182,16 +1104,15 @@ int main()
 
   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
 
-  // int test_count = 10;
-  // gettimeofday(&start_time, NULL);
-  // for (int i = 0; i < test_count; ++i)
-  // {
-  //   engine.run(inputs, outputs);
-  //   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
-  // }
-  // gettimeofday(&stop_time, NULL);
-  // printf("loop count = %d , average run  %f ms\n", test_count,
-  //        (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
+  // 释放分配的掩码内存
+  for (int i = 0; i < od_results.count; ++i)
+  {
+    if (od_results.results_seg[i].seg_mask != nullptr)
+    {
+      free(od_results.results_seg[i].seg_mask);
+      od_results.results_seg[i].seg_mask = nullptr;
+    }
+  }
 
   return 0;
 }
