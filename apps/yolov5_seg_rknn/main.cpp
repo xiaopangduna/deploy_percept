@@ -657,7 +657,7 @@ static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
   int8_t res = (int8_t)__clip(dst_val, -128, 127);
   return res;
 }
-static int process_i8(rknn_output *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
+static int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
                       std::vector<float> &boxes, std::vector<float> &segments, float *proto, std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
                       rknn_app_context_t *app_ctx)
 {
@@ -672,7 +672,7 @@ static int process_i8(rknn_output *all_input, int input_id, int *anchor, int gri
 
   if (input_id == 6)
   {
-    int8_t *input_proto = (int8_t *)all_input[input_id].buf;
+    int8_t *input_proto = (int8_t *)(*all_input)[input_id];
     int32_t zp_proto = app_ctx->output_attrs[input_id].zp;
     float scale_proto = app_ctx->output_attrs[input_id].scale;
     for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
@@ -682,8 +682,8 @@ static int process_i8(rknn_output *all_input, int input_id, int *anchor, int gri
     return validCount;
   }
 
-  int8_t *input = (int8_t *)all_input[input_id].buf;
-  int8_t *input_seg = (int8_t *)all_input[input_id + 1].buf;
+  int8_t *input = (int8_t *)(*all_input)[input_id];
+  int8_t *input_seg = (int8_t *)(*all_input)[input_id + 1];
   int32_t zp = app_ctx->output_attrs[input_id].zp;
   float scale = app_ctx->output_attrs[input_id].scale;
   int32_t zp_seg = app_ctx->output_attrs[input_id + 1].zp;
@@ -903,7 +903,7 @@ void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real
   // resize_by_rga_rk356x(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
   // resize_by_rga_rk3588(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
 }
-int post_process(int model_in_width, int model_in_height, rknn_tensor_attr *output_attrs, rknn_output *outputs, letterbox_t *letter_box, float conf_threshold, float nms_threshold, object_detect_result_list *od_results, rknn_app_context_t *app_ctx)
+int post_process(int model_in_width, int model_in_height, rknn_tensor_attr *output_attrs, std::vector<void*> *outputs, letterbox_t *letter_box, float conf_threshold, float nms_threshold, object_detect_result_list *od_results, rknn_app_context_t *app_ctx)
 {
   std::vector<float> filterBoxes;
   std::vector<float> objProbs;
@@ -1102,6 +1102,12 @@ int main()
   bool outputsMatch = compareOutputsToNpz(outputs, engine.model_io_num_.n_output, npzFilePath);
   std::cout << "模型输出与NPZ文件匹配结果: " << (outputsMatch ? "一致" : "不一致") << std::endl;
 
+  // 为兼容新的post_process函数接口，创建std::vector<void*>
+  std::vector<void*> output_buffers;
+  for (int i = 0; i < engine.model_io_num_.n_output; i++) {
+    output_buffers.push_back(outputs[i].buf);
+  }
+
   // 读取保存的检测和分割结果用于验证
   std::string yaml_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_seg/detection_results.yaml";
   std::string bin_dir_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov5_seg";
@@ -1137,7 +1143,7 @@ int main()
   const float box_conf_threshold = BOX_THRESH;
   object_detect_result_list od_results;
   memset(&od_results, 0x00, sizeof(od_results));
-  post_process(model_in_width, model_in_height, engine.model_output_attrs_.data(), outputs, &letter_box, box_conf_threshold, nms_threshold, &od_results, &rknn_app_ctx);
+  post_process(model_in_width, model_in_height, engine.model_output_attrs_.data(), &output_buffers, &letter_box, box_conf_threshold, nms_threshold, &od_results, &rknn_app_ctx);
 
   // 比较加载的结果和计算的结果
   printf("Comparing loaded results with computed results...\n");
