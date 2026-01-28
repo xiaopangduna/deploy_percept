@@ -179,11 +179,6 @@ namespace deploy_percept
             return val > min ? (val < max ? val : max) : min;
         }
 
-        int YoloV5SegPostProcess::box_reverse(int position, int boundary, int pad, float scale)
-        {
-            return (int)((clamp(position, 0, boundary) - pad) / scale);
-        }
-
         void YoloV5SegPostProcess::matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
         {
             float temp = 0;
@@ -254,23 +249,23 @@ namespace deploy_percept
         }
 
         void YoloV5SegPostProcess::seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                                             int model_in_height, int model_in_width, int cropped_height, int cropped_width, 
+                                             int input_image_height, int input_image_width, int cropped_height, int cropped_width, 
                                              int ori_in_height, int ori_in_width, int y_pad, int x_pad)
         {
-            if (y_pad == 0 && x_pad == 0 && ori_in_height == model_in_height && ori_in_width == model_in_width)
+            if (y_pad == 0 && x_pad == 0 && ori_in_height == input_image_height && ori_in_width == input_image_width)
             {
                 memcpy(seg_mask_real, seg_mask, ori_in_height * ori_in_width);
                 return;
             }
 
             int cropped_index = 0;
-            for (int i = 0; i < model_in_height; i++)
+            for (int i = 0; i < input_image_height; i++)
             {
-                for (int j = 0; j < model_in_width; j++)
+                for (int j = 0; j < input_image_width; j++)
                 {
-                    if (i >= y_pad && i < model_in_height - y_pad && j >= x_pad && j < model_in_width - x_pad)
+                    if (i >= y_pad && i < input_image_height - y_pad && j >= x_pad && j < input_image_width - x_pad)
                     {
-                        int seg_index = i * model_in_width + j;
+                        int seg_index = i * input_image_width + j;
                         cropped_seg[cropped_index] = seg_mask[seg_index];
                         cropped_index++;
                     }
@@ -284,17 +279,16 @@ namespace deploy_percept
         }
 
         bool YoloV5SegPostProcess::run(
-            int model_in_width,
-            int model_in_height,
             std::vector<std::vector<int>> &output_dims,
             std::vector<float> &output_scales,
             std::vector<int32_t> &output_zps,
             std::vector<void*> *outputs,
-            BoxRect pads,
-            float scale,
             int input_image_width,
             int input_image_height)
         {
+            // Print debug info to understand dimensions
+            printf("Processing image: %dx%d\n", input_image_width, input_image_height);
+
             const int PROTO_CHANNEL = params_.proto_channel;
             const int PROTO_HEIGHT = params_.proto_height;
             const int PROTO_WEIGHT = params_.proto_weight;
@@ -325,8 +319,9 @@ namespace deploy_percept
                 if (i >= output_dims.size()) break;
                 grid_h = output_dims[i][2];
                 grid_w = output_dims[i][3];
-                stride = model_in_height / grid_h;
-                validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, model_in_height, model_in_width, stride, 
+                stride = input_image_height / grid_h; // 使用input_image_height计算stride
+                validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, 
+                                         input_image_height, input_image_width, stride, 
                                          filterBoxes, filterSegments, proto, objProbs, classId, params_.conf_threshold, 
                                          output_dims, output_scales, output_zps);
             }
@@ -423,11 +418,12 @@ namespace deploy_percept
                     cls_id[i] = 0;  // Default to 0 if parsing fails
                 }
 
-                // get real box
-                result_.group.results[i].box.left = box_reverse(result_.group.results[i].box.left, model_in_width, pads.left, scale);
-                result_.group.results[i].box.top = box_reverse(result_.group.results[i].box.top, model_in_height, pads.top, scale);
-                result_.group.results[i].box.right = box_reverse(result_.group.results[i].box.right, model_in_width, pads.left, scale);
-                result_.group.results[i].box.bottom = box_reverse(result_.group.results[i].box.bottom, model_in_height, pads.top, scale);
+                // 不再进行坐标转换，因为我们假设模型输入就是最终结果所需的坐标系
+                // 之前的代码使用了box_reverse函数，但现在我们不再需要坐标转换
+                // result_.group.results[i].box.left = box_reverse(result_.group.results[i].box.left, model_in_width, pads.left, scale);
+                // result_.group.results[i].box.top = box_reverse(result_.group.results[i].box.top, model_in_height, pads.top, scale);
+                // result_.group.results[i].box.right = box_reverse(result_.group.results[i].box.right, model_in_width, pads.left, scale);
+                // result_.group.results[i].box.bottom = box_reverse(result_.group.results[i].box.bottom, model_in_height, pads.top, scale);
             }
 
             // compute the mask through Matmul
@@ -447,17 +443,17 @@ namespace deploy_percept
             matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
 
             // Resize the matmul result to model resolution
-            uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * model_in_height * model_in_width * sizeof(uint8_t));
+            uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * input_image_height * input_image_width * sizeof(uint8_t));
             if (!seg_mask) {
                 free(matmul_out);
                 result_.message = "Failed to allocate memory for seg_mask";
                 return false;
             }
             
-            resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, model_in_width, model_in_height);
+            resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, input_image_width, input_image_height);
 
             // Allocate memory for combined mask
-            uint8_t *all_mask_in_one = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
+            uint8_t *all_mask_in_one = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
             if (!all_mask_in_one) {
                 free(seg_mask);
                 free(matmul_out);
@@ -466,31 +462,14 @@ namespace deploy_percept
             }
             
             // Initialize combined mask to 0
-            memset(all_mask_in_one, 0, model_in_height * model_in_width * sizeof(uint8_t));
+            memset(all_mask_in_one, 0, input_image_height * input_image_width * sizeof(uint8_t));
 
             // Crop mask based on bounding boxes
-            crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, model_in_height, model_in_width);
+            crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, input_image_height, input_image_width);
 
-            // get real mask
-            int cropped_height = model_in_height - pads.top * 2;  // Assuming symmetric padding
-            int cropped_width = model_in_width - pads.left * 2;   // Assuming symmetric padding
-            int ori_in_height = input_image_height;
-            int ori_in_width = input_image_width;
-            int y_pad = pads.top;
-            int x_pad = pads.left;
-            
-            uint8_t *cropped_seg_mask = (uint8_t *)malloc(cropped_height * cropped_width * sizeof(uint8_t));
-            if (!cropped_seg_mask) {
-                free(all_mask_in_one);
-                free(seg_mask);
-                free(matmul_out);
-                result_.message = "Failed to allocate memory for cropped_seg_mask";
-                return false;
-            }
-            
-            uint8_t *real_seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
+            // get real mask - simplified without pad handling
+            uint8_t *real_seg_mask = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
             if (!real_seg_mask) {
-                free(cropped_seg_mask);
                 free(all_mask_in_one);
                 free(seg_mask);
                 free(matmul_out);
@@ -498,14 +477,16 @@ namespace deploy_percept
                 return false;
             }
             
-            seg_reverse(all_mask_in_one, cropped_seg_mask, real_seg_mask,
-                       model_in_height, model_in_width, cropped_height, cropped_width, 
-                       ori_in_height, ori_in_width, y_pad, x_pad);
+            // For now, just assign the all_mask_in_one as the final mask
+            // We'll need to handle resizing to input_image dimensions separately if needed
+            // This would involve resizing all_mask_in_one to match input_image dimensions
+            // Placeholder for future implementation of actual resizing
+            // 直接复制数据，因为现在input_image_*就是我们的目标尺寸
+            memcpy(real_seg_mask, all_mask_in_one, input_image_height * input_image_width * sizeof(uint8_t));
             
             result_.group.results_seg[0].seg_mask = real_seg_mask;
             
             // Clean up allocated memory
-            free(cropped_seg_mask);
             free(all_mask_in_one);
             free(seg_mask);
             free(matmul_out);

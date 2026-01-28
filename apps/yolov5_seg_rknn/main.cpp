@@ -818,23 +818,12 @@ int main()
 
   deploy_percept::post_process::YoloV5SegPostProcess seg_processor(params_post);
 
-  // 创建BoxRect用于pads参数
-  deploy_percept::post_process::BoxRect pads;
-  pads.left = letter_box.x_pad;
-  pads.top = letter_box.y_pad;
-  pads.right = letter_box.x_pad;
-  pads.bottom = letter_box.y_pad;
-
-  // 调用新的后处理类
+  // // 调用新的后处理类
   bool success = seg_processor.run(
-      model_in_width,
-      model_in_height,
       output_dims,
       output_scales,
       output_zps,
       &output_buffers,
-      pads,
-      letter_box.scale,
       orig_img.rows,
       orig_img.cols);
 

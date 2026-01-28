@@ -56,14 +56,10 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(
-                int model_in_width,
-                int model_in_height,
                 std::vector<std::vector<int>> &output_dims,
                 std::vector<float> &output_scales,
                 std::vector<int32_t> &output_zps,
                 std::vector<void*> *outputs,
-                BoxRect pads,
-                float scale,
                 int input_image_width,
                 int input_image_height);
 
@@ -84,8 +80,6 @@ namespace deploy_percept
                            
             static int clamp(float val, int min, int max);
             
-            static int box_reverse(int position, int boundary, int pad, float scale);
-            
             static void matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B);
             
             static void resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num, 
@@ -95,7 +89,7 @@ namespace deploy_percept
                                       int *cls_id, int height, int width);
                                       
             static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                                  int model_in_height, int model_in_width, int cropped_height, int cropped_width, 
+                                  int input_image_height, int input_image_width, int cropped_height, int cropped_width, 
                                   int ori_in_height, int ori_in_width, int y_pad, int x_pad);
         };
     } // namespace post_process
