@@ -80,11 +80,7 @@ namespace deploy_percept
                                 
             static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices);
             
-            static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
-                                      float ymax1);
                                       
-            static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
-                           int filterId, float threshold);
                            
             static int clamp(float val, int min, int max);
             

@@ -15,9 +15,6 @@ namespace deploy_percept
             result_.group.results_seg.resize(params_.obj_numb_max_size);
         }
 
-        static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { 
-            return ((float)qnt - (float)zp) * scale; 
-        }
         
         inline static int32_t __clip(float val, float min, float max)
         {
@@ -65,7 +62,7 @@ namespace deploy_percept
                 float scale_proto = output_scales[input_id];
                 for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
                 {
-                    proto[i] = deqnt_affine_to_f32(input_proto[i], zp_proto, scale_proto);
+                    proto[i] = deqntAffineToF32(input_proto[i], zp_proto, scale_proto);
                 }
                 return validCount;
             }
@@ -93,10 +90,10 @@ namespace deploy_percept
                             int8_t *in_ptr = input + offset;
                             int8_t *in_ptr_seg = input_seg + offset_seg;
 
-                            float box_x = (deqnt_affine_to_f32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-                            float box_y = (deqnt_affine_to_f32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-                            float box_w = (deqnt_affine_to_f32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-                            float box_h = (deqnt_affine_to_f32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
+                            float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
+                            float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
+                            float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
+                            float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
                             box_x = (box_x + j) * (float)stride;
                             box_y = (box_y + i) * (float)stride;
                             box_w = box_w * box_w * (float)anchor[a * 2];
@@ -116,18 +113,18 @@ namespace deploy_percept
                                 }
                             }
 
-                            float box_conf_f32 = deqnt_affine_to_f32(box_confidence, zp, scale);
-                            float class_prob_f32 = deqnt_affine_to_f32(maxClassProbs, zp, scale);
+                            float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
+                            float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
                             float limit_score = box_conf_f32 * class_prob_f32;
                             if (limit_score > threshold)
                             {
                                 for (int k = 0; k < PROTO_CHANNEL; k++)
                                 {
-                                    float seg_element_fp = deqnt_affine_to_f32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
+                                    float seg_element_fp = deqntAffineToF32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
                                     segments.push_back(seg_element_fp);
                                 }
 
-                                objProbs.push_back((deqnt_affine_to_f32(maxClassProbs, zp, scale)) * (deqnt_affine_to_f32(box_confidence, zp, scale)));
+                                objProbs.push_back((deqntAffineToF32(maxClassProbs, zp, scale)) * (deqntAffineToF32(box_confidence, zp, scale)));
                                 classId.push_back(maxClassId);
                                 validCount++;
                                 boxes.push_back(box_x);
@@ -175,53 +172,7 @@ namespace deploy_percept
             return low;
         }
 
-        float YoloV5SegPostProcess::CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
-                                                   float ymax1)
-        {
-            float w = fmax(0.f, fmin(xmax0, xmax1) - fmax(xmin0, xmin1) + 1.0);
-            float h = fmax(0.f, fmin(ymax0, ymax1) - fmax(ymin0, ymin1) + 1.0);
-            float i = w * h;
-            float u = (xmax0 - xmin0 + 1.0) * (ymax0 - ymin0 + 1.0) + (xmax1 - xmin1 + 1.0) * (ymax1 - ymin1 + 1.0) - i;
-            return u <= 0.f ? 0.f : (i / u);
-        }
 
-        int YoloV5SegPostProcess::nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
-                                     int filterId, float threshold)
-        {
-            for (int i = 0; i < validCount; ++i)
-            {
-                if (order[i] == -1 || classIds[i] != filterId)
-                {
-                    continue;
-                }
-                int n = order[i];
-                for (int j = i + 1; j < validCount; ++j)
-                {
-                    int m = order[j];
-                    if (m == -1 || classIds[i] != filterId)
-                    {
-                        continue;
-                    }
-                    float xmin0 = outputLocations[n * 4 + 0];
-                    float ymin0 = outputLocations[n * 4 + 1];
-                    float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
-                    float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
-
-                    float xmin1 = outputLocations[m * 4 + 0];
-                    float ymin1 = outputLocations[m * 4 + 1];
-                    float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
-                    float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
-
-                    float iou = CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
-
-                    if (iou > threshold)
-                    {
-                        order[j] = -1;
-                    }
-                }
-            }
-            return 0;
-        }
 
         int YoloV5SegPostProcess::clamp(float val, int min, int max)
         {
