@@ -97,37 +97,33 @@ typedef struct
   float scale;
 } letterbox_t;
 
-static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
-{
-  float key;
-  int key_index;
-  int low = left;
-  int high = right;
-  if (left < right)
-  {
-    key_index = indices[left];
-    key = input[left];
-    while (low < high)
-    {
-      while (low < high && input[high] <= key)
-      {
-        high--;
-      }
-      input[low] = input[high];
-      indices[low] = indices[high];
-      while (low < high && input[low] >= key)
-      {
-        low++;
-      }
-      input[high] = input[low];
-      indices[high] = indices[low];
+// 打印结果详情的函数
+void printResultDetails(const object_detect_result_list &result, const std::string &label) {
+    printf("\n=== %s ===\n", label.c_str());
+    printf("Count: %d\n", result.count);
+    
+    for (int i = 0; i < result.count; i++) {
+        printf("Object %d:\n", i);
+        printf("  BBox: (%d, %d, %d, %d)\n", 
+               result.results[i].box.left, 
+               result.results[i].box.top, 
+               result.results[i].box.right, 
+               result.results[i].box.bottom);
+        printf("  Prop: %.8f\n", result.results[i].prop);
+        printf("  Class ID: %d\n", result.results[i].cls_id);
+        
+        if (result.results_seg[i].seg_mask != nullptr) {
+            printf("  Mask: exists\n");
+            // 打印前几个掩码值用于调试
+            printf("  First 10 mask values: ");
+            for (int j = 0; j < 10 && j < 640*640; j++) {
+                printf("%d ", result.results_seg[i].seg_mask[j]);
+            }
+            printf("\n");
+        } else {
+            printf("  Mask: null\n");
+        }
     }
-    input[low] = key;
-    indices[low] = key_index;
-    quick_sort_indice_inverse(input, left, low - 1, indices);
-    quick_sort_indice_inverse(input, low + 1, right, indices);
-  }
-  return low;
 }
 
 // 比较两个检测结果列表是否一致
@@ -160,9 +156,9 @@ bool compareDetectionResults(const object_detect_result_list &loaded, const obje
     }
 
     // 比较置信度（允许一定误差）
-    if (abs(loaded_result.prop - computed_result.prop) > 0.01f)
+    if (abs(loaded_result.prop - computed_result.prop) > 0.001f)
     {
-      printf("Confidence mismatch for object %d: loaded=%.4f, computed=%.4f\n",
+      printf("Confidence mismatch for object %d: loaded=%.8f, computed=%.8f\n",
              i, loaded_result.prop, computed_result.prop);
       return false;
     }
@@ -174,32 +170,80 @@ bool compareDetectionResults(const object_detect_result_list &loaded, const obje
              i, loaded_result.cls_id, computed_result.cls_id);
       return false;
     }
+  }
 
-    // 比较分割掩码（如果存在）
-    if (loaded.results_seg[i].seg_mask != nullptr && computed.results_seg[i].seg_mask != nullptr)
-    {
-      // 比较整个掩码
-      bool masks_match = true;
-      int total_pixels = img_width * img_height;
-      for (int j = 0; j < total_pixels; j++)
-      {
-        if (loaded.results_seg[i].seg_mask[j] != computed.results_seg[i].seg_mask[j])
-        {
-          masks_match = false;
-          break;
+  // 比较分割掩码 - 所有掩码都存储在results_seg[0]中
+  if (loaded.results_seg[0].seg_mask != nullptr && computed.results_seg[0].seg_mask != nullptr) {
+    // 比较整个掩码
+    bool masks_match = true;
+    int total_pixels = img_width * img_height;
+    
+    // 统计不匹配的像素数量
+    int mismatch_count = 0;
+    int first_diff_idx = -1;  // 记录第一个不同像素的位置
+    
+    for (int j = 0; j < total_pixels; j++) {
+      if (loaded.results_seg[0].seg_mask[j] != computed.results_seg[0].seg_mask[j]) {
+        if (first_diff_idx == -1) {
+          first_diff_idx = j;
         }
-      }
-      if (!masks_match)
-      {
-        printf("Segmentation mask mismatch for object %d\n", i);
-        return false;
+        mismatch_count++;
       }
     }
-    else if ((loaded.results_seg[i].seg_mask != nullptr) != (computed.results_seg[i].seg_mask != nullptr))
-    {
-      printf("One segmentation mask exists but the other doesn't for object %d\n", i);
+    
+    if (mismatch_count > 0) {
+      printf("Segmentation mask mismatch: %d/%d pixels differ\n", mismatch_count, total_pixels);
+      printf("First segmentation mask mismatch at pixel index %d\n", first_diff_idx);
+      printf("Loaded mask value at first diff index: %d\n", loaded.results_seg[0].seg_mask[first_diff_idx]);
+      printf("Computed mask value at first diff index: %d\n", computed.results_seg[0].seg_mask[first_diff_idx]);
+      
+      // 输出更多上下文信息
+      int row = first_diff_idx / img_width;
+      int col = first_diff_idx % img_width;
+      printf("Pixel coordinates (row, col) of first mismatch: (%d, %d)\n", row, col);
+      
+      // 检查附近像素的值
+      printf("Nearby pixels in loaded mask: ");
+      for (int k = std::max(0, first_diff_idx - 3); k <= std::min(total_pixels - 1, first_diff_idx + 3); k++) {
+          printf("[%d]%d ", k, loaded.results_seg[0].seg_mask[k]);
+      }
+      printf("\n");
+      
+      printf("Nearby pixels in computed mask: ");
+      for (int k = std::max(0, first_diff_idx - 3); k <= std::min(total_pixels - 1, first_diff_idx + 3); k++) {
+          printf("[%d]%d ", k, computed.results_seg[0].seg_mask[k]);
+      }
+      printf("\n");
+      
+      // 分析每个对象在该位置是否有mask
+      printf("Analyzing mask contribution at pixel (%d, %d):\n", row, col);
+      for (int i = 0; i < loaded.count; i++) {
+          int x = col;
+          int y = row;
+          int pixel_idx = y * img_width + x;
+          
+          // Check if this pixel is within the bounding box of each object
+          if (x >= loaded.results[i].box.left && x <= loaded.results[i].box.right &&
+              y >= loaded.results[i].box.top && y <= loaded.results[i].box.bottom) {
+              printf("  Object %d (bbox: %d-%d, %d-%d) covers this pixel\n", 
+                     i, 
+                     loaded.results[i].box.left, loaded.results[i].box.right,
+                     loaded.results[i].box.top, loaded.results[i].box.bottom);
+          }
+      }
+      
       return false;
+    } else {
+      printf("All segmentation mask pixels match!\n");
     }
+  } else if ((loaded.results_seg[0].seg_mask != nullptr) != (computed.results_seg[0].seg_mask != nullptr)) {
+    printf("One segmentation mask exists but the other doesn't\n");
+    if (loaded.results_seg[0].seg_mask != nullptr) {
+      printf("Loaded has mask, computed does not\n");
+    } else {
+      printf("Computed has mask, loaded does not\n");
+    }
+    return false;
   }
 
   printf("All results match!\n");
@@ -659,236 +703,6 @@ const int anchor[3][6] = {{10, 13, 16, 30, 33, 23},
                           {30, 61, 62, 45, 59, 119},
                           {116, 90, 156, 198, 373, 326}};
 
-static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { return ((float)qnt - (float)zp) * scale; }
-inline static int32_t __clip(float val, float min, float max)
-{
-  float f = val <= min ? min : (val >= max ? max : val);
-  return f;
-}
-static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
-{
-  float dst_val = (f32 / scale) + zp;
-  int8_t res = (int8_t)__clip(dst_val, -128, 127);
-  return res;
-}
-static int process_i8(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w, int height, int width, int stride,
-                      std::vector<float> &boxes, std::vector<float> &segments, float *proto, std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                      std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, std::vector<int32_t> &output_zps)
-{
-
-  int validCount = 0;
-  int grid_len = grid_h * grid_w;
-
-  if (input_id % 2 == 1)
-  {
-    return validCount;
-  }
-
-  if (input_id == 6)
-  {
-    int8_t *input_proto = (int8_t *)(*all_input)[input_id];
-    int32_t zp_proto = output_zps[input_id];
-    float scale_proto = output_scales[input_id];
-    for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
-    {
-      proto[i] = deqnt_affine_to_f32(input_proto[i], zp_proto, scale_proto);
-    }
-    return validCount;
-  }
-
-  int8_t *input = (int8_t *)(*all_input)[input_id];
-  int8_t *input_seg = (int8_t *)(*all_input)[input_id + 1];
-  int32_t zp = output_zps[input_id];
-  float scale = output_scales[input_id];
-  int32_t zp_seg = output_zps[input_id + 1];
-  float scale_seg = output_scales[input_id + 1];
-
-  int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
-
-  for (int a = 0; a < 3; a++)
-  {
-    for (int i = 0; i < grid_h; i++)
-    {
-      for (int j = 0; j < grid_w; j++)
-      {
-        int8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
-        if (box_confidence >= thres_i8)
-        {
-          int offset = (PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
-          int offset_seg = (PROTO_CHANNEL * a) * grid_len + i * grid_w + j;
-          int8_t *in_ptr = input + offset;
-          int8_t *in_ptr_seg = input_seg + offset_seg;
-
-          float box_x = (deqnt_affine_to_f32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-          float box_y = (deqnt_affine_to_f32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-          float box_w = (deqnt_affine_to_f32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-          float box_h = (deqnt_affine_to_f32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
-          box_x = (box_x + j) * (float)stride;
-          box_y = (box_y + i) * (float)stride;
-          box_w = box_w * box_w * (float)anchor[a * 2];
-          box_h = box_h * box_h * (float)anchor[a * 2 + 1];
-          box_x -= (box_w / 2.0);
-          box_y -= (box_h / 2.0);
-
-          int8_t maxClassProbs = in_ptr[5 * grid_len];
-          int maxClassId = 0;
-          for (int k = 1; k < OBJ_CLASS_NUM; ++k)
-          {
-            int8_t prob = in_ptr[(5 + k) * grid_len];
-            if (prob > maxClassProbs)
-            {
-              maxClassId = k;
-              maxClassProbs = prob;
-            }
-          }
-
-          float box_conf_f32 = deqnt_affine_to_f32(box_confidence, zp, scale);
-          float class_prob_f32 = deqnt_affine_to_f32(maxClassProbs, zp, scale);
-          float limit_score = box_conf_f32 * class_prob_f32;
-          // if (maxClassProbs > thres_i8)
-          if (limit_score > threshold)
-          {
-            for (int k = 0; k < PROTO_CHANNEL; k++)
-            {
-              float seg_element_fp = deqnt_affine_to_f32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
-              segments.push_back(seg_element_fp);
-            }
-
-            objProbs.push_back((deqnt_affine_to_f32(maxClassProbs, zp, scale)) * (deqnt_affine_to_f32(box_confidence, zp, scale)));
-            classId.push_back(maxClassId);
-            validCount++;
-            boxes.push_back(box_x);
-            boxes.push_back(box_y);
-            boxes.push_back(box_w);
-            boxes.push_back(box_h);
-          }
-        }
-      }
-    }
-  }
-  return validCount;
-}
-
-static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
-                              float ymax1)
-{
-  float w = fmax(0.f, fmin(xmax0, xmax1) - fmax(xmin0, xmin1) + 1.0);
-  float h = fmax(0.f, fmin(ymax0, ymax1) - fmax(ymin0, ymin1) + 1.0);
-  float i = w * h;
-  float u = (xmax0 - xmin0 + 1.0) * (ymax0 - ymin0 + 1.0) + (xmax1 - xmin1 + 1.0) * (ymax1 - ymin1 + 1.0) - i;
-  return u <= 0.f ? 0.f : (i / u);
-}
-static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> classIds, std::vector<int> &order,
-               int filterId, float threshold)
-{
-  for (int i = 0; i < validCount; ++i)
-  {
-    if (order[i] == -1 || classIds[i] != filterId)
-    {
-      continue;
-    }
-    int n = order[i];
-    for (int j = i + 1; j < validCount; ++j)
-    {
-      int m = order[j];
-      if (m == -1 || classIds[i] != filterId)
-      {
-        continue;
-      }
-      float xmin0 = outputLocations[n * 4 + 0];
-      float ymin0 = outputLocations[n * 4 + 1];
-      float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
-      float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
-
-      float xmin1 = outputLocations[m * 4 + 0];
-      float ymin1 = outputLocations[m * 4 + 1];
-      float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
-      float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
-
-      float iou = CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
-
-      if (iou > threshold)
-      {
-        order[j] = -1;
-      }
-    }
-  }
-  return 0;
-}
-int clamp(float val, int min, int max)
-{
-  return val > min ? (val < max ? val : max) : min;
-}
-int box_reverse(int position, int boundary, int pad, float scale)
-{
-  return (int)((clamp(position, 0, boundary) - pad) / scale);
-}
-void matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
-{
-
-  float temp = 0;
-  for (int i = 0; i < ROWS_A; i++)
-  {
-    for (int j = 0; j < COLS_B; j++)
-    {
-      temp = 0;
-      for (int k = 0; k < COLS_A; k++)
-      {
-        temp += A[i * COLS_A + k] * B[k * COLS_B + j];
-      }
-      if (temp > 0)
-      {
-        C[i * COLS_B + j] = 4;
-      }
-      else
-      {
-        C[i * COLS_B + j] = 0;
-      }
-    }
-  }
-}
-void resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num, uint8_t *output_image, int target_width, int target_height)
-{
-  for (int b = 0; b < boxes_num; b++)
-  {
-    cv::Mat src_image(input_height, input_width, CV_8U, &input_image[b * input_width * input_height]);
-    cv::Mat dst_image;
-    cv::resize(src_image, dst_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
-    memcpy(&output_image[b * target_width * target_height], dst_image.data, target_width * target_height * sizeof(uint8_t));
-  }
-}
-void crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num, int *cls_id, int height, int width)
-{
-  for (int b = 0; b < boxes_num; b++)
-  {
-    float x1 = boxes[b * 4 + 0];
-    float y1 = boxes[b * 4 + 1];
-    float x2 = boxes[b * 4 + 2];
-    float y2 = boxes[b * 4 + 3];
-
-    for (int i = 0; i < height; i++)
-    {
-      for (int j = 0; j < width; j++)
-      {
-        if (j >= x1 && j < x2 && i >= y1 && i < y2)
-        {
-          if (all_mask_in_one[i * width + j] == 0)
-          {
-            if (seg_mask[b * width * height + i * width + j] > 0)
-            {
-              all_mask_in_one[i * width + j] = (cls_id[b] + 1);
-            }
-            else
-            {
-              all_mask_in_one[i * width + j] = 0;
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
 int main()
 {
   std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s_seg.rknn";
@@ -1054,18 +868,38 @@ int main()
         od_results.results[i].cls_id = 0;  // 默认为0
     }
 
-    // 复制掩码数据
-    if (i < seg_results.results_seg.size() && seg_results.results_seg[0].seg_mask != nullptr) {
-      // 分配内存并复制掩码数据
-      int mask_size = orig_img.rows * orig_img.cols * sizeof(uint8_t);
-      od_results.results_seg[i].seg_mask = (uint8_t*)malloc(mask_size);
-      if (od_results.results_seg[i].seg_mask != nullptr) {
-        memcpy(od_results.results_seg[i].seg_mask, seg_results.results_seg[0].seg_mask, mask_size);
-      }
-    } else {
-      od_results.results_seg[i].seg_mask = nullptr;
-    }
+    // 所有掩码都存储在seg_results.results_seg[0]中，对于单个对象的掩码，设为nullptr
+    od_results.results_seg[i].seg_mask = nullptr;
   }
+
+  // 只有results_seg[0]存储完整的掩码数据，从YoloV5SegPostProcess获取的合并掩码
+  if (seg_results.results_seg.size() > 0 && seg_results.results_seg[0].seg_mask != nullptr) {
+    // 分配内存并复制掩码数据
+    int mask_size = orig_img.rows * orig_img.cols * sizeof(uint8_t);
+    od_results.results_seg[0].seg_mask = (uint8_t*)malloc(mask_size);
+    if (od_results.results_seg[0].seg_mask != nullptr) {
+      memcpy(od_results.results_seg[0].seg_mask, seg_results.results_seg[0].seg_mask, mask_size);
+      
+      // DEBUG: 输出一些掩码统计信息
+      int non_zero_pixels = 0;
+      int max_mask_value = 0;
+      for (int i = 0; i < mask_size/sizeof(uint8_t); i++) {
+          if (od_results.results_seg[0].seg_mask[i] != 0) {
+              non_zero_pixels++;
+              if (od_results.results_seg[0].seg_mask[i] > max_mask_value) {
+                  max_mask_value = od_results.results_seg[0].seg_mask[i];
+              }
+          }
+      }
+      printf("DEBUG: Computed mask - Non-zero pixels: %d, Max mask value: %d\n", non_zero_pixels, max_mask_value);
+    }
+  } else {
+    od_results.results_seg[0].seg_mask = nullptr;
+  }
+
+  // 打印loaded_results和od_results的详细信息
+  printResultDetails(loaded_results, "LOADED RESULTS");
+  printResultDetails(od_results, "COMPUTED RESULTS");
 
   // 比较加载的结果和计算的结果
   printf("Comparing loaded results with computed results...\n");
@@ -1086,21 +920,6 @@ int main()
   printf("Save loaded detect result to %s\n", computed_out_path_2.c_str());
   cv::imwrite(computed_out_path_2, result_img_2);
 
-  // std::vector<float> out_scales;
-  // std::vector<int32_t> out_zps;
-  // for (int i = 0; i < engine.model_io_num_.n_output; ++i)
-  // {
-  //   out_scales.push_back(engine.model_output_attrs_[i].scale);
-  //   out_zps.push_back(engine.model_output_attrs_[i].zp);
-  // }
-
-  // 使用YoloV5DetectPostProcess类进行后处理
-  // deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
-  // deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
-
-  // processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
-  //               target_size.height, target_size.width, pads, scale_w, scale_h, out_zps, out_scales);
-  // processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
 
   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
 

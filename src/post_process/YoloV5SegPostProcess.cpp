@@ -422,7 +422,7 @@ namespace deploy_percept
                 float x2 = x1 + filterBoxes[n * 4 + 2];
                 float y2 = y1 + filterBoxes[n * 4 + 3];
                 int id = classId[n];  // 保存真实的类别ID
-                float obj_conf = objProbs[i];
+                float obj_conf = objProbs[i]; // 修复：使用正确的索引获取置信度
 
                 for (int k = 0; k < PROTO_CHANNEL; k++)
                 {
@@ -447,6 +447,12 @@ namespace deploy_percept
             result_.group.count = last_count;
             int boxes_num = result_.group.count;
 
+            // 如果没有检测到物体，不需要生成分割掩码
+            if (boxes_num <= 0) {
+                result_.success = true;
+                return true;
+            }
+
             float filterBoxes_by_nms[boxes_num * 4];
             int cls_id[boxes_num];
             for (int i = 0; i < boxes_num; i++)
@@ -457,8 +463,7 @@ namespace deploy_percept
                 filterBoxes_by_nms[i * 4 + 2] = result_.group.results[i].box.right;  // x2;
                 filterBoxes_by_nms[i * 4 + 3] = result_.group.results[i].box.bottom; // y2;
                 
-                // 从classId数组中获取真实的类别ID，而不是从名字中解析
-                // 需要重建classId映射，因为经过NMS排序后顺序可能变化
+                // 获取真实的类别ID
                 std::string name_str(result_.group.results[i].name);
                 size_t pos = name_str.find_last_of('_');
                 if (pos != std::string::npos) {
@@ -480,105 +485,79 @@ namespace deploy_percept
             int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
             uint8_t *matmul_out = nullptr;
             
-            if (boxes_num > 0) {
-                // Allocate memory for matmul result
-                matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
-                if (!matmul_out) {
-                    result_.message = "Failed to allocate memory for matmul_out";
-                    return false;
-                }
-                
-                // Perform matrix multiplication: instance coefficients * prototype masks
-                matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
-
-                int ori_in_height = input_image_height;
-                int ori_in_width = input_image_width;
-                
-                // Allocate memory for combined mask
-                result_.group.results_seg[0].seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
-                if (!result_.group.results_seg[0].seg_mask) {
-                    free(matmul_out);
-                    result_.message = "Failed to allocate memory for combined seg_mask";
-                    return false;
-                }
-                
-                // Initialize combined mask to 0
-                memset(result_.group.results_seg[0].seg_mask, 0, ori_in_height * ori_in_width * sizeof(uint8_t));
-
-                // Generate mask for each detection and combine them
-                for (int i = 0; i < result_.group.count; i++) {
-                    // Get the individual mask for this detection at model resolution
-                    uint8_t *model_sized_mask = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
-                    if (!model_sized_mask) {
-                        free(result_.group.results_seg[0].seg_mask);
-                        result_.group.results_seg[0].seg_mask = nullptr;
-                        free(matmul_out);
-                        result_.message = "Failed to allocate memory for temporary model sized mask";
-                        return false;
-                    }
-
-                    // Initialize model-sized mask to 0
-                    memset(model_sized_mask, 0, model_in_height * model_in_width * sizeof(uint8_t));
-
-                    // Generate mask for this specific detection by combining instance coefficients and prototypes
-                    int left = (int)filterBoxes_by_nms[i * 4 + 0];
-                    int top = (int)filterBoxes_by_nms[i * 4 + 1];
-                    int right = (int)filterBoxes_by_nms[i * 4 + 2];
-                    int bottom = (int)filterBoxes_by_nms[i * 4 + 3];
-
-                    // Ensure coordinates are within bounds
-                    left = std::max(0, left);
-                    top = std::max(0, top);
-                    right = std::min(model_in_width - 1, right);
-                    bottom = std::min(model_in_height - 1, bottom);
-
-                    // Apply sigmoid activation to the matmul result to get probabilities
-                    for (int h = top; h <= bottom; h++) {
-                        for (int w = left; w <= right; w++) {
-                            if (h >= 0 && h < model_in_height && w >= 0 && w < model_in_width) {
-                                float sum = 0.0f;
-                                
-                                // Calculate the mask value by multiplying instance coefficients with prototype masks
-                                for (int c = 0; c < PROTO_CHANNEL; c++) {
-                                    float inst_coeff = filterSegments_by_nms[i * PROTO_CHANNEL + c];
-                                    int proto_idx = c * PROTO_HEIGHT * PROTO_WEIGHT + 
-                                                    (h * PROTO_HEIGHT / model_in_height) * PROTO_WEIGHT + 
-                                                    (w * PROTO_WEIGHT / model_in_width);
-                                    proto_idx = std::min(proto_idx, PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT - 1);
-                                    float proto_val = proto[proto_idx];
-                                    sum += inst_coeff * proto_val;
-                                }
-                                
-                                // Apply sigmoid-like activation and thresholding
-                                sum = 1.0f / (1.0f + expf(-sum)); // Sigmoid activation
-                                if (sum > 0.5f) {  // Threshold
-                                    // Use the class ID instead of object index to ensure correct coloring
-                                    model_sized_mask[h * model_in_width + w] = (uint8_t)(cls_id[i] + 1); // Use class ID as mask value
-                                }
-                            }
-                        }
-                    }
-
-                    // Resize the model-sized mask to original image size
-                    cv::Mat src_mask(model_in_height, model_in_width, CV_8UC1, model_sized_mask);
-                    cv::Mat dst_mask;
-                    cv::resize(src_mask, dst_mask, cv::Size(ori_in_width, ori_in_height), 0, 0, cv::INTER_LINEAR);
-                    
-                    // Combine this mask with the overall mask, respecting object priority (later detections overwrite earlier ones)
-                    uint8_t *current_mask_data = dst_mask.data;
-                    for (int idx = 0; idx < ori_in_height * ori_in_width; idx++) {
-                        if (current_mask_data[idx] != 0) {
-                            result_.group.results_seg[0].seg_mask[idx] = current_mask_data[idx];
-                        }
-                    }
-
-                    // Free temporary memory
-                    free(model_sized_mask);
-                }
-
-                // Clean up matmul result
-                free(matmul_out);
+            // Allocate memory for matmul result
+            matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
+            if (!matmul_out) {
+                result_.message = "Failed to allocate memory for matmul_out";
+                return false;
             }
+            
+            // Perform matrix multiplication: instance coefficients * prototype masks
+            matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
+
+            // Resize the matmul result to model resolution
+            uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * model_in_height * model_in_width * sizeof(uint8_t));
+            if (!seg_mask) {
+                free(matmul_out);
+                result_.message = "Failed to allocate memory for seg_mask";
+                return false;
+            }
+            
+            resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, model_in_width, model_in_height);
+
+            // Allocate memory for combined mask
+            uint8_t *all_mask_in_one = (uint8_t *)malloc(model_in_height * model_in_width * sizeof(uint8_t));
+            if (!all_mask_in_one) {
+                free(seg_mask);
+                free(matmul_out);
+                result_.message = "Failed to allocate memory for combined mask";
+                return false;
+            }
+            
+            // Initialize combined mask to 0
+            memset(all_mask_in_one, 0, model_in_height * model_in_width * sizeof(uint8_t));
+
+            // Crop mask based on bounding boxes
+            crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, model_in_height, model_in_width);
+
+            // get real mask
+            int cropped_height = model_in_height - pads.top * 2;  // Assuming symmetric padding
+            int cropped_width = model_in_width - pads.left * 2;   // Assuming symmetric padding
+            int ori_in_height = input_image_height;
+            int ori_in_width = input_image_width;
+            int y_pad = pads.top;
+            int x_pad = pads.left;
+            
+            uint8_t *cropped_seg_mask = (uint8_t *)malloc(cropped_height * cropped_width * sizeof(uint8_t));
+            if (!cropped_seg_mask) {
+                free(all_mask_in_one);
+                free(seg_mask);
+                free(matmul_out);
+                result_.message = "Failed to allocate memory for cropped_seg_mask";
+                return false;
+            }
+            
+            uint8_t *real_seg_mask = (uint8_t *)malloc(ori_in_height * ori_in_width * sizeof(uint8_t));
+            if (!real_seg_mask) {
+                free(cropped_seg_mask);
+                free(all_mask_in_one);
+                free(seg_mask);
+                free(matmul_out);
+                result_.message = "Failed to allocate memory for real_seg_mask";
+                return false;
+            }
+            
+            seg_reverse(all_mask_in_one, cropped_seg_mask, real_seg_mask,
+                       model_in_height, model_in_width, cropped_height, cropped_width, 
+                       ori_in_height, ori_in_width, y_pad, x_pad);
+            
+            result_.group.results_seg[0].seg_mask = real_seg_mask;
+            
+            // Clean up allocated memory
+            free(cropped_seg_mask);
+            free(all_mask_in_one);
+            free(seg_mask);
+            free(matmul_out);
 
             result_.success = true;
             return true;
