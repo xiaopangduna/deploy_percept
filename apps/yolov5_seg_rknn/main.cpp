@@ -22,28 +22,13 @@
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
 
-#define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/yolov5_seg_rknn/coco_80_labels_list.txt"
-#define OBJ_NAME_MAX_SIZE 64
+
 #define OBJ_NUMB_MAX_SIZE 128
-#define OBJ_CLASS_NUM 80
 #define NMS_THRESH 0.45
 #define BOX_THRESH 0.25
-#define PROP_BOX_SIZE (5 + OBJ_CLASS_NUM)
 
-#define PROTO_CHANNEL 32
-#define PROTO_HEIGHT 160
-#define PROTO_WEIGHT 160
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
-/**
- * @brief 通用张量属性结构体
- */
-typedef struct
-{
-  int dims[4]; // 张量维度
-  float scale; // 量化参数scale
-  int32_t zp;  // 量化参数zero point
-} TensorAttr;
 
 /**
  * @brief Image rectangle
@@ -76,19 +61,7 @@ typedef struct
   object_segment_result results_seg[OBJ_NUMB_MAX_SIZE];
 } object_detect_result_list;
 
-typedef struct
-{
-  rknn_context rknn_ctx;
-  rknn_input_output_num io_num;
-  rknn_tensor_attr *input_attrs;
-  rknn_tensor_attr *output_attrs;
-  int model_channel;
-  int model_width;
-  int model_height;
-  int input_image_width;
-  int input_image_height;
-  bool is_quant;
-} rknn_app_context_t;
+
 
 typedef struct
 {
@@ -421,160 +394,160 @@ bool compareImageData(const cv::Mat &img, const std::string &binFilePath)
   return isEqual;
 }
 
-// 比较模型输出outputs与NPZ文件中的数据是否一致的函数
-bool compareOutputsToNpz(rknn_output *outputs, int output_count, const std::string &npzFilePath)
-{
-  try
-  {
-    // 加载npz文件
-    cnpy::npz_t npz_data = cnpy::npz_load(npzFilePath);
+// // 比较模型输出outputs与NPZ文件中的数据是否一致的函数
+// bool compareOutputsToNpz(rknn_output *outputs, int output_count, const std::string &npzFilePath)
+// {
+//   try
+//   {
+//     // 加载npz文件
+//     cnpy::npz_t npz_data = cnpy::npz_load(npzFilePath);
 
-    if (npz_data.size() == 0)
-    {
-      std::cerr << "NPZ文件为空或无法读取: " << npzFilePath << std::endl;
-      return false;
-    }
+//     if (npz_data.size() == 0)
+//     {
+//       std::cerr << "NPZ文件为空或无法读取: " << npzFilePath << std::endl;
+//       return false;
+//     }
 
-    // 获取NPZ文件中的数组数量
-    int npz_output_count = npz_data.size();
-    std::cout << "NPZ文件中的输出张量数量: " << npz_output_count << ", 实际输出张量数量: " << output_count << std::endl;
+//     // 获取NPZ文件中的数组数量
+//     int npz_output_count = npz_data.size();
+//     std::cout << "NPZ文件中的输出张量数量: " << npz_output_count << ", 实际输出张量数量: " << output_count << std::endl;
 
-    if (npz_output_count != output_count)
-    {
-      std::cerr << "输出张量数量不匹配!" << std::endl;
-      return false;
-    }
+//     if (npz_output_count != output_count)
+//     {
+//       std::cerr << "输出张量数量不匹配!" << std::endl;
+//       return false;
+//     }
 
-    // 按顺序比较每个输出张量
-    for (int i = 0; i < output_count; ++i)
-    {
-      // 构造NPZ文件中数组的名称（通常为"arr_0", "arr_1", ... 或其他命名方式）
-      std::string arr_name = "arr_" + std::to_string(i);
+//     // 按顺序比较每个输出张量
+//     for (int i = 0; i < output_count; ++i)
+//     {
+//       // 构造NPZ文件中数组的名称（通常为"arr_0", "arr_1", ... 或其他命名方式）
+//       std::string arr_name = "arr_" + std::to_string(i);
 
-      // 检查是否能找到对应的数组名
-      auto it = npz_data.find(arr_name);
-      if (it == npz_data.end())
-      {
-        // 如果按默认命名找不到，尝试其他可能的命名方式
-        arr_name = "output_" + std::to_string(i);
-        it = npz_data.find(arr_name);
-        if (it == npz_data.end())
-        {
-          arr_name = "out" + std::to_string(i);
-          it = npz_data.find(arr_name);
-          if (it == npz_data.end())
-          {
-            std::cerr << "在NPZ文件中找不到输出数组: " << arr_name << std::endl;
-            continue;
-          }
-        }
-      }
+//       // 检查是否能找到对应的数组名
+//       auto it = npz_data.find(arr_name);
+//       if (it == npz_data.end())
+//       {
+//         // 如果按默认命名找不到，尝试其他可能的命名方式
+//         arr_name = "output_" + std::to_string(i);
+//         it = npz_data.find(arr_name);
+//         if (it == npz_data.end())
+//         {
+//           arr_name = "out" + std::to_string(i);
+//           it = npz_data.find(arr_name);
+//           if (it == npz_data.end())
+//           {
+//             std::cerr << "在NPZ文件中找不到输出数组: " << arr_name << std::endl;
+//             continue;
+//           }
+//         }
+//       }
 
-      // 获取NPZ中的数组
-      cnpy::NpyArray npz_array = it->second;
+//       // 获取NPZ中的数组
+//       cnpy::NpyArray npz_array = it->second;
 
-      // 打印数组信息用于调试
-      std::cout << "输出 #" << i << " - NPZ数组形状: ";
-      for (size_t j = 0; j < npz_array.shape.size(); j++)
-      {
-        std::cout << npz_array.shape[j];
-        if (j < npz_array.shape.size() - 1)
-          std::cout << "x";
-      }
-      std::cout << ", 类型: " << npz_array.word_size << " bytes per element" << std::endl;
+//       // 打印数组信息用于调试
+//       std::cout << "输出 #" << i << " - NPZ数组形状: ";
+//       for (size_t j = 0; j < npz_array.shape.size(); j++)
+//       {
+//         std::cout << npz_array.shape[j];
+//         if (j < npz_array.shape.size() - 1)
+//           std::cout << "x";
+//       }
+//       std::cout << ", 类型: " << npz_array.word_size << " bytes per element" << std::endl;
 
-      // 比较大小
-      size_t npz_size_bytes = npz_array.num_bytes();
-      size_t output_size_bytes = outputs[i].size;
+//       // 比较大小
+//       size_t npz_size_bytes = npz_array.num_bytes();
+//       size_t output_size_bytes = outputs[i].size;
 
-      if (npz_size_bytes != output_size_bytes)
-      {
-        std::cerr << "输出 #" << i << " 大小不匹配! NPZ: " << npz_size_bytes
-                  << " bytes, 实际输出: " << output_size_bytes << " bytes" << std::endl;
-        return false;
-      }
+//       if (npz_size_bytes != output_size_bytes)
+//       {
+//         std::cerr << "输出 #" << i << " 大小不匹配! NPZ: " << npz_size_bytes
+//                   << " bytes, 实际输出: " << output_size_bytes << " bytes" << std::endl;
+//         return false;
+//       }
 
-      // 比较数据内容
-      float tolerance = 0.001f; // 允许的误差范围
-      bool arrays_equal = true;
+//       // 比较数据内容
+//       float tolerance = 0.001f; // 允许的误差范围
+//       bool arrays_equal = true;
 
-      // 根据NPZ数组的数据类型进行比较
-      if (npz_array.word_size == 4)
-      { // 假设是float类型
-        float *npz_data_ptr = reinterpret_cast<float *>(npz_array.data<void>());
+//       // 根据NPZ数组的数据类型进行比较
+//       if (npz_array.word_size == 4)
+//       { // 假设是float类型
+//         float *npz_data_ptr = reinterpret_cast<float *>(npz_array.data<void>());
 
-        // 根据RKNN输出类型决定如何比较
-        if (outputs[i].want_float)
-        {
-          float *output_data_ptr = reinterpret_cast<float *>(outputs[i].buf);
+//         // 根据RKNN输出类型决定如何比较
+//         if (outputs[i].want_float)
+//         {
+//           float *output_data_ptr = reinterpret_cast<float *>(outputs[i].buf);
 
-          for (size_t j = 0; j < npz_size_bytes / sizeof(float); ++j)
-          {
-            if (abs(npz_data_ptr[j] - output_data_ptr[j]) > tolerance)
-            {
-              std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
-                        << "NPZ值=" << npz_data_ptr[j]
-                        << ", 实际输出=" << output_data_ptr[j] << std::endl;
-              arrays_equal = false;
-              break;
-            }
-          }
-        }
-        else
-        {
-          uint8_t *output_data_ptr = reinterpret_cast<uint8_t *>(outputs[i].buf);
+//           for (size_t j = 0; j < npz_size_bytes / sizeof(float); ++j)
+//           {
+//             if (abs(npz_data_ptr[j] - output_data_ptr[j]) > tolerance)
+//             {
+//               std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
+//                         << "NPZ值=" << npz_data_ptr[j]
+//                         << ", 实际输出=" << output_data_ptr[j] << std::endl;
+//               arrays_equal = false;
+//               break;
+//             }
+//           }
+//         }
+//         else
+//         {
+//           uint8_t *output_data_ptr = reinterpret_cast<uint8_t *>(outputs[i].buf);
 
-          for (size_t j = 0; j < npz_size_bytes / sizeof(uint8_t); ++j)
-          {
-            if (abs(npz_data_ptr[j] - static_cast<float>(output_data_ptr[j])) > tolerance)
-            {
-              std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
-                        << "NPZ值=" << npz_data_ptr[j]
-                        << ", 实际输出=" << static_cast<float>(output_data_ptr[j]) << std::endl;
-              arrays_equal = false;
-              break;
-            }
-          }
-        }
-      }
-      else if (npz_array.word_size == 1)
-      { // 假设是uint8类型
-        uint8_t *npz_data_ptr = reinterpret_cast<uint8_t *>(npz_array.data<void>());
-        uint8_t *output_data_ptr = reinterpret_cast<uint8_t *>(outputs[i].buf);
+//           for (size_t j = 0; j < npz_size_bytes / sizeof(uint8_t); ++j)
+//           {
+//             if (abs(npz_data_ptr[j] - static_cast<float>(output_data_ptr[j])) > tolerance)
+//             {
+//               std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
+//                         << "NPZ值=" << npz_data_ptr[j]
+//                         << ", 实际输出=" << static_cast<float>(output_data_ptr[j]) << std::endl;
+//               arrays_equal = false;
+//               break;
+//             }
+//           }
+//         }
+//       }
+//       else if (npz_array.word_size == 1)
+//       { // 假设是uint8类型
+//         uint8_t *npz_data_ptr = reinterpret_cast<uint8_t *>(npz_array.data<void>());
+//         uint8_t *output_data_ptr = reinterpret_cast<uint8_t *>(outputs[i].buf);
 
-        for (size_t j = 0; j < npz_size_bytes; ++j)
-        {
-          if (npz_data_ptr[j] != output_data_ptr[j])
-          {
-            std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
-                      << "NPZ值=" << static_cast<int>(npz_data_ptr[j])
-                      << ", 实际输出=" << static_cast<int>(output_data_ptr[j]) << std::endl;
-            arrays_equal = false;
-            break;
-          }
-        }
-      }
+//         for (size_t j = 0; j < npz_size_bytes; ++j)
+//         {
+//           if (npz_data_ptr[j] != output_data_ptr[j])
+//           {
+//             std::cout << "输出 #" << i << ", 第 " << j << " 个元素不匹配: "
+//                       << "NPZ值=" << static_cast<int>(npz_data_ptr[j])
+//                       << ", 实际输出=" << static_cast<int>(output_data_ptr[j]) << std::endl;
+//             arrays_equal = false;
+//             break;
+//           }
+//         }
+//       }
 
-      if (!arrays_equal)
-      {
-        std::cerr << "输出 #" << i << " 数据不匹配!" << std::endl;
-        return false;
-      }
-      else
-      {
-        std::cout << "输出 #" << i << " 数据匹配!" << std::endl;
-      }
-    }
+//       if (!arrays_equal)
+//       {
+//         std::cerr << "输出 #" << i << " 数据不匹配!" << std::endl;
+//         return false;
+//       }
+//       else
+//       {
+//         std::cout << "输出 #" << i << " 数据匹配!" << std::endl;
+//       }
+//     }
 
-    std::cout << "所有输出张量与NPZ文件中的数据完全匹配！" << std::endl;
-    return true;
-  }
-  catch (const std::exception &e)
-  {
-    std::cerr << "读取NPZ文件时发生错误: " << e.what() << std::endl;
-    return false;
-  }
-}
+//     std::cout << "所有输出张量与NPZ文件中的数据完全匹配！" << std::endl;
+//     return true;
+//   }
+//   catch (const std::exception &e)
+//   {
+//     std::cerr << "读取NPZ文件时发生错误: " << e.what() << std::endl;
+//     return false;
+//   }
+// }
 static int read_detection_and_segmentation_results(const char *yaml_path, const char *bin_dir_path, object_detect_result_list *results, int expected_img_width, int expected_img_height)
 {
   if (!yaml_path || !bin_dir_path || !results)
@@ -699,9 +672,7 @@ static int read_detection_and_segmentation_results(const char *yaml_path, const 
 
   return 0;
 }
-const int anchor[3][6] = {{10, 13, 16, 30, 33, 23},
-                          {30, 61, 62, 45, 59, 119},
-                          {116, 90, 156, 198, 373, 326}};
+
 
 int main()
 {

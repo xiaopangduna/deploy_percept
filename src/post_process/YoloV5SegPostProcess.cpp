@@ -12,30 +12,17 @@ namespace deploy_percept
         YoloV5SegPostProcess::YoloV5SegPostProcess(const Params &params) : params_(params)
         {
             result_.group.results.resize(params_.obj_numb_max_size);
-            result_.group.results_seg.resize(params_.obj_numb_max_size);
+            result_.group.results_seg.resize(1); // 只需要一个分割结果
         }
 
-        
-        inline static int32_t __clip(float val, float min, float max)
-        {
-            float f = val <= min ? min : (val >= max ? max : val);
-            return f;
-        }
-        
-        static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
-        {
-            float dst_val = (f32 / scale) + zp;
-            int8_t res = (int8_t)__clip(dst_val, -128, 127);
-            return res;
-        }
-        
+        // 删除重复的quick_sort_indice_inverse函数，使用父类的quickSortIndices实现
 
-        int YoloV5SegPostProcess::process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, 
-                                   int stride,
-                                   std::vector<float> &boxes, std::vector<float> &segments,
-                                   std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                   std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
-                                   std::vector<int32_t> &output_zps)
+        int YoloV5SegPostProcess::process_i8(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
+                                             int stride,
+                                             std::vector<float> &boxes, std::vector<float> &segments,
+                                             std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                             std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
+                                             std::vector<int32_t> &output_zps)
         {
             int validCount = 0;
             int grid_len = grid_h * grid_w;
@@ -54,7 +41,7 @@ namespace deploy_percept
             int32_t zp_seg = output_zps[input_id + 1];
             float scale_seg = output_scales[input_id + 1];
 
-            int8_t thres_i8 = qnt_f32_to_affine(threshold, zp, scale);
+            int8_t thres_i8 = qntF32ToAffine(threshold, zp, scale);
 
             for (int a = 0; a < 3; a++)
             {
@@ -71,7 +58,7 @@ namespace deploy_percept
                             int8_t *in_ptr_seg = input_seg + offset_seg;
 
                             float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
-                            
+
                             if (box_conf_f32 > threshold)
                             {
                                 // 在条件内部进行类别概率计算和边界框解码
@@ -89,7 +76,7 @@ namespace deploy_percept
 
                                 float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
                                 float limit_score = box_conf_f32 * class_prob_f32;
-                                
+
                                 if (limit_score > threshold)
                                 {
                                     // 边界框解码
@@ -126,46 +113,6 @@ namespace deploy_percept
             return validCount;
         }
 
-        int YoloV5SegPostProcess::quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices)
-        {
-            float key;
-            int key_index;
-            int low = left;
-            int high = right;
-            if (left < right)
-            {
-                key_index = indices[left];
-                key = input[left];
-                while (low < high)
-                {
-                    while (low < high && input[high] <= key)
-                    {
-                        high--;
-                    }
-                    input[low] = input[high];
-                    indices[low] = indices[high];
-                    while (low < high && input[low] >= key)
-                    {
-                        low++;
-                    }
-                    input[high] = input[low];
-                    indices[high] = indices[low];
-                }
-                input[low] = key;
-                indices[low] = key_index;
-                quick_sort_indice_inverse(input, left, low - 1, indices);
-                quick_sort_indice_inverse(input, low + 1, right, indices);
-            }
-            return low;
-        }
-
-
-
-        int YoloV5SegPostProcess::clamp(float val, int min, int max)
-        {
-            return val > min ? (val < max ? val : max) : min;
-        }
-
         void YoloV5SegPostProcess::matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
         {
             float temp = 0;
@@ -190,8 +137,8 @@ namespace deploy_percept
             }
         }
 
-        void YoloV5SegPostProcess::resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num, 
-                                                        uint8_t *output_image, int target_width, int target_height)
+        void YoloV5SegPostProcess::resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num,
+                                                          uint8_t *output_image, int target_width, int target_height)
         {
             for (int b = 0; b < boxes_num; b++)
             {
@@ -202,8 +149,8 @@ namespace deploy_percept
             }
         }
 
-        void YoloV5SegPostProcess::crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num, 
-                                                 int *cls_id, int height, int width)
+        void YoloV5SegPostProcess::crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
+                                                   int *cls_id, int height, int width)
         {
             for (int b = 0; b < boxes_num; b++)
             {
@@ -236,8 +183,8 @@ namespace deploy_percept
         }
 
         void YoloV5SegPostProcess::seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                                             int input_image_height, int input_image_width, int cropped_height, int cropped_width, 
-                                             int ori_in_height, int ori_in_width, int y_pad, int x_pad)
+                                               int input_image_height, int input_image_width, int cropped_height, int cropped_width,
+                                               int ori_in_height, int ori_in_width, int y_pad, int x_pad)
         {
             if (y_pad == 0 && x_pad == 0 && ori_in_height == input_image_height && ori_in_width == input_image_width)
             {
@@ -258,18 +205,66 @@ namespace deploy_percept
                     }
                 }
             }
-            // Note: Here are different methods provided for implementing single-channel image scaling.
-            //       The method of using rga to resize the image requires that the image size is 2 aligned.
             resize_by_opencv_uint8(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
-            // resize_by_rga_rk356x(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
-            // resize_by_rga_rk3588(cropped_seg, cropped_width, cropped_height, seg_mask_real, ori_in_width, ori_in_height);
+        }
+
+        void YoloV5SegPostProcess::processNMSSelectedResults(
+            const std::vector<int> &indexArray,
+            const std::vector<float> &filterBoxes,
+            const std::vector<int> &classId,
+            const std::vector<float> &objProbs,
+            const std::vector<float> &filterSegments,
+            int validCount,
+            std::vector<float> &filterSegments_by_nms,
+            int &last_count)
+        {
+            for (int i = 0; i < validCount; ++i)
+            {
+                // 跳过被NMS标记为冗余的检测框，或超出最大检测数量限制的框
+                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
+                {
+                    continue;
+                }
+
+                int n = indexArray[i]; // 获取原始检测框的索引
+
+                // 提取并计算边界框坐标
+                float x1 = filterBoxes[n * 4 + 0];      // 左上角x
+                float y1 = filterBoxes[n * 4 + 1];      // 左上角y
+                float x2 = x1 + filterBoxes[n * 4 + 2]; // 右下角x (x1 + width)
+                float y2 = y1 + filterBoxes[n * 4 + 3]; // 右下角y (y1 + height)
+
+                int id = classId[n];          // 保存真实的类别ID
+                float obj_conf = objProbs[i]; // 获取该检测框的置信度
+
+                // 收集该检测框对应的分割特征向量
+                for (int k = 0; k < params_.proto_channel; k++)
+                {
+                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
+                }
+
+                // 填充检测结果结构体
+                result_.group.results[last_count].box.left = x1;
+                result_.group.results[last_count].box.top = y1;
+                result_.group.results[last_count].box.right = x2;
+                result_.group.results[last_count].box.bottom = y2;
+
+                result_.group.results[last_count].prop = obj_conf;
+
+                // 设置类别名称
+                snprintf(result_.group.results[last_count].name,
+                         sizeof(result_.group.results[last_count].name),
+                         "class_%d", id);
+
+                last_count++; // 增加有效检测计数
+            }
         }
 
         bool YoloV5SegPostProcess::run(
             std::vector<std::vector<int>> &output_dims,
             std::vector<float> &output_scales,
             std::vector<int32_t> &output_zps,
-            std::vector<void*> *outputs,
+            std::vector<void *> *outputs,
             int input_image_width,
             int input_image_height)
         {
@@ -294,37 +289,48 @@ namespace deploy_percept
             result_.success = false;
 
             // 单独处理原型掩码层（Layer 6）
-            if (output_dims.size() > 6) {
+            if (output_dims.size() > 6)
+            {
                 int8_t *input_proto = (int8_t *)(*outputs)[6];
                 int32_t zp_proto = output_zps[6];
                 float scale_proto = output_scales[6];
-                
-                for (int i = 0; i < params_.proto_channel * params_.proto_height * params_.proto_weight; i++) {
+
+                for (int i = 0; i < params_.proto_channel * params_.proto_height * params_.proto_weight; i++)
+                {
                     proto[i] = deqntAffineToF32(input_proto[i], zp_proto, scale_proto);
                 }
-                printf("Prototype mask processed: %d elements\n", params_.proto_channel * params_.proto_height * params_.proto_weight);
             }
 
             // Process the outputs of the model (only layers 0-5)
-            for (int i = 0; i < 6; i++)  // 只处理前6层
+            for (int i = 0; i < 6; i++) // 只处理前6层
             {
-                if (i >= output_dims.size()) break;
+                if (i >= output_dims.size())
+                    break;
                 grid_h = output_dims[i][2];
                 grid_w = output_dims[i][3];
                 stride = input_image_height / grid_h;
 
                 // 根据层索引选择对应的anchor
-                const int* current_anchor;
-                switch(i / 2) {
-                    case 0: current_anchor = params_.anchor_stride8.data(); break;
-                    case 1: current_anchor = params_.anchor_stride16.data(); break;
-                    case 2: current_anchor = params_.anchor_stride32.data(); break;
-                    default: current_anchor = params_.anchor_stride8.data(); break;
+                const int *current_anchor;
+                switch (i / 2)
+                {
+                case 0:
+                    current_anchor = params_.anchor_stride8.data();
+                    break;
+                case 1:
+                    current_anchor = params_.anchor_stride16.data();
+                    break;
+                case 2:
+                    current_anchor = params_.anchor_stride32.data();
+                    break;
+                default:
+                    current_anchor = params_.anchor_stride8.data();
+                    break;
                 }
-                
-                validCount += process_i8(outputs, i, (int *)current_anchor, grid_h, grid_w, 
+
+                validCount += process_i8(outputs, i, (int *)current_anchor, grid_h, grid_w,
                                          stride,
-                                         filterBoxes, filterSegments, objProbs, classId, params_.conf_threshold, 
+                                         filterBoxes, filterSegments, objProbs, classId, params_.conf_threshold,
                                          output_dims, output_scales, output_zps);
             }
 
@@ -334,14 +340,15 @@ namespace deploy_percept
                 result_.success = true;
                 return true;
             }
-            
+
             std::vector<int> indexArray;
             for (int i = 0; i < validCount; ++i)
             {
                 indexArray.push_back(i);
             }
 
-            quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+            // 明确调用基类的静态函数
+            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
 
             std::set<int> class_set(std::begin(classId), std::end(classId));
 
@@ -353,50 +360,16 @@ namespace deploy_percept
             int last_count = 0;
             result_.group.count = 0;
 
-            // Resize vectors to ensure they have enough space
-            result_.group.results.resize(params_.obj_numb_max_size);
-            result_.group.results_seg.resize(1); // 只需要一个分割结果
+            // 处理NMS筛选后的检测结果
+            processNMSSelectedResults(indexArray, filterBoxes, classId, objProbs,
+                                      filterSegments, validCount, filterSegments_by_nms, last_count);
 
-            for (int i = 0; i < validCount; ++i)
-            {
-                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
-                {
-                    continue;
-                }
-                int n = indexArray[i];
-
-                float x1 = filterBoxes[n * 4 + 0];
-                float y1 = filterBoxes[n * 4 + 1];
-                float x2 = x1 + filterBoxes[n * 4 + 2];
-                float y2 = y1 + filterBoxes[n * 4 + 3];
-                int id = classId[n];  // 保存真实的类别ID
-                float obj_conf = objProbs[i]; // 修复：使用正确的索引获取置信度
-
-                for (int k = 0; k < params_.proto_channel; k++)
-                {
-                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
-                }
-
-                result_.group.results[last_count].box.left = x1;
-                result_.group.results[last_count].box.top = y1;
-                result_.group.results[last_count].box.right = x2;
-                result_.group.results[last_count].box.bottom = y2;
-
-                result_.group.results[last_count].prop = obj_conf;
-                // Set class name based on class id
-                snprintf(result_.group.results[last_count].name, 
-                         sizeof(result_.group.results[last_count].name), 
-                         "class_%d", id);
-                // 保存真实的类别ID
-                // 注意：在DetectResult结构中没有cls_id字段，所以我们需要在生成掩码时使用正确的类别ID
-
-                last_count++;
-            }
             result_.group.count = last_count;
             int boxes_num = result_.group.count;
 
             // 如果没有检测到物体，不需要生成分割掩码
-            if (boxes_num <= 0) {
+            if (boxes_num <= 0)
+            {
                 result_.success = true;
                 return true;
             }
@@ -410,16 +383,18 @@ namespace deploy_percept
                 filterBoxes_by_nms[i * 4 + 1] = result_.group.results[i].box.top;    // y1;
                 filterBoxes_by_nms[i * 4 + 2] = result_.group.results[i].box.right;  // x2;
                 filterBoxes_by_nms[i * 4 + 3] = result_.group.results[i].box.bottom; // y2;
-                
+
                 // 获取真实的类别ID
                 std::string name_str(result_.group.results[i].name);
                 size_t pos = name_str.find_last_of('_');
-                if (pos != std::string::npos) {
+                if (pos != std::string::npos)
+                {
                     cls_id[i] = std::stoi(name_str.substr(pos + 1));
-                } else {
-                    cls_id[i] = 0;  // Default to 0 if parsing fails
                 }
-
+                else
+                {
+                    cls_id[i] = 0; // Default to 0 if parsing fails
+                }
             }
 
             // compute the mask through Matmul
@@ -427,36 +402,39 @@ namespace deploy_percept
             int COLS_A = params_.proto_channel;
             int COLS_B = params_.proto_height * params_.proto_weight;
             uint8_t *matmul_out = nullptr;
-            
+
             // Allocate memory for matmul result
             matmul_out = (uint8_t *)malloc(boxes_num * params_.proto_height * params_.proto_weight * sizeof(uint8_t));
-            if (!matmul_out) {
+            if (!matmul_out)
+            {
                 result_.message = "Failed to allocate memory for matmul_out";
                 return false;
             }
-            
+
             // Perform matrix multiplication: instance coefficients * prototype masks
             matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, boxes_num, params_.proto_channel, params_.proto_height * params_.proto_weight);
 
             // Resize the matmul result to model resolution
             uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * input_image_height * input_image_width * sizeof(uint8_t));
-            if (!seg_mask) {
+            if (!seg_mask)
+            {
                 free(matmul_out);
                 result_.message = "Failed to allocate memory for seg_mask";
                 return false;
             }
-            
+
             resize_by_opencv_uint8(matmul_out, params_.proto_weight, params_.proto_height, boxes_num, seg_mask, input_image_width, input_image_height);
 
             // Allocate memory for combined mask
             uint8_t *all_mask_in_one = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
-            if (!all_mask_in_one) {
+            if (!all_mask_in_one)
+            {
                 free(seg_mask);
                 free(matmul_out);
                 result_.message = "Failed to allocate memory for combined mask";
                 return false;
             }
-            
+
             // Initialize combined mask to 0
             memset(all_mask_in_one, 0, input_image_height * input_image_width * sizeof(uint8_t));
 
@@ -465,18 +443,19 @@ namespace deploy_percept
 
             // get real mask - simplified without pad handling
             uint8_t *real_seg_mask = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
-            if (!real_seg_mask) {
+            if (!real_seg_mask)
+            {
                 free(all_mask_in_one);
                 free(seg_mask);
                 free(matmul_out);
                 result_.message = "Failed to allocate memory for real_seg_mask";
                 return false;
             }
-            
+
             memcpy(real_seg_mask, all_mask_in_one, input_image_height * input_image_width * sizeof(uint8_t));
-            
+
             result_.group.results_seg[0].seg_mask = real_seg_mask;
-            
+
             // Clean up allocated memory
             free(all_mask_in_one);
             free(seg_mask);

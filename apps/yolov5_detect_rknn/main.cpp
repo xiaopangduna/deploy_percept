@@ -21,7 +21,6 @@
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
 
-#define LABEL_NALE_TXT_PATH "/home/orangepi/HectorHuang/deploy_percept/apps/yolov5_detect_rknn/coco_80_labels_list.txt"
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 

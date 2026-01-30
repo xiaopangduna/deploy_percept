@@ -77,7 +77,7 @@ namespace deploy_percept
                 indexArray.push_back(i);
             }
 
-            quickSortIndices(objProbs, 0, validCount - 1, indexArray);
+            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
 
             std::set<int> class_set(classId.begin(), classId.end());
 
@@ -257,38 +257,6 @@ namespace deploy_percept
                 }
             }
             return validCount; // 返回有效检测框数量
-        }
-
-        void YoloV5DetectPostProcess::quickSortIndices(std::vector<float> &input, int left, int right, std::vector<int> &indices)
-        {
-            float key;
-            int key_index;
-            int low = left;
-            int high = right;
-            if (left < right)
-            {
-                key_index = indices[left];
-                key = input[left];
-                while (low < high)
-                {
-                    while (low < high && input[high] <= key)
-                    {
-                        high--;
-                    }
-                    input[low] = input[high];
-                    indices[low] = indices[high];
-                    while (low < high && input[low] >= key)
-                    {
-                        low++;
-                    }
-                    input[high] = input[low];
-                    indices[high] = indices[low];
-                }
-                input[low] = key;
-                indices[low] = key_index;
-                quickSortIndices(input, left, low - 1, indices);
-                quickSortIndices(input, low + 1, right, indices);
-            }
         }
 
     } // namespace post_process

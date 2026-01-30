@@ -81,11 +81,6 @@ namespace deploy_percept
                     std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
                     std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
                     std::vector<int32_t> &output_zps);
-            static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices);
-            
-                                      
-                           
-            static int clamp(float val, int min, int max);
             
             static void matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B);
             
@@ -98,6 +93,18 @@ namespace deploy_percept
             static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
                                   int input_image_height, int input_image_width, int cropped_height, int cropped_width, 
                                   int ori_in_height, int ori_in_width, int y_pad, int x_pad);
+                                  
+            // 新增：处理NMS后检测结果的函数
+            void processNMSSelectedResults(
+                const std::vector<int>& indexArray,
+                const std::vector<float>& filterBoxes,
+                const std::vector<int>& classId,
+                const std::vector<float>& objProbs,
+                const std::vector<float>& filterSegments,
+                int validCount,
+                std::vector<float>& filterSegments_by_nms,
+                int& last_count);
+
         };
     } // namespace post_process
 } // namespace deploy_percept
