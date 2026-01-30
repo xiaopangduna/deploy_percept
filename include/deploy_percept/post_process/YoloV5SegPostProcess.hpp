@@ -27,6 +27,14 @@ namespace deploy_percept
                 int proto_channel = 32;
                 int proto_height = 160;
                 int proto_weight = 160;
+                
+                // Anchor参数
+                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
+                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
+                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
+                
+                // 模型结构参数
+                int prop_box_size = 5;  // 边界框坐标(xywh) + 置信度
             };
 
             // 分割结果结构体
@@ -67,13 +75,12 @@ namespace deploy_percept
             Params params_;
             Result result_{};
             
-            static int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, 
-                                int height, int width, int stride,
-                                std::vector<float> &boxes, std::vector<float> &segments, float *proto, 
-                                std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
-                                std::vector<int32_t> &output_zps);
-                                
+            int process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, 
+                    int stride,
+                    std::vector<float> &boxes, std::vector<float> &segments,
+                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                    std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
+                    std::vector<int32_t> &output_zps);
             static int quick_sort_indice_inverse(std::vector<float> &input, int left, int right, std::vector<int> &indices);
             
                                       

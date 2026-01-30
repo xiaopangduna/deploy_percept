@@ -29,17 +29,13 @@ namespace deploy_percept
             return res;
         }
         
-        // Anchor values for YOLOv5
-        const int anchor[3][6] = {{10, 13, 16, 30, 33, 23},
-                                  {30, 61, 62, 45, 59, 119},
-                                  {116, 90, 156, 198, 373, 326}};
 
         int YoloV5SegPostProcess::process_i8(std::vector<void*> *all_input, int input_id, int *anchor, int grid_h, int grid_w, 
-                                           int height, int width, int stride,
-                                           std::vector<float> &boxes, std::vector<float> &segments, float *proto, 
-                                           std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                           std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
-                                           std::vector<int32_t> &output_zps)
+                                   int stride,
+                                   std::vector<float> &boxes, std::vector<float> &segments,
+                                   std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                   std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales, 
+                                   std::vector<int32_t> &output_zps)
         {
             int validCount = 0;
             int grid_len = grid_h * grid_w;
@@ -49,23 +45,7 @@ namespace deploy_percept
                 return validCount;
             }
 
-            const int PROTO_CHANNEL = 32;
-            const int PROTO_HEIGHT = 160;
-            const int PROTO_WEIGHT = 160;
-            const int OBJ_CLASS_NUM = 80;
-            const int PROP_BOX_SIZE = (5 + OBJ_CLASS_NUM);
-
-            if (input_id == 6)
-            {
-                int8_t *input_proto = (int8_t *)(*all_input)[input_id];
-                int32_t zp_proto = output_zps[input_id];
-                float scale_proto = output_scales[input_id];
-                for (int i = 0; i < PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT; i++)
-                {
-                    proto[i] = deqntAffineToF32(input_proto[i], zp_proto, scale_proto);
-                }
-                return validCount;
-            }
+            // 原型掩码 (proto) 现由 run() 函数单独处理
 
             int8_t *input = (int8_t *)(*all_input)[input_id];
             int8_t *input_seg = (int8_t *)(*all_input)[input_id + 1];
@@ -82,55 +62,62 @@ namespace deploy_percept
                 {
                     for (int j = 0; j < grid_w; j++)
                     {
-                        int8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+                        int8_t box_confidence = input[((params_.prop_box_size + params_.obj_class_num) * a + 4) * grid_len + i * grid_w + j];
                         if (box_confidence >= thres_i8)
                         {
-                            int offset = (PROP_BOX_SIZE * a) * grid_len + i * grid_w + j;
-                            int offset_seg = (PROTO_CHANNEL * a) * grid_len + i * grid_w + j;
+                            int offset = ((params_.prop_box_size + params_.obj_class_num) * a) * grid_len + i * grid_w + j;
+                            int offset_seg = (params_.proto_channel * a) * grid_len + i * grid_w + j;
                             int8_t *in_ptr = input + offset;
                             int8_t *in_ptr_seg = input_seg + offset_seg;
 
-                            float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-                            float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-                            float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-                            float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
-                            box_x = (box_x + j) * (float)stride;
-                            box_y = (box_y + i) * (float)stride;
-                            box_w = box_w * box_w * (float)anchor[a * 2];
-                            box_h = box_h * box_h * (float)anchor[a * 2 + 1];
-                            box_x -= (box_w / 2.0);
-                            box_y -= (box_h / 2.0);
-
-                            int8_t maxClassProbs = in_ptr[5 * grid_len];
-                            int maxClassId = 0;
-                            for (int k = 1; k < OBJ_CLASS_NUM; ++k)
-                            {
-                                int8_t prob = in_ptr[(5 + k) * grid_len];
-                                if (prob > maxClassProbs)
-                                {
-                                    maxClassId = k;
-                                    maxClassProbs = prob;
-                                }
-                            }
-
                             float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
-                            float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
-                            float limit_score = box_conf_f32 * class_prob_f32;
-                            if (limit_score > threshold)
+                            
+                            if (box_conf_f32 > threshold)
                             {
-                                for (int k = 0; k < PROTO_CHANNEL; k++)
+                                // 在条件内部进行类别概率计算和边界框解码
+                                int8_t maxClassProbs = in_ptr[5 * grid_len];
+                                int maxClassId = 0;
+                                for (int k = 1; k < params_.obj_class_num; ++k)
                                 {
-                                    float seg_element_fp = deqntAffineToF32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
-                                    segments.push_back(seg_element_fp);
+                                    int8_t prob = in_ptr[(5 + k) * grid_len];
+                                    if (prob > maxClassProbs)
+                                    {
+                                        maxClassId = k;
+                                        maxClassProbs = prob;
+                                    }
                                 }
 
-                                objProbs.push_back((deqntAffineToF32(maxClassProbs, zp, scale)) * (deqntAffineToF32(box_confidence, zp, scale)));
-                                classId.push_back(maxClassId);
-                                validCount++;
-                                boxes.push_back(box_x);
-                                boxes.push_back(box_y);
-                                boxes.push_back(box_w);
-                                boxes.push_back(box_h);
+                                float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
+                                float limit_score = box_conf_f32 * class_prob_f32;
+                                
+                                if (limit_score > threshold)
+                                {
+                                    // 边界框解码
+                                    float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
+                                    float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
+                                    float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
+                                    float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
+                                    box_x = (box_x + j) * (float)stride;
+                                    box_y = (box_y + i) * (float)stride;
+                                    box_w = box_w * box_w * (float)anchor[a * 2];
+                                    box_h = box_h * box_h * (float)anchor[a * 2 + 1];
+                                    box_x -= (box_w / 2.0);
+                                    box_y -= (box_h / 2.0);
+
+                                    for (int k = 0; k < params_.proto_channel; k++)
+                                    {
+                                        float seg_element_fp = deqntAffineToF32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
+                                        segments.push_back(seg_element_fp);
+                                    }
+
+                                    objProbs.push_back(limit_score);
+                                    classId.push_back(maxClassId);
+                                    validCount++;
+                                    boxes.push_back(box_x);
+                                    boxes.push_back(box_y);
+                                    boxes.push_back(box_w);
+                                    boxes.push_back(box_h);
+                                }
                             }
                         }
                     }
@@ -289,19 +276,12 @@ namespace deploy_percept
             // Print debug info to understand dimensions
             printf("Processing image: %dx%d\n", input_image_width, input_image_height);
 
-            const int PROTO_CHANNEL = params_.proto_channel;
-            const int PROTO_HEIGHT = params_.proto_height;
-            const int PROTO_WEIGHT = params_.proto_weight;
-            const int OBJ_CLASS_NUM = params_.obj_class_num;
-            const int OBJ_NUMB_MAX_SIZE = params_.obj_numb_max_size;
-            const int PROP_BOX_SIZE = (5 + OBJ_CLASS_NUM);
-
             std::vector<float> filterBoxes;
             std::vector<float> objProbs;
             std::vector<int> classId;
 
             std::vector<float> filterSegments;
-            float proto[PROTO_CHANNEL * PROTO_HEIGHT * PROTO_WEIGHT];
+            float proto[params_.proto_channel * params_.proto_height * params_.proto_weight];
             std::vector<float> filterSegments_by_nms;
 
             int validCount = 0;
@@ -313,16 +293,38 @@ namespace deploy_percept
             result_.group.count = 0;
             result_.success = false;
 
-            // Process the outputs of the model
-            for (int i = 0; i < 7; i++)
+            // 单独处理原型掩码层（Layer 6）
+            if (output_dims.size() > 6) {
+                int8_t *input_proto = (int8_t *)(*outputs)[6];
+                int32_t zp_proto = output_zps[6];
+                float scale_proto = output_scales[6];
+                
+                for (int i = 0; i < params_.proto_channel * params_.proto_height * params_.proto_weight; i++) {
+                    proto[i] = deqntAffineToF32(input_proto[i], zp_proto, scale_proto);
+                }
+                printf("Prototype mask processed: %d elements\n", params_.proto_channel * params_.proto_height * params_.proto_weight);
+            }
+
+            // Process the outputs of the model (only layers 0-5)
+            for (int i = 0; i < 6; i++)  // 只处理前6层
             {
                 if (i >= output_dims.size()) break;
                 grid_h = output_dims[i][2];
                 grid_w = output_dims[i][3];
-                stride = input_image_height / grid_h; // 使用input_image_height计算stride
-                validCount += process_i8(outputs, i, (int *)anchor[i / 2], grid_h, grid_w, 
-                                         input_image_height, input_image_width, stride, 
-                                         filterBoxes, filterSegments, proto, objProbs, classId, params_.conf_threshold, 
+                stride = input_image_height / grid_h;
+
+                // 根据层索引选择对应的anchor
+                const int* current_anchor;
+                switch(i / 2) {
+                    case 0: current_anchor = params_.anchor_stride8.data(); break;
+                    case 1: current_anchor = params_.anchor_stride16.data(); break;
+                    case 2: current_anchor = params_.anchor_stride32.data(); break;
+                    default: current_anchor = params_.anchor_stride8.data(); break;
+                }
+                
+                validCount += process_i8(outputs, i, (int *)current_anchor, grid_h, grid_w, 
+                                         stride,
+                                         filterBoxes, filterSegments, objProbs, classId, params_.conf_threshold, 
                                          output_dims, output_scales, output_zps);
             }
 
@@ -352,12 +354,12 @@ namespace deploy_percept
             result_.group.count = 0;
 
             // Resize vectors to ensure they have enough space
-            result_.group.results.resize(OBJ_NUMB_MAX_SIZE);
+            result_.group.results.resize(params_.obj_numb_max_size);
             result_.group.results_seg.resize(1); // 只需要一个分割结果
 
             for (int i = 0; i < validCount; ++i)
             {
-                if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
+                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
                 {
                     continue;
                 }
@@ -370,9 +372,9 @@ namespace deploy_percept
                 int id = classId[n];  // 保存真实的类别ID
                 float obj_conf = objProbs[i]; // 修复：使用正确的索引获取置信度
 
-                for (int k = 0; k < PROTO_CHANNEL; k++)
+                for (int k = 0; k < params_.proto_channel; k++)
                 {
-                    filterSegments_by_nms.push_back(filterSegments[n * PROTO_CHANNEL + k]);
+                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
                 }
 
                 result_.group.results[last_count].box.left = x1;
@@ -418,29 +420,23 @@ namespace deploy_percept
                     cls_id[i] = 0;  // Default to 0 if parsing fails
                 }
 
-                // 不再进行坐标转换，因为我们假设模型输入就是最终结果所需的坐标系
-                // 之前的代码使用了box_reverse函数，但现在我们不再需要坐标转换
-                // result_.group.results[i].box.left = box_reverse(result_.group.results[i].box.left, model_in_width, pads.left, scale);
-                // result_.group.results[i].box.top = box_reverse(result_.group.results[i].box.top, model_in_height, pads.top, scale);
-                // result_.group.results[i].box.right = box_reverse(result_.group.results[i].box.right, model_in_width, pads.left, scale);
-                // result_.group.results[i].box.bottom = box_reverse(result_.group.results[i].box.bottom, model_in_height, pads.top, scale);
             }
 
             // compute the mask through Matmul
             int ROWS_A = boxes_num;
-            int COLS_A = PROTO_CHANNEL;
-            int COLS_B = PROTO_HEIGHT * PROTO_WEIGHT;
+            int COLS_A = params_.proto_channel;
+            int COLS_B = params_.proto_height * params_.proto_weight;
             uint8_t *matmul_out = nullptr;
             
             // Allocate memory for matmul result
-            matmul_out = (uint8_t *)malloc(boxes_num * PROTO_HEIGHT * PROTO_WEIGHT * sizeof(uint8_t));
+            matmul_out = (uint8_t *)malloc(boxes_num * params_.proto_height * params_.proto_weight * sizeof(uint8_t));
             if (!matmul_out) {
                 result_.message = "Failed to allocate memory for matmul_out";
                 return false;
             }
             
             // Perform matrix multiplication: instance coefficients * prototype masks
-            matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, ROWS_A, COLS_A, COLS_B);
+            matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, boxes_num, params_.proto_channel, params_.proto_height * params_.proto_weight);
 
             // Resize the matmul result to model resolution
             uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * input_image_height * input_image_width * sizeof(uint8_t));
@@ -450,7 +446,7 @@ namespace deploy_percept
                 return false;
             }
             
-            resize_by_opencv_uint8(matmul_out, PROTO_WEIGHT, PROTO_HEIGHT, boxes_num, seg_mask, input_image_width, input_image_height);
+            resize_by_opencv_uint8(matmul_out, params_.proto_weight, params_.proto_height, boxes_num, seg_mask, input_image_width, input_image_height);
 
             // Allocate memory for combined mask
             uint8_t *all_mask_in_one = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
@@ -477,11 +473,6 @@ namespace deploy_percept
                 return false;
             }
             
-            // For now, just assign the all_mask_in_one as the final mask
-            // We'll need to handle resizing to input_image dimensions separately if needed
-            // This would involve resizing all_mask_in_one to match input_image dimensions
-            // Placeholder for future implementation of actual resizing
-            // 直接复制数据，因为现在input_image_*就是我们的目标尺寸
             memcpy(real_seg_mask, all_mask_in_one, input_image_height * input_image_width * sizeof(uint8_t));
             
             result_.group.results_seg[0].seg_mask = real_seg_mask;
