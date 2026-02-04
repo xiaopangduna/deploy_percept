@@ -255,6 +255,9 @@ namespace deploy_percept
                 snprintf(result_.group.results[last_count].name,
                          sizeof(result_.group.results[last_count].name),
                          "class_%d", id);
+                
+                // 设置类别ID
+                result_.group.results[last_count].cls_id = id;
 
                 last_count++; // 增加有效检测计数
             }

@@ -37,22 +37,10 @@ namespace deploy_percept
                 int prop_box_size = 5;  // 边界框坐标(xywh) + 置信度
             };
 
-            // 分割结果结构体
-            struct SegmentationResult {
-                uint8_t *seg_mask = nullptr;
-            };
-
-            struct SegmentationResultGroup {
-                int id = 0;
-                int count = 0;
-                std::vector<DetectResult> results; // 检测结果
-                std::vector<SegmentationResult> results_seg; // 分割结果
-            };
-
             // 结果结构体
             struct Result
             {
-                SegmentationResultGroup group{};
+                ResultGroup group{};  // 使用统一的ResultGroup
                 bool success = false;
                 std::string message{}; // 可选的详细信息
             };
