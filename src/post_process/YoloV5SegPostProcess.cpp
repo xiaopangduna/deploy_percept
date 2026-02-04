@@ -15,6 +15,111 @@ namespace deploy_percept
             result_.group.results_seg.resize(1); // 只需要一个分割结果
         }
 
+        // 绘制检测和分割结果
+        void YoloV5SegPostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup &results) const
+        {
+            // 定义类别颜色
+            unsigned char class_colors[][3] = {
+                {255, 56, 56},   // 'FF3838'
+                {255, 157, 151}, // 'FF9D97'
+                {255, 112, 31},  // 'FF701F'
+                {255, 178, 29},  // 'FFB21D'
+                {207, 210, 49},  // 'CFD231'
+                {72, 249, 10},   // '48F90A'
+                {146, 204, 23},  // '92CC17'
+                {61, 219, 134},  // '3DDB86'
+                {26, 147, 52},   // '1A9334'
+                {0, 212, 187},   // '00D4BB'
+                {44, 153, 168},  // '2C99A8'
+                {0, 194, 255},   // '00C2FF'
+                {52, 69, 147},   // '344593'
+                {100, 115, 255}, // '6473FF'
+                {0, 24, 236},    // '0018EC'
+                {132, 56, 255},  // '8438FF'
+                {82, 0, 133},    // '520085'
+                {203, 56, 255},  // 'CB38FF'
+                {255, 149, 200}, // 'FF95C8'
+                {255, 55, 199}   // 'FF37C7'
+            };
+
+            int width = image.cols;
+            int height = image.rows;
+            float alpha = 0.5f; // 透明度
+
+            // 首先绘制分割掩码
+            if (results.count >= 1)
+            {
+                for (int i = 0; i < results.count; i++)
+                {
+                    const DetectResult *det_result = &results.results[i];
+
+                    // 获取对应类别的颜色
+                    cv::Vec3b color = cv::Vec3b(class_colors[det_result->cls_id % 20][0],
+                                                class_colors[det_result->cls_id % 20][1],
+                                                class_colors[det_result->cls_id % 20][2]); // RGB格式
+
+                    // 绘制分割掩码
+                    if (results.results_seg.size() > i && results.results_seg[i].seg_mask != nullptr)
+                    {
+                        // 直接修改原图的像素值
+                        for (int h = 0; h < height; h++)
+                        {
+                            for (int w = 0; w < width; w++)
+                            {
+                                // 获取掩码值
+                                int mask_value = results.results_seg[i].seg_mask[h * width + w];
+
+                                if (mask_value != 0)
+                                {
+                                    // 使用掩码值来索引颜色
+                                    cv::Vec3b color = cv::Vec3b(class_colors[mask_value % 20][0],
+                                                                class_colors[mask_value % 20][1],
+                                                                class_colors[mask_value % 20][2]); // RGB格式
+
+                                    cv::Vec3b &pixel = image.at<cv::Vec3b>(h, w);
+
+                                    // 使用对象的类别颜色来绘制掩码
+                                    pixel[0] = (unsigned char)(color[0] * (1 - alpha) + pixel[0] * alpha); // B
+                                    pixel[1] = (unsigned char)(color[1] * (1 - alpha) + pixel[1] * alpha); // G
+                                    pixel[2] = (unsigned char)(color[2] * (1 - alpha) + pixel[2] * alpha); // R
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 然后绘制边界框和标签
+                for (int i = 0; i < results.count; i++)
+                {
+                    const DetectResult *det_result = &results.results[i];
+
+                    // 获取对应类别的颜色
+                    cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
+                                                class_colors[det_result->cls_id % 20][1],
+                                                class_colors[det_result->cls_id % 20][0]); // BGR格式
+
+                    // 绘制边界框
+                    cv::rectangle(image,
+                                cv::Point(det_result->box.left, det_result->box.top),
+                                cv::Point(det_result->box.right, det_result->box.bottom),
+                                color, 2);
+
+                    // 添加标签文本
+                    std::string label = "Class " + std::to_string(det_result->cls_id) + " " +
+                                        std::to_string(det_result->prop * 100) + "%";
+                    int baseline;
+                    cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                    cv::rectangle(image,
+                                cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
+                                cv::Point(det_result->box.left + textSize.width, det_result->box.top),
+                                color, -1);
+                    cv::putText(image, label,
+                                cv::Point(det_result->box.left, det_result->box.top - 5),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+                }
+            }
+        }
+
         // 删除重复的quick_sort_indice_inverse函数，使用父类的quickSortIndices实现
 
         int YoloV5SegPostProcess::process_i8(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,

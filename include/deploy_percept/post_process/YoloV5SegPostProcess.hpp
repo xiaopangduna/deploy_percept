@@ -59,6 +59,9 @@ namespace deploy_percept
                 int input_image_width,
                 int input_image_height);
 
+            // 新增：绘制检测和分割结果的函数
+            void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const;
+
         private:
             Params params_;
             Result result_{};
