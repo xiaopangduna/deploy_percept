@@ -13,12 +13,9 @@
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
 
-// #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
-#include "deploy_percept/post_process/YoloV5SegPostProcess.hpp" // 新增头文件
+#include "deploy_percept/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
-
-#define OBJ_NUMB_MAX_SIZE 128
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
@@ -111,8 +108,6 @@ int main()
 
   // 获取后处理结果
   auto seg_results = seg_processor.getResult().group;
-
-
 
   // 绘制计算得到的检测结果 - 使用类的成员函数
   cv::Mat result_img = orig_img.clone();
