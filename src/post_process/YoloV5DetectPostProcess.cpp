@@ -16,17 +16,19 @@ namespace deploy_percept
         }
 
         bool YoloV5DetectPostProcess::run(
-            int8_t *input0,
-            int8_t *input1,
-            int8_t *input2,
+            const std::vector<int8_t*>& inputs,
             int model_in_h,
             int model_in_w,
-            BoxRect pads,
-            float scale_w,
-            float scale_h,
             std::vector<int32_t> &qnt_zps,
             std::vector<float> &qnt_scales)
         {
+            // 检查输入数量
+            if (inputs.size() != 3) {
+                result_.success = false;
+                result_.message = "Invalid input count: expected 3 inputs, got " + std::to_string(inputs.size());
+                return false;
+            }
+
             // 重置结果
             memset(&result_.group, 0, sizeof(DetectResultGroup));
             result_.success = false;
@@ -41,7 +43,7 @@ namespace deploy_percept
             int grid_h0 = model_in_h / stride0;
             int grid_w0 = model_in_w / stride0;
             int validCount0 = 0;
-            validCount0 = processYoloOutput(input0, params_.anchor_stride8.data(), grid_h0, grid_w0,
+            validCount0 = processYoloOutput(inputs[0], params_.anchor_stride8.data(), grid_h0, grid_w0,
                                             model_in_h, model_in_w, stride0, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[0], qnt_scales[0]);
 
@@ -50,7 +52,7 @@ namespace deploy_percept
             int grid_h1 = model_in_h / stride1;
             int grid_w1 = model_in_w / stride1;
             int validCount1 = 0;
-            validCount1 = processYoloOutput(input1, params_.anchor_stride16.data(), grid_h1, grid_w1,
+            validCount1 = processYoloOutput(inputs[1], params_.anchor_stride16.data(), grid_h1, grid_w1,
                                             model_in_h, model_in_w, stride1, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[1], qnt_scales[1]);
 
@@ -59,7 +61,7 @@ namespace deploy_percept
             int grid_h2 = model_in_h / stride2;
             int grid_w2 = model_in_w / stride2;
             int validCount2 = 0;
-            validCount2 = processYoloOutput(input2, params_.anchor_stride32.data(), grid_h2, grid_w2,
+            validCount2 = processYoloOutput(inputs[2], params_.anchor_stride32.data(), grid_h2, grid_w2,
                                             model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[2], qnt_scales[2]);
 
@@ -97,18 +99,18 @@ namespace deploy_percept
                 }
                 int n = indexArray[i];
 
-                float x1 = filterBoxes[n * 4 + 0] - pads.left;
-                float y1 = filterBoxes[n * 4 + 1] - pads.top;
+                float x1 = filterBoxes[n * 4 + 0];
+                float y1 = filterBoxes[n * 4 + 1];
                 float x2 = x1 + filterBoxes[n * 4 + 2];
                 float y2 = y1 + filterBoxes[n * 4 + 3];
 
                 int id = classId[n];
                 float obj_conf = objProbs[i];
 
-                result_.group.results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w) / scale_w);
-                result_.group.results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h) / scale_h);
-                result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w) / scale_w);
-                result_.group.results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h) / scale_h);
+                result_.group.results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w));
+                result_.group.results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h));
+                result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w));
+                result_.group.results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
                 result_.group.results[last_count].prop = obj_conf;
 
                 // 设置标签名称，这里只是框架，实际需要从外部加载标签

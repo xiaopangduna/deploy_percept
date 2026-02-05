@@ -80,8 +80,6 @@ bool readNpzFile(const std::string &filepath,
 bool readParamsYaml(const std::string &filepath,
                     int &model_in_h, int &model_in_w,
                     float &box_conf_threshold, float &nms_threshold,
-                    deploy_percept::post_process::BoxRect &pads,
-                    float &scale_w, float &scale_h,
                     std::vector<int32_t> &qnt_zps,
                     std::vector<float> &qnt_scales)
 {
@@ -94,18 +92,6 @@ bool readParamsYaml(const std::string &filepath,
         model_in_w = config["model_w"].as<int>();
         box_conf_threshold = config["box_conf_threshold"].as<float>();
         nms_threshold = config["nms_threshold"].as<float>();
-        scale_w = config["scale_w"].as<float>();
-        scale_h = config["scale_h"].as<float>();
-
-        // 读取pads参数
-        YAML::Node pads_node = config["pads"];
-        if (pads_node)
-        {
-            pads.left = pads_node["left"].as<int>();
-            pads.top = pads_node["top"].as<int>();
-            pads.right = pads_node["right"].as<int>();
-            pads.bottom = pads_node["bottom"].as<int>();
-        }
 
         // 读取量化参数
         if (config["qnt_zps"])
@@ -309,15 +295,12 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     // 读取参数YAML文件
     int model_in_h, model_in_w;
     float box_conf_threshold = 0.5f, nms_threshold = 0.5f;
-    deploy_percept::post_process::BoxRect pads = {0, 0, 0, 0};
-    float scale_w = 1.0, scale_h = 1.0;
     std::vector<int32_t> qnt_zps;
     std::vector<float> qnt_scales;
 
     bool params_loaded = readParamsYaml(params_path,
                                         model_in_h, model_in_w,
                                         box_conf_threshold, nms_threshold,
-                                        pads, scale_w, scale_h,
                                         qnt_zps, qnt_scales);
 
     if (!params_loaded)
@@ -343,11 +326,17 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         std::cout << val << " ";
     std::cout << std::endl;
 
+    // 准备输入向量
+    std::vector<int8_t*> inputs = {
+        input0.data(),
+        input1.data(),
+        input2.data()
+    };
+
     // 执行处理
     bool result = processor->run(
-        input0.data(), input1.data(), input2.data(),
+        inputs,
         model_in_h, model_in_w,
-        pads, scale_w, scale_h,
         qnt_zps, qnt_scales);
 
     // 验证结果

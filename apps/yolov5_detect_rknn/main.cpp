@@ -40,7 +40,6 @@ int main()
 
   cv::Mat img;
   cv::cvtColor(orig_img, img, cv::COLOR_BGR2RGB);
-  deploy_percept::post_process::BoxRect pads;
 
   cv::Size target_size(engine.model_input_attrs_[0].dims[1], engine.model_input_attrs_[0].dims[1]);
   cv::Mat resized_img(target_size.height, target_size.width, CV_8UC3);
@@ -83,8 +82,14 @@ int main()
   deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
   deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
 
-  processor.run((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf,
-                target_size.height, target_size.width, pads, scale_w, scale_h, out_zps, out_scales);
+  // 准备输入向量
+  std::vector<int8_t*> input_buffers = {
+      (int8_t *)outputs[0].buf,
+      (int8_t *)outputs[1].buf, 
+      (int8_t *)outputs[2].buf
+  };
+
+  processor.run(input_buffers, target_size.height, target_size.width, out_zps, out_scales);
   processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
 
   std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
