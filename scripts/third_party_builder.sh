@@ -32,7 +32,7 @@ show_help() {
     echo "示例:"
     echo "  bash scripts/third_party_builder.sh aarch64 --libs all"
     echo "  bash scripts/third_party_builder.sh x86_64 --libs gtest,opencv"
-    echo "  bash scripts/third_party_builder.sh aarch64 --libs spdlog,cnpy,rknpu"
+    echo "  bash scripts/third_party_builder.sh aarch64 --libs cnpy,gtest,opencv,rga,rknpu,spdlog,yaml-cpp"
     echo ""
     echo "注意:"
     echo "  1. 必须在项目根目录下运行，或者通过--project-root指定项目根目录"
@@ -108,6 +108,30 @@ fi
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 PROJECT_ROOT=$(realpath "$SCRIPT_DIR/..")
 echo "项目根目录: $PROJECT_ROOT"
+
+# 自动推断构建模式
+HOST_ARCH=$(uname -m)
+case "${HOST_ARCH}" in
+    aarch64|arm64)
+        HOST_PLATFORM="aarch64"
+        ;;
+    x86_64|amd64)
+        HOST_PLATFORM="x86_64"
+        ;;
+    *)
+        echo "警告: 无法识别的主机架构: ${HOST_ARCH}"
+        HOST_PLATFORM=""
+        ;;
+esac
+
+# 根据平台确定构建模式
+if [ "$PLATFORM" = "$HOST_PLATFORM" ]; then
+    BUILD_MODE="host"
+    echo "检测到目标平台($PLATFORM)与主机平台($HOST_PLATFORM)相同，使用 host 模式构建"
+else
+    BUILD_MODE="cross"
+    echo "检测到目标平台($PLATFORM)与主机平台($HOST_PLATFORM)不同，使用 cross 模式构建"
+fi
 
 # 第三方构建器目录
 THIRD_PARTY_BUILDERS_DIR="$SCRIPT_DIR/third_party_builders"
@@ -214,6 +238,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     # 调用具体的库构建脚本，传递所需参数
     # 调度脚本不管理具体编译逻辑，只负责传递参数
     if ! source "$build_script" \
+        --build-mode "$BUILD_MODE" \
         --platform "$PLATFORM" \
         --project-root "$PROJECT_ROOT" \
         --install-dir "$INSTALL_DIR" \

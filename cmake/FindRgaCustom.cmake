@@ -13,7 +13,7 @@
 # /dev/rga
 
 # 设置RGA库路径
-set(RGA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rga)
+set(RGA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rga/aarch64)
 
 # 第一级：根据系统类型判断
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
