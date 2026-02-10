@@ -93,12 +93,12 @@ int main()
 
   // // 调用新的后处理类
   bool success = seg_processor.run(
+      &output_buffers,
+      orig_img.cols,
+      orig_img.rows,
       output_dims,
       output_scales,
-      output_zps,
-      &output_buffers,
-      orig_img.rows,
-      orig_img.cols);
+      output_zps);
 
   if (!success)
   {

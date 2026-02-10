@@ -52,12 +52,12 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(
-                std::vector<std::vector<int>> &output_dims,
-                std::vector<float> &output_scales,
-                std::vector<int32_t> &output_zps,
                 std::vector<void*> *outputs,
                 int input_image_width,
-                int input_image_height);
+                int input_image_height,
+                std::vector<std::vector<int>> &output_dims,
+                std::vector<float> &output_scales,
+                std::vector<int32_t> &output_zps);
 
             // 新增：绘制检测和分割结果的函数
             void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const;

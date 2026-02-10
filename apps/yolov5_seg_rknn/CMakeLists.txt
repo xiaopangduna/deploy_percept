@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(demo_app)
+project(yolov5_seg_rknn)
 
-add_executable(demo_app main.cpp)
+add_executable(yolov5_seg_rknn main.cpp)
 
-target_link_libraries(demo_app PRIVATE deploy_percept)
+target_link_libraries(yolov5_seg_rknn PRIVATE deploy_percept)
 
 # 安装可执行文件
-install(TARGETS demo_app
+install(TARGETS yolov5_detect_rknn
     RUNTIME DESTINATION bin
 )

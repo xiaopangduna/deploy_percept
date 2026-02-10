@@ -17,19 +17,23 @@ message(STATUS "=== Using aarch64 cross compiler ===")
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-# 编译器（必须是 CACHE + FILEPATH）
-set(CMAKE_C_COMPILER "/usr/bin/aarch64-linux-gnu-gcc" CACHE FILEPATH "C compiler" FORCE)
-set(CMAKE_CXX_COMPILER "/usr/bin/aarch64-linux-gnu-g++" CACHE FILEPATH "C++ compiler" FORCE)
+# 编译器（不要乱 FORCE，除非你非常清楚后果）
+set(CMAKE_C_COMPILER   /usr/bin/aarch64-linux-gnu-gcc)
+set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++)
 
-# 目标根路径（Ubuntu multiarch）和项目第三方库路径
-set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+# Root path
+set(CMAKE_FIND_ROOT_PATH
+    /usr/aarch64-linux-gnu
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
 
-# 查找策略（关键）
+# 查找策略（推荐）
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
-set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-message(STATUS "CMAKE_TOOLCHAIN_FILE = ${CMAKE_TOOLCHAIN_FILE}")
-message(STATUS "CMAKE_SYSTEM_PROCESSOR = ${CMAKE_SYSTEM_PROCESSOR}")
-message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+message(STATUS "CMAKE_SYSTEM_NAME       = ${CMAKE_SYSTEM_NAME}")
+message(STATUS "CMAKE_SYSTEM_PROCESSOR  = ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_C_COMPILER        = ${CMAKE_C_COMPILER}")
+message(STATUS "CMAKE_CXX_COMPILER      = ${CMAKE_CXX_COMPILER}")

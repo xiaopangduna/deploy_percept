@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 # 定义项目名称
 project(deploy_percept VERSION 0.1.0 LANGUAGES CXX)
 
+
 message(STATUS "CMake配置信息:")
 message(STATUS "  - CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "  - CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
@@ -10,8 +11,6 @@ message(STATUS "  - CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
 message(STATUS "  - CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 message(STATUS "  - CMAKE_SYSROOT: ${CMAKE_SYSROOT}")
 message(STATUS "  - CMAKE_CROSSCOMPILING: ${CMAKE_CROSSCOMPILING}")
-
-
 
 
 # 指定C++标准

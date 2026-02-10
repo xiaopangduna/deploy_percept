@@ -27,6 +27,7 @@ show_help() {
     echo "  rga        - Rockchip 2D 图形加速库"
     echo "  rknpu      - Rockchip NPU 库 (仅 aarch64 平台)"
     echo "  spdlog     - 快速C++日志库 (v1.14.1)"
+    echo "  yaml-cpp   - yaml文件"
     echo ""
     echo "示例:"
     echo "  bash scripts/third_party_builder.sh aarch64 --libs all"

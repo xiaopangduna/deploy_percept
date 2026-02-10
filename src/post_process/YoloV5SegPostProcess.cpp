@@ -369,12 +369,12 @@ namespace deploy_percept
         }
 
         bool YoloV5SegPostProcess::run(
-            std::vector<std::vector<int>> &output_dims,
-            std::vector<float> &output_scales,
-            std::vector<int32_t> &output_zps,
             std::vector<void *> *outputs,
             int input_image_width,
-            int input_image_height)
+            int input_image_height,
+            std::vector<std::vector<int>> &output_dims,
+            std::vector<float> &output_scales,
+            std::vector<int32_t> &output_zps)
         {
             // Print debug info to understand dimensions
             printf("Processing image: %dx%d\n", input_image_width, input_image_height);
