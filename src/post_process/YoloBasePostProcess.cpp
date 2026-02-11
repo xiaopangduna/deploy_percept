@@ -39,7 +39,7 @@ int8_t YoloBasePostProcess::qntF32ToAffine(float f32, int32_t zp, float scale) {
     return res;
 }
 
-int YoloBasePostProcess::nms(int validCount, std::vector<float>& outputLocations, 
+int YoloBasePostProcess::retainHighestScoringBoxesByNMS(int validCount, std::vector<float>& outputLocations, 
                          std::vector<int> classIds, std::vector<int>& order, 
                          int filterId, float threshold) {
     for (int i = 0; i < validCount; ++i) {

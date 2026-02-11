@@ -85,7 +85,7 @@ namespace deploy_percept
 
             for (auto c : class_set)
             {
-                nms(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
+                retainHighestScoringBoxesByNMS(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
             }
 
             int last_count = 0;

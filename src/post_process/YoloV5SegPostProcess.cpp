@@ -122,12 +122,12 @@ namespace deploy_percept
 
         // 删除重复的quick_sort_indice_inverse函数，使用父类的quickSortIndices实现
 
-        int YoloV5SegPostProcess::process_i8(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
-                                             int stride,
-                                             std::vector<float> &boxes, std::vector<float> &segments,
-                                             std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                             std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
-                                             std::vector<int32_t> &output_zps)
+        int YoloV5SegPostProcess::decodeDetectionHead(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
+                                                      int stride,
+                                                      std::vector<float> &boxes, std::vector<float> &segments,
+                                                      std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                                      std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
+                                                      std::vector<int32_t> &output_zps)
         {
             int validCount = 0;
             int grid_len = grid_h * grid_w;
@@ -213,7 +213,7 @@ namespace deploy_percept
             return validCount;
         }
 
-        void YoloV5SegPostProcess::matmul_by_cpu_uint8(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
+        void YoloV5SegPostProcess::computeSegMask(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
         {
             float temp = 0;
             for (int i = 0; i < ROWS_A; i++)
@@ -237,7 +237,7 @@ namespace deploy_percept
             }
         }
 
-        void YoloV5SegPostProcess::resize_by_opencv_uint8(uint8_t *input_image, int input_width, int input_height, int boxes_num,
+        void YoloV5SegPostProcess::resizeSegMasks(uint8_t *input_image, int input_width, int input_height, int boxes_num,
                                                           uint8_t *output_image, int target_width, int target_height)
         {
             for (int b = 0; b < boxes_num; b++)
@@ -249,7 +249,7 @@ namespace deploy_percept
             }
         }
 
-        void YoloV5SegPostProcess::crop_mask_uint8(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
+        void YoloV5SegPostProcess::mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
                                                    int *cls_id, int height, int width)
         {
             for (int b = 0; b < boxes_num; b++)
@@ -305,10 +305,10 @@ namespace deploy_percept
                     }
                 }
             }
-            resize_by_opencv_uint8(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
+            resizeSegMasks(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
         }
 
-        void YoloV5SegPostProcess::processNMSSelectedResults(
+        void YoloV5SegPostProcess::collectDetectionsAfterNMS(
             const std::vector<int> &indexArray,
             const std::vector<float> &filterBoxes,
             const std::vector<int> &classId,
@@ -405,10 +405,9 @@ namespace deploy_percept
                 int32_t zp = output_zps[6];
                 float scale = output_scales[6];
 
-                for (size_t i = 0; i < proto.size(); ++i)
-                {
-                    proto[i] = deqntAffineToF32(input_proto[i], zp, scale);
-                }
+                std::transform(input_proto, input_proto + proto.size(), proto.begin(),
+                               [zp, scale](int8_t val)
+                               { return deqntAffineToF32(val, zp, scale); });
             }
 
             // ===============================
@@ -421,12 +420,12 @@ namespace deploy_percept
                 int grid_h0 = output_dims[0][2];
                 int grid_w0 = output_dims[0][3];
                 int stride0 = input_image_height / grid_h0;
-                validCount += process_i8(outputs, 0, params_.anchor_stride8.data(),
-                                         grid_h0, grid_w0, stride0,
-                                         filterBoxes, filterSegments,
-                                         objProbs, classId,
-                                         params_.conf_threshold,
-                                         output_dims, output_scales, output_zps);
+                validCount += decodeDetectionHead(outputs, 0, params_.anchor_stride8.data(),
+                                                  grid_h0, grid_w0, stride0,
+                                                  filterBoxes, filterSegments,
+                                                  objProbs, classId,
+                                                  params_.conf_threshold,
+                                                  output_dims, output_scales, output_zps);
             }
 
             // stride 16
@@ -435,12 +434,12 @@ namespace deploy_percept
                 int grid_h1 = output_dims[2][2];
                 int grid_w1 = output_dims[2][3];
                 int stride1 = input_image_height / grid_h1;
-                validCount += process_i8(outputs, 2, params_.anchor_stride16.data(),
-                                         grid_h1, grid_w1, stride1,
-                                         filterBoxes, filterSegments,
-                                         objProbs, classId,
-                                         params_.conf_threshold,
-                                         output_dims, output_scales, output_zps);
+                validCount += decodeDetectionHead(outputs, 2, params_.anchor_stride16.data(),
+                                                  grid_h1, grid_w1, stride1,
+                                                  filterBoxes, filterSegments,
+                                                  objProbs, classId,
+                                                  params_.conf_threshold,
+                                                  output_dims, output_scales, output_zps);
             }
 
             // stride 32
@@ -449,12 +448,12 @@ namespace deploy_percept
                 int grid_h2 = output_dims[4][2];
                 int grid_w2 = output_dims[4][3];
                 int stride2 = input_image_height / grid_h2;
-                validCount += process_i8(outputs, 4, params_.anchor_stride32.data(),
-                                         grid_h2, grid_w2, stride2,
-                                         filterBoxes, filterSegments,
-                                         objProbs, classId,
-                                         params_.conf_threshold,
-                                         output_dims, output_scales, output_zps);
+                validCount += decodeDetectionHead(outputs, 4, params_.anchor_stride32.data(),
+                                                  grid_h2, grid_w2, stride2,
+                                                  filterBoxes, filterSegments,
+                                                  objProbs, classId,
+                                                  params_.conf_threshold,
+                                                  output_dims, output_scales, output_zps);
             }
 
             if (validCount <= 0)
@@ -470,16 +469,20 @@ namespace deploy_percept
             for (int i = 0; i < validCount; ++i)
                 indexArray[i] = i;
 
-            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
+            // 使用 std::sort 按 objProbs 降序排列索引
+            std::sort(indexArray.begin(), indexArray.end(),
+                      [&objProbs](int a, int b)
+                      { return objProbs[a] > objProbs[b]; });
 
+            // 对每个类别执行 NMS
             std::set<int> class_set(classId.begin(), classId.end());
             for (int c : class_set)
             {
-                nms(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
+                retainHighestScoringBoxesByNMS(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
             }
 
             int last_count = 0;
-            processNMSSelectedResults(
+            collectDetectionsAfterNMS(
                 indexArray,
                 filterBoxes,
                 classId,
@@ -520,7 +523,7 @@ namespace deploy_percept
                 boxes_num * params_.proto_height * params_.proto_weight;
             matmul_out_.assign(matmul_size, 0);
 
-            matmul_by_cpu_uint8(
+            computeSegMask(
                 filterSegments_by_nms,
                 proto.data(),
                 matmul_out_.data(),
@@ -532,7 +535,7 @@ namespace deploy_percept
                 boxes_num * input_image_height * input_image_width;
             seg_mask_.assign(seg_size, 0);
 
-            resize_by_opencv_uint8(
+            resizeSegMasks(
                 matmul_out_.data(),
                 params_.proto_weight,
                 params_.proto_height,
@@ -545,7 +548,7 @@ namespace deploy_percept
                 input_image_height * input_image_width;
             all_mask_in_one_.assign(mask_size, 0);
 
-            crop_mask_uint8(
+            mergeBoxMasks(
                 seg_mask_.data(),
                 all_mask_in_one_.data(),
                 filterBoxes_by_nms.data(),

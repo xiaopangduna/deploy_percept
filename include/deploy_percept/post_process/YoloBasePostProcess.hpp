@@ -76,7 +76,7 @@ public:
      * @return 执行状态，0表示成功
      * @details 通过计算IOU去除重叠度高的冗余检测框，保留置信度最高的检测结果
      */
-    static int nms(int validCount, std::vector<float>& outputLocations, std::vector<int> classIds, 
+    static int retainHighestScoringBoxesByNMS(int validCount, std::vector<float>& outputLocations, std::vector<int> classIds, 
             std::vector<int>& order, int filterId, float threshold);
 
     /**
