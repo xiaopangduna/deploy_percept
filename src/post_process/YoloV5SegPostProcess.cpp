@@ -59,7 +59,7 @@ namespace deploy_percept
                                                 class_colors[det_result->cls_id % 20][2]); // RGB格式
 
                     // 绘制分割掩码
-                    if (results.results_seg.size() > i && results.results_seg[i].seg_mask != nullptr)
+                    if (results.results_seg.size() > i && !results.results_seg[i].seg_mask.empty())
                     {
                         // 直接修改原图的像素值
                         for (int h = 0; h < height; h++)
@@ -95,14 +95,14 @@ namespace deploy_percept
 
                     // 获取对应类别的颜色
                     cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
-                                                class_colors[det_result->cls_id % 20][1],
-                                                class_colors[det_result->cls_id % 20][0]); // BGR格式
+                                                  class_colors[det_result->cls_id % 20][1],
+                                                  class_colors[det_result->cls_id % 20][0]); // BGR格式
 
                     // 绘制边界框
                     cv::rectangle(image,
-                                cv::Point(det_result->box.left, det_result->box.top),
-                                cv::Point(det_result->box.right, det_result->box.bottom),
-                                color, 2);
+                                  cv::Point(det_result->box.left, det_result->box.top),
+                                  cv::Point(det_result->box.right, det_result->box.bottom),
+                                  color, 2);
 
                     // 添加标签文本
                     std::string label = "Class " + std::to_string(det_result->cls_id) + " " +
@@ -110,9 +110,9 @@ namespace deploy_percept
                     int baseline;
                     cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
                     cv::rectangle(image,
-                                cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
-                                cv::Point(det_result->box.left + textSize.width, det_result->box.top),
-                                color, -1);
+                                  cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
+                                  cv::Point(det_result->box.left + textSize.width, det_result->box.top),
+                                  color, -1);
                     cv::putText(image, label,
                                 cv::Point(det_result->box.left, det_result->box.top - 5),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
@@ -131,11 +131,6 @@ namespace deploy_percept
         {
             int validCount = 0;
             int grid_len = grid_h * grid_w;
-
-            if (input_id % 2 == 1)
-            {
-                return validCount;
-            }
 
             // 原型掩码 (proto) 现由 run() 函数单独处理
 
@@ -360,7 +355,7 @@ namespace deploy_percept
                 snprintf(result_.group.results[last_count].name,
                          sizeof(result_.group.results[last_count].name),
                          "class_%d", id);
-                
+
                 // 设置类别ID
                 result_.group.results[last_count].cls_id = id;
 
@@ -376,198 +371,193 @@ namespace deploy_percept
             std::vector<float> &output_scales,
             std::vector<int32_t> &output_zps)
         {
-            // Print debug info to understand dimensions
-            printf("Processing image: %dx%d\n", input_image_width, input_image_height);
+            // ===============================
+            // 0. reset state
+            // ===============================
+            result_.group.count = 0;
+            result_.success = false;
+            result_.message.clear();
+
+            if (!result_.group.results_seg.empty())
+            {
+                result_.group.results_seg[0].seg_mask.clear();
+            }
 
             std::vector<float> filterBoxes;
             std::vector<float> objProbs;
             std::vector<int> classId;
-
             std::vector<float> filterSegments;
-            float proto[params_.proto_channel * params_.proto_height * params_.proto_weight];
             std::vector<float> filterSegments_by_nms;
 
             int validCount = 0;
-            int stride = 0;
-            int grid_h = 0;
-            int grid_w = 0;
 
-            // Initialize result
-            result_.group.count = 0;
-            result_.success = false;
+            // ===============================
+            // 1. proto
+            // ===============================
+            std::vector<float> proto(
+                params_.proto_channel *
+                params_.proto_height *
+                params_.proto_weight);
 
-            // 单独处理原型掩码层（Layer 6）
             if (output_dims.size() > 6)
             {
                 int8_t *input_proto = (int8_t *)(*outputs)[6];
-                int32_t zp_proto = output_zps[6];
-                float scale_proto = output_scales[6];
+                int32_t zp = output_zps[6];
+                float scale = output_scales[6];
 
-                for (int i = 0; i < params_.proto_channel * params_.proto_height * params_.proto_weight; i++)
+                for (size_t i = 0; i < proto.size(); ++i)
                 {
-                    proto[i] = deqntAffineToF32(input_proto[i], zp_proto, scale_proto);
+                    proto[i] = deqntAffineToF32(input_proto[i], zp, scale);
                 }
             }
 
-            // Process the outputs of the model (only layers 0-5)
-            for (int i = 0; i < 6; i++) // 只处理前6层
+            // ===============================
+            // 2. detect heads
+            // ===============================
+
+            // stride 8
+            if (output_dims.size() > 0)
             {
-                if (i >= output_dims.size())
-                    break;
-                grid_h = output_dims[i][2];
-                grid_w = output_dims[i][3];
-                stride = input_image_height / grid_h;
-
-                // 根据层索引选择对应的anchor
-                const int *current_anchor;
-                switch (i / 2)
-                {
-                case 0:
-                    current_anchor = params_.anchor_stride8.data();
-                    break;
-                case 1:
-                    current_anchor = params_.anchor_stride16.data();
-                    break;
-                case 2:
-                    current_anchor = params_.anchor_stride32.data();
-                    break;
-                default:
-                    current_anchor = params_.anchor_stride8.data();
-                    break;
-                }
-
-                validCount += process_i8(outputs, i, (int *)current_anchor, grid_h, grid_w,
-                                         stride,
-                                         filterBoxes, filterSegments, objProbs, classId, params_.conf_threshold,
+                int grid_h0 = output_dims[0][2];
+                int grid_w0 = output_dims[0][3];
+                int stride0 = input_image_height / grid_h0;
+                validCount += process_i8(outputs, 0, params_.anchor_stride8.data(),
+                                         grid_h0, grid_w0, stride0,
+                                         filterBoxes, filterSegments,
+                                         objProbs, classId,
+                                         params_.conf_threshold,
                                          output_dims, output_scales, output_zps);
             }
 
-            // NMS
+            // stride 16
+            if (output_dims.size() > 2)
+            {
+                int grid_h1 = output_dims[2][2];
+                int grid_w1 = output_dims[2][3];
+                int stride1 = input_image_height / grid_h1;
+                validCount += process_i8(outputs, 2, params_.anchor_stride16.data(),
+                                         grid_h1, grid_w1, stride1,
+                                         filterBoxes, filterSegments,
+                                         objProbs, classId,
+                                         params_.conf_threshold,
+                                         output_dims, output_scales, output_zps);
+            }
+
+            // stride 32
+            if (output_dims.size() > 4)
+            {
+                int grid_h2 = output_dims[4][2];
+                int grid_w2 = output_dims[4][3];
+                int stride2 = input_image_height / grid_h2;
+                validCount += process_i8(outputs, 4, params_.anchor_stride32.data(),
+                                         grid_h2, grid_w2, stride2,
+                                         filterBoxes, filterSegments,
+                                         objProbs, classId,
+                                         params_.conf_threshold,
+                                         output_dims, output_scales, output_zps);
+            }
+
             if (validCount <= 0)
             {
                 result_.success = true;
                 return true;
             }
 
-            std::vector<int> indexArray;
+            // ===============================
+            // 3. NMS
+            // ===============================
+            std::vector<int> indexArray(validCount);
             for (int i = 0; i < validCount; ++i)
-            {
-                indexArray.push_back(i);
-            }
+                indexArray[i] = i;
 
-            // 明确调用基类的静态函数
             YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
 
-            std::set<int> class_set(std::begin(classId), std::end(classId));
-
-            for (auto c : class_set)
+            std::set<int> class_set(classId.begin(), classId.end());
+            for (int c : class_set)
             {
                 nms(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
             }
 
             int last_count = 0;
-            result_.group.count = 0;
-
-            // 处理NMS筛选后的检测结果
-            processNMSSelectedResults(indexArray, filterBoxes, classId, objProbs,
-                                      filterSegments, validCount, filterSegments_by_nms, last_count);
+            processNMSSelectedResults(
+                indexArray,
+                filterBoxes,
+                classId,
+                objProbs,
+                filterSegments,
+                validCount,
+                filterSegments_by_nms,
+                last_count);
 
             result_.group.count = last_count;
-            int boxes_num = result_.group.count;
-
-            // 如果没有检测到物体，不需要生成分割掩码
-            if (boxes_num <= 0)
+            if (last_count <= 0)
             {
                 result_.success = true;
                 return true;
             }
 
-            float filterBoxes_by_nms[boxes_num * 4];
-            int cls_id[boxes_num];
-            for (int i = 0; i < boxes_num; i++)
-            {
-                // for crop_mask
-                filterBoxes_by_nms[i * 4 + 0] = result_.group.results[i].box.left;   // x1;
-                filterBoxes_by_nms[i * 4 + 1] = result_.group.results[i].box.top;    // y1;
-                filterBoxes_by_nms[i * 4 + 2] = result_.group.results[i].box.right;  // x2;
-                filterBoxes_by_nms[i * 4 + 3] = result_.group.results[i].box.bottom; // y2;
+            // ===============================
+            // 4. boxes / class
+            // ===============================
+            int boxes_num = last_count;
 
-                // 获取真实的类别ID
-                std::string name_str(result_.group.results[i].name);
-                size_t pos = name_str.find_last_of('_');
-                if (pos != std::string::npos)
-                {
-                    cls_id[i] = std::stoi(name_str.substr(pos + 1));
-                }
-                else
-                {
-                    cls_id[i] = 0; // Default to 0 if parsing fails
-                }
+            std::vector<float> filterBoxes_by_nms(boxes_num * 4);
+            std::vector<int> cls_id(boxes_num);
+
+            for (int i = 0; i < boxes_num; ++i)
+            {
+                filterBoxes_by_nms[i * 4 + 0] = result_.group.results[i].box.left;
+                filterBoxes_by_nms[i * 4 + 1] = result_.group.results[i].box.top;
+                filterBoxes_by_nms[i * 4 + 2] = result_.group.results[i].box.right;
+                filterBoxes_by_nms[i * 4 + 3] = result_.group.results[i].box.bottom;
+                cls_id[i] = result_.group.results[i].cls_id;
             }
 
-            // compute the mask through Matmul
-            int ROWS_A = boxes_num;
-            int COLS_A = params_.proto_channel;
-            int COLS_B = params_.proto_height * params_.proto_weight;
-            uint8_t *matmul_out = nullptr;
+            // ===============================
+            // 5. segmentation (NO malloc)
+            // ===============================
+            const size_t matmul_size =
+                boxes_num * params_.proto_height * params_.proto_weight;
+            matmul_out_.assign(matmul_size, 0);
 
-            // Allocate memory for matmul result
-            matmul_out = (uint8_t *)malloc(boxes_num * params_.proto_height * params_.proto_weight * sizeof(uint8_t));
-            if (!matmul_out)
-            {
-                result_.message = "Failed to allocate memory for matmul_out";
-                return false;
-            }
+            matmul_by_cpu_uint8(
+                filterSegments_by_nms,
+                proto.data(),
+                matmul_out_.data(),
+                boxes_num,
+                params_.proto_channel,
+                params_.proto_height * params_.proto_weight);
 
-            // Perform matrix multiplication: instance coefficients * prototype masks
-            matmul_by_cpu_uint8(filterSegments_by_nms, proto, matmul_out, boxes_num, params_.proto_channel, params_.proto_height * params_.proto_weight);
+            const size_t seg_size =
+                boxes_num * input_image_height * input_image_width;
+            seg_mask_.assign(seg_size, 0);
 
-            // Resize the matmul result to model resolution
-            uint8_t *seg_mask = (uint8_t *)malloc(boxes_num * input_image_height * input_image_width * sizeof(uint8_t));
-            if (!seg_mask)
-            {
-                free(matmul_out);
-                result_.message = "Failed to allocate memory for seg_mask";
-                return false;
-            }
+            resize_by_opencv_uint8(
+                matmul_out_.data(),
+                params_.proto_weight,
+                params_.proto_height,
+                boxes_num,
+                seg_mask_.data(),
+                input_image_width,
+                input_image_height);
 
-            resize_by_opencv_uint8(matmul_out, params_.proto_weight, params_.proto_height, boxes_num, seg_mask, input_image_width, input_image_height);
+            const size_t mask_size =
+                input_image_height * input_image_width;
+            all_mask_in_one_.assign(mask_size, 0);
 
-            // Allocate memory for combined mask
-            uint8_t *all_mask_in_one = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
-            if (!all_mask_in_one)
-            {
-                free(seg_mask);
-                free(matmul_out);
-                result_.message = "Failed to allocate memory for combined mask";
-                return false;
-            }
+            crop_mask_uint8(
+                seg_mask_.data(),
+                all_mask_in_one_.data(),
+                filterBoxes_by_nms.data(),
+                boxes_num,
+                cls_id.data(),
+                input_image_height,
+                input_image_width);
 
-            // Initialize combined mask to 0
-            memset(all_mask_in_one, 0, input_image_height * input_image_width * sizeof(uint8_t));
-
-            // Crop mask based on bounding boxes
-            crop_mask_uint8(seg_mask, all_mask_in_one, filterBoxes_by_nms, boxes_num, cls_id, input_image_height, input_image_width);
-
-            // get real mask - simplified without pad handling
-            uint8_t *real_seg_mask = (uint8_t *)malloc(input_image_height * input_image_width * sizeof(uint8_t));
-            if (!real_seg_mask)
-            {
-                free(all_mask_in_one);
-                free(seg_mask);
-                free(matmul_out);
-                result_.message = "Failed to allocate memory for real_seg_mask";
-                return false;
-            }
-
-            memcpy(real_seg_mask, all_mask_in_one, input_image_height * input_image_width * sizeof(uint8_t));
-
-            result_.group.results_seg[0].seg_mask = real_seg_mask;
-
-            // Clean up allocated memory
-            free(all_mask_in_one);
-            free(seg_mask);
-            free(matmul_out);
+            result_.group.results_seg[0].seg_mask.resize(mask_size);
+            memcpy(result_.group.results_seg[0].seg_mask.data(),
+                   all_mask_in_one_.data(),
+                   mask_size);
 
             result_.success = true;
             return true;

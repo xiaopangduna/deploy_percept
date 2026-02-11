@@ -22,7 +22,7 @@ struct DetectResult {
 };
 
 struct SegmentationResult {
-    uint8_t *seg_mask = nullptr;
+    std::vector<uint8_t> seg_mask;  // 改为vector类型，自动管理内存
 };
 
 struct DetectResultGroup {

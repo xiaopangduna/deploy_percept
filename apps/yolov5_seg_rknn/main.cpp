@@ -63,20 +63,18 @@ int main()
   gettimeofday(&stop_time, NULL);
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-  // 为兼容新的post_process函数接口，创建std::vector<void*>
+  // 为兼容新的post_process函数接口，创建std::vector<void*>并提取输出张量属性
   std::vector<void *> output_buffers;
-  for (int i = 0; i < engine.model_io_num_.n_output; i++)
-  {
-    output_buffers.push_back(outputs[i].buf);
-  }
-
-  // 将rknn_tensor_attr转换为基本数据类型
   std::vector<std::vector<int>> output_dims;
   std::vector<float> output_scales;
   std::vector<int32_t> output_zps;
 
   for (int i = 0; i < engine.model_io_num_.n_output; i++)
   {
+    // 添加输出缓冲区指针
+    output_buffers.push_back(outputs[i].buf);
+    
+    // 提取张量维度信息
     std::vector<int> dims(4);
     dims[0] = engine.model_output_attrs_[i].dims[0];
     dims[1] = engine.model_output_attrs_[i].dims[1];
