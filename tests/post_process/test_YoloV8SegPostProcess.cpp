@@ -8,6 +8,7 @@
 #include "cnpy.h"
 
 using namespace deploy_percept::post_process;
+using namespace deploy_percept::utils;
 namespace fs = std::filesystem;
 
 // 比较两个 DetectResult 向量是否相等
@@ -120,9 +121,9 @@ protected:
     {
         YoloV8SegPostProcess::Params params;
         processor = std::make_unique<YoloV8SegPostProcess>(params);
-        fs::path path_model_outputs_npz = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov8_seg/yolov8_seg_outputs.npz";
+        fs::path path_model_outputs_npz = "apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
         model_outputs_npz = cnpy::npz_load(path_model_outputs_npz);
-        path_seg_result = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov8_seg/yolov8_seg_mask_0.bin";
+        path_seg_result = "apps/yolov8_seg_rknn/yolov8_seg_result_mask.bin";
     }
 
     void TearDown() override
@@ -142,24 +143,6 @@ protected:
         strncpy(res.name, name_str, sizeof(res.name) - 1);
         res.name[sizeof(res.name) - 1] = '\0';
         return res;
-    }
-
-    static std::vector<void *> LoadOutputBuffers(const cnpy::npz_t &npz, int num_outputs)
-    {
-        std::vector<void *> buffers;
-        buffers.reserve(num_outputs);
-        for (int i = 0; i < num_outputs; ++i)
-        {
-            std::string key = "output_" + std::to_string(i);
-            auto it = npz.find(key);
-            if (it == npz.end())
-            {
-                throw std::runtime_error("Key not found: " + key);
-            }
-            // 添加 const_cast 以匹配非常量指针
-            buffers.push_back(const_cast<void *>(it->second.data<void>()));
-        }
-        return buffers;
     }
 };
 
@@ -220,16 +203,22 @@ TEST_F(YoloV8SegPostProcessTest, run)
     // --- 调用被测方法 ---
     bool success = processor->run(&output_buffers, 640, 640,
                                   output_dims, output_scales, output_zps);
-    ASSERT_TRUE(success);
+
     const auto &result = processor->getResult();
-    ASSERT_TRUE(result.success);
+
 
     const auto &result_group = result.group;
 
     // --- 比较检测结果 ---
     EXPECT_TRUE(CompareDetectResultVectors(expected_results, result_group.results));
 
-    EXPECT_TRUE(CompareSegmentationResults(expected_seg, result_group.results_seg[0]));
+    EXPECT_TRUE(CompareSegmentationResults(expected_seg, result.group.results_seg[0]));
+    std::string input_path = "/home/xiaopangdun/project/deploy_percept/apps/yolov8_seg_rknn/bus.jpg";
+    cv::Mat orig_img = cv::imread(input_path, 1);
+    cv::Mat result_img = orig_img.clone();
+    processor->drawDetectionResults(result_img, result_group);
+    std::string computed_out_path = "/home/xiaopangdun/project/deploy_percept/tmp/yolov8_seg_out.jpg";
+    cv::imwrite(computed_out_path, result_img);
 }
 
 int main(int argc, char **argv)

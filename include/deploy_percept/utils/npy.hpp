@@ -2,6 +2,7 @@
 #define DEPLOY_PERCEPT_UTILS_NPY_HPP
 
 #include <string>
+#include <vector>
 #include <cnpy.h>
 
 namespace deploy_percept {
@@ -22,6 +23,14 @@ bool areNpzObjectsIdentical(const cnpy::npz_t& npz1, const cnpy::npz_t& npz2);
  * @return bool true表示完全一致，false表示存在差异
  */
 bool compareNpzFiles(const std::string& file1, const std::string& file2);
+
+/**
+ * @brief 从cnpy::npz_t对象中加载输出缓冲区
+ * @param npz 包含输出数据的NPZ对象
+ * @param num_outputs 输出的数量
+ * @return std::vector<void*> 包含输出缓冲区指针的向量
+ */
+std::vector<void*> LoadOutputBuffers(const cnpy::npz_t& npz, int num_outputs);
 
 } // namespace utils
 } // namespace deploy_percept

@@ -159,33 +159,6 @@ int main()
     deploy_percept::post_process::YoloV8SegPostProcess::Params params_post;
     deploy_percept::post_process::YoloV8SegPostProcess seg_processor(params_post);
 
-    // 打印后处理参数用于调试
-    printf("\n=== YoloV8SegPostProcess Parameters ===\n");
-    printf("Image dimensions: %d x %d\n", orig_img.cols, orig_img.rows);
-    printf("Number of output tensors: %zu\n", output_buffers.size());
-    
-    printf("Output dimensions:\n");
-    for (size_t i = 0; i < output_dims.size(); i++) {
-        printf("  Tensor[%zu]: [%d, %d, %d, %d]\n", i, 
-               output_dims[i][0], output_dims[i][1], output_dims[i][2], output_dims[i][3]);
-    }
-    
-    printf("Output scales:\n");
-    for (size_t i = 0; i < output_scales.size(); i++) {
-        printf("  Tensor[%zu]: %.6f\n", i, output_scales[i]);
-    }
-    
-    printf("Output zero points:\n");
-    for (size_t i = 0; i < output_zps.size(); i++) {
-        printf("  Tensor[%zu]: %d\n", i, output_zps[i]);
-    }
-    
-    printf("Output buffer pointers:\n");
-    for (size_t i = 0; i < output_buffers.size(); i++) {
-        printf("  Buffer[%zu]: %p\n", i, output_buffers[i]);
-    }
-    printf("=====================================\n\n");
-
     // // 调用新的后处理类
     bool success = seg_processor.run(
         &output_buffers,
@@ -203,54 +176,45 @@ int main()
     // 获取后处理结果
     auto seg_results = seg_processor.getResult().group;
 
-    // 打印检测结果
-    printf("\n=== Detection Results ===\n");
-    printf("Total detections: %d\n", seg_results.count);
-    for (int i = 0; i < seg_results.count; i++) {
-        const auto& det = seg_results.results[i];
-        printf("Detection %d:\n", i);
-        printf("  Class ID: %d\n", det.cls_id);
-        printf("  Class Name: %s\n", det.name);
-        printf("  Confidence: %.4f\n", det.prop);
-        printf("  Bounding Box: [%d, %d, %d, %d]\n", 
-               det.box.left, det.box.top, det.box.right, det.box.bottom);
-        printf("  Width: %d, Height: %d\n", 
-               det.box.right - det.box.left, det.box.bottom - det.box.top);
-    }
-    printf("========================\n\n");
-
     // 保存分割结果到文件
     printf("=== Saving Segmentation Results ===\n");
-    for (size_t i = 0; i < seg_results.results_seg.size(); i++) {
-        const auto& seg = seg_results.results_seg[i];
-        if (!seg.seg_mask.empty()) {
+    for (size_t i = 0; i < seg_results.results_seg.size(); i++)
+    {
+        const auto &seg = seg_results.results_seg[i];
+        if (!seg.seg_mask.empty())
+        {
             std::string seg_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/segmentation_mask_" + std::to_string(i) + ".bin";
-            FILE* seg_file = fopen(seg_filename.c_str(), "wb");
-            if (seg_file) {
+            FILE *seg_file = fopen(seg_filename.c_str(), "wb");
+            if (seg_file)
+            {
                 size_t written = fwrite(seg.seg_mask.data(), sizeof(uint8_t), seg.seg_mask.size(), seg_file);
                 fclose(seg_file);
-                printf("Saved segmentation mask %zu to %s (size: %zu bytes)\n", 
+                printf("Saved segmentation mask %zu to %s (size: %zu bytes)\n",
                        i, seg_filename.c_str(), seg.seg_mask.size());
-                
+
                 // 同时保存一些元数据信息
                 std::string meta_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/segmentation_meta_" + std::to_string(i) + ".txt";
-                FILE* meta_file = fopen(meta_filename.c_str(), "w");
-                if (meta_file) {
+                FILE *meta_file = fopen(meta_filename.c_str(), "w");
+                if (meta_file)
+                {
                     fprintf(meta_file, "Segmentation Mask %zu Metadata\n", i);
                     fprintf(meta_file, "Mask Size: %zu bytes\n", seg.seg_mask.size());
                     fprintf(meta_file, "Detection Index: %zu\n", i);
-                    if (i < static_cast<size_t>(seg_results.count)) {
-                        const auto& det = seg_results.results[i];
+                    if (i < static_cast<size_t>(seg_results.count))
+                    {
+                        const auto &det = seg_results.results[i];
                         fprintf(meta_file, "Associated Class ID: %d\n", det.cls_id);
                         fprintf(meta_file, "Associated Class Name: %s\n", det.name);
                         fprintf(meta_file, "Associated Confidence: %.4f\n", det.prop);
-                        fprintf(meta_file, "Associated BBox: [%d, %d, %d, %d]\n", 
+                        fprintf(meta_file, "Associated BBox: [%d, %d, %d, %d]\n",
                                 det.box.left, det.box.top, det.box.right, det.box.bottom);
                     }
                     fclose(meta_file);
                     printf("Saved metadata to %s\n", meta_filename.c_str());
                 }
-            } else {
+            }
+            else
+            {
                 printf("Failed to create segmentation file: %s\n", seg_filename.c_str());
             }
         }
@@ -264,6 +228,12 @@ int main()
     printf("Save computed detect result to %s\n", computed_out_path.c_str());
     cv::imwrite(computed_out_path, result_img);
     rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
-
+    // std::vector<DetectResult> expected_results = {
+    // MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
+    // MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
+    // MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),
+    // MakeDetectResult(0, "class_0", 0.8655f, 477, 232, 559, 519),
+    // MakeDetectResult(0, "class_0", 0.5403f, 79, 327, 125, 514),
+    // MakeDetectResult(27, "class_27", 0.2741f, 248, 284, 259, 310)};
     return 0;
 }

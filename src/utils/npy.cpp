@@ -105,5 +105,23 @@ bool compareNpzFiles(const std::string& file1, const std::string& file2) {
     }
 }
 
+std::vector<void*> LoadOutputBuffers(const cnpy::npz_t& npz, int num_outputs)
+{
+    std::vector<void *> buffers;
+    buffers.reserve(num_outputs);
+    for (int i = 0; i < num_outputs; ++i)
+    {
+        std::string key = "output_" + std::to_string(i);
+        auto it = npz.find(key);
+        if (it == npz.end())
+        {
+            throw std::runtime_error("Key not found: " + key);
+        }
+        // 添加 const_cast 以匹配非常量指针
+        buffers.push_back(const_cast<void *>(it->second.data<void>()));
+    }
+    return buffers;
+}
+
 } // namespace utils
 } // namespace deploy_percept
