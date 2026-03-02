@@ -129,13 +129,6 @@ namespace deploy_percept
                                                       std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
                                                       std::vector<int32_t> &output_zps)
         {
-            printf("[DEBUG] decodeDetectionHead调用参数:\n");
-            printf("  input_id: %d\n", input_id);
-            printf("  grid_h: %d, grid_w: %d\n", grid_h, grid_w);
-            printf("  stride: %d\n", stride);
-            printf("  threshold: %.4f\n", threshold);
-            printf("  dfl_len: %d\n", output_dims[0][1] / 4);
-            
             int validCount = 0;
             int grid_len = grid_h * grid_w;
             int dfl_len = output_dims[0][1] / 4;
@@ -146,16 +139,6 @@ namespace deploy_percept
             int8_t *score_tensor = (int8_t *)(*all_input)[input_id + 1];
             int32_t score_zp = output_zps[input_id + 1];
             float score_scale = output_scales[input_id + 1];
-            
-            // 添加输入数据验证
-            printf("[DEBUG] 输入张量信息 (input_id=%d):\n", input_id);
-            printf("  box_tensor[0~9]: ");
-            for(int idx = 0; idx < std::min(10, grid_len * 4 * dfl_len); idx++) {
-                printf("%d ", box_tensor[idx]);
-            }
-            printf("\n");
-            printf("  box_zp: %d, box_scale: %.6f\n", box_zp, box_scale);
-            printf("  score_zp: %d, score_scale: %.6f\n", score_zp, score_scale);
             
             int8_t *score_sum_tensor = nullptr;
             int32_t score_sum_zp = 0;
@@ -221,12 +204,6 @@ namespace deploy_percept
                             offset += grid_len;
                         }
                         compute_dfl(before_dfl, dfl_len, box);
-                        
-                        // 添加DFL解码结果调试
-                        if (validCount < 5) {
-                            printf("[DEBUG] DFL解码结果: box[0]=%.3f, box[1]=%.3f, box[2]=%.3f, box[3]=%.3f\n",
-                                   box[0], box[1], box[2], box[3]);
-                        }
 
                         float x1, y1, x2, y2, w, h;
                         x1 = (-box[0] + j + 0.5) * stride;
@@ -235,15 +212,6 @@ namespace deploy_percept
                         y2 = (box[3] + i + 0.5) * stride;
                         w = x2 - x1;
                         h = y2 - y1;
-                        
-                        // 添加调试信息
-                        if (validCount < 10) {  // 只打印前10个检测框的详细信息
-                            printf("[DEBUG] 解码详情 - 网格(%d,%d): box[0]=%.2f, box[1]=%.2f, box[2]=%.2f, box[3]=%.2f\n", 
-                                   i, j, box[0], box[1], box[2], box[3]);
-                            printf("[DEBUG] 计算结果: x1=%.2f, y1=%.2f, x2=%.2f, y2=%.2f, w=%.2f, h=%.2f\n",
-                                   x1, y1, x2, y2, w, h);
-                            printf("[DEBUG] 网格参数: stride=%d, j=%d, i=%d\n", stride, j, i);
-                        }
 
                         boxes.push_back(x1);
                         boxes.push_back(y1);
@@ -537,30 +505,6 @@ namespace deploy_percept
                     remaining_count++;
                 }
             }
-            
-            // printf("[DEBUG] NMS处理后统计:\n");
-            // printf("  原始检测数量: %d\n", validCount);
-            // printf("  NMS后剩余数量: %d\n", remaining_count);
-            // printf("  过滤掉的数量: %d\n", validCount - remaining_count);
-            // printf("  NMS阈值: %.2f\n", params_.nms_threshold);
-            
-            // // 打印保留的检测框详细信息
-            // printf("[DEBUG] 保留的检测框详情:\n");
-            // for (int i = 0; i < validCount; ++i) {
-            //     if (indexArray[i] != -1) {
-            //         int n = indexArray[i];
-            //         float x1 = filterBoxes[n * 4 + 0];
-            //         float y1 = filterBoxes[n * 4 + 1];
-            //         float w = filterBoxes[n * 4 + 2];
-            //         float h = filterBoxes[n * 4 + 3];
-            //         float x2 = x1 + w;
-            //         float y2 = y1 + h;
-                    
-            //         printf("  检测框 %d: 类别=%d, 置信度=%.4f, 坐标=[%.1f,%.1f,%.1f,%.1f], 尺寸=[%.1fx%.1f]\n",
-            //                i, classId[n], objProbs[n], x1, y1, x2, y2, w, h);
-            //     }
-            // }
-            // printf("\n");
 
             int last_count = 0;
             collectDetectionsAfterNMS(
@@ -576,15 +520,6 @@ namespace deploy_percept
                 input_image_height);
 
             result_.group.count = last_count;
-            
-            // 添加最终结果验证：确保按置信度降序排列
-            printf("[DEBUG] 最终结果验证:\n");
-            for (int i = 0; i < last_count; ++i) {
-                printf("  结果 %d: 类别=%d, 置信度=%.4f, 坐标=[%d,%d,%d,%d]\n",
-                       i+1, result_.group.results[i].cls_id, result_.group.results[i].prop,
-                       result_.group.results[i].box.left, result_.group.results[i].box.top,
-                       result_.group.results[i].box.right, result_.group.results[i].box.bottom);
-            }
             
             if (last_count <= 0)
             {
