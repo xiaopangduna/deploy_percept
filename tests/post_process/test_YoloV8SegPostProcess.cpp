@@ -10,6 +10,109 @@
 using namespace deploy_percept::post_process;
 namespace fs = std::filesystem;
 
+// 比较两个 DetectResult 向量是否相等
+bool CompareDetectResultVectors(const std::vector<DetectResult> &expected,
+                                const std::vector<DetectResult> &actual)
+{
+    bool match = true;
+    // if (expected.size() != actual.size()) {
+    //     EXPECT_EQ(expected.size(), actual.size());
+    //     return false;
+    // }
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        const auto &exp = expected[i];
+        const auto &act = actual[i];
+        // 使用 SCOPED_TRACE 帮助定位哪个元素失败
+        ::testing::ScopedTrace trace(__FILE__, __LINE__,
+                                     "Comparing element " + std::to_string(i));
+        if (exp.cls_id != act.cls_id)
+        {
+            EXPECT_EQ(exp.cls_id, act.cls_id);
+            match = false;
+        }
+        if (std::strcmp(exp.name, act.name) != 0)
+        {
+            EXPECT_STREQ(exp.name, act.name);
+            match = false;
+        }
+        if (std::abs(exp.prop - act.prop) > 1e-4)
+        {
+            EXPECT_NEAR(exp.prop, act.prop, 1e-4);
+            match = false;
+        }
+        if (exp.box.left != act.box.left ||
+            exp.box.top != act.box.top ||
+            exp.box.right != act.box.right ||
+            exp.box.bottom != act.box.bottom)
+        {
+            EXPECT_EQ(exp.box.left, act.box.left);
+            EXPECT_EQ(exp.box.top, act.box.top);
+            EXPECT_EQ(exp.box.right, act.box.right);
+            EXPECT_EQ(exp.box.bottom, act.box.bottom);
+            match = false;
+        }
+    }
+    return match;
+}
+
+// 比较两个 SegmentationResult 对象（内部使用 EXPECT_* 断言）
+bool CompareSegmentationResults(const SegmentationResult &expected,
+                                const SegmentationResult &actual)
+{
+    bool match = true;
+
+    // 比较大小
+    EXPECT_EQ(expected.seg_mask.size(), actual.seg_mask.size());
+    if (expected.seg_mask.size() != actual.seg_mask.size())
+    {
+        return false; // 大小不同，无需继续
+    }
+
+    // 逐字节比较
+    for (size_t i = 0; i < expected.seg_mask.size(); ++i)
+    {
+        SCOPED_TRACE("Mask byte index " + std::to_string(i));
+        EXPECT_EQ(expected.seg_mask[i], actual.seg_mask[i]);
+        if (::testing::Test::HasFailure())
+        {
+            match = false;
+        }
+    }
+    return match;
+}
+SegmentationResult LoadSegmentationResult(const fs::path &file_path)
+{
+    std::ifstream file(file_path, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+    {
+        throw std::runtime_error("Cannot open file: " + file_path.string());
+    }
+
+    std::streamsize size = file.tellg();
+    if (size < 0)
+    {
+        throw std::runtime_error("Failed to get file size: " + file_path.string());
+    }
+    file.seekg(0, std::ios::beg);
+
+    SegmentationResult result;
+    result.seg_mask.resize(static_cast<size_t>(size));
+
+    if (!file.read(reinterpret_cast<char *>(result.seg_mask.data()), size))
+    {
+        throw std::runtime_error("Failed to read file: " + file_path.string());
+    }
+
+    // 可选：检查是否完整读取
+    if (file.gcount() != size)
+    {
+        throw std::runtime_error("Read incomplete: " + file_path.string());
+    }
+
+    return result;
+}
+
 class YoloV8SegPostProcessTest : public ::testing::Test
 {
 protected:
@@ -29,44 +132,57 @@ protected:
     std::unique_ptr<deploy_percept::post_process::YoloV8SegPostProcess> processor;
     cnpy::npz_t model_outputs_npz;
     fs::path path_seg_result;
-};
-
-TEST_F(YoloV8SegPostProcessTest, run)
-
-{
-    // 读取expected_seg
-    std::ifstream file(path_seg_result, std::ios::binary | std::ios::ate);
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    SegmentationResult expected_seg;
-    expected_seg.seg_mask.resize(size);
-    file.read(reinterpret_cast<char *>(expected_seg.seg_mask.data()), size);
-    file.close();
-
-    auto make_detect = [](int cls_id, const char *name_str, float conf,
-                          int x1, int y1, int x2, int y2) -> DetectResult
+    static DetectResult MakeDetectResult(int cls_id, const char *name_str, float conf,
+                                         int x1, int y1, int x2, int y2)
     {
         DetectResult res;
         res.cls_id = cls_id;
         res.prop = conf;
         res.box = {x1, y1, x2, y2};
-        // 安全拷贝字符串到固定长度数组
         strncpy(res.name, name_str, sizeof(res.name) - 1);
         res.name[sizeof(res.name) - 1] = '\0';
         return res;
-    };
+    }
+
+    static std::vector<void *> LoadOutputBuffers(const cnpy::npz_t &npz, int num_outputs)
+    {
+        std::vector<void *> buffers;
+        buffers.reserve(num_outputs);
+        for (int i = 0; i < num_outputs; ++i)
+        {
+            std::string key = "output_" + std::to_string(i);
+            auto it = npz.find(key);
+            if (it == npz.end())
+            {
+                throw std::runtime_error("Key not found: " + key);
+            }
+            // 添加 const_cast 以匹配非常量指针
+            buffers.push_back(const_cast<void *>(it->second.data<void>()));
+        }
+        return buffers;
+    }
+};
+
+TEST_F(YoloV8SegPostProcessTest, run)
+
+{
+    SegmentationResult expected_seg;
+    ASSERT_NO_THROW({
+        expected_seg = LoadSegmentationResult(path_seg_result);
+    }) << "Failed to load expected segmentation mask";
+
     std::vector<DetectResult> expected_results = {
-        make_detect(5, "class_5", 0.9113f, 87, 137, 553, 439),
-        make_detect(0, "class_0", 0.8998f, 108, 236, 227, 537),
-        make_detect(0, "class_0", 0.8693f, 211, 241, 283, 508),
-        make_detect(0, "class_0", 0.8655f, 477, 232, 559, 519),
-        make_detect(0, "class_0", 0.5403f, 79, 327, 125, 514),
-        make_detect(27, "class_27", 0.2741f, 248, 284, 259, 310)};
+        MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
+        MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
+        MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),
+        MakeDetectResult(0, "class_0", 0.8655f, 477, 232, 559, 519),
+        MakeDetectResult(0, "class_0", 0.5403f, 79, 327, 125, 514),
+        MakeDetectResult(27, "class_27", 0.2741f, 248, 284, 259, 310)};
 
     std::vector<std::vector<int>> output_dims;
     std::vector<float> output_scales;
     std::vector<int32_t> output_zps;
-    std::vector<void *> output_buffers;
+
     output_dims = {
         {1, 64, 80, 80},
         {1, 80, 80, 80},
@@ -96,17 +212,11 @@ TEST_F(YoloV8SegPostProcessTest, run)
         -55, -128, -128, 43,
         -119};
 
-    output_buffers.reserve(13);
-    for (int i = 0; i < 13; ++i)
-    {
-        std::string key = "output_" + std::to_string(i);
-        auto it = model_outputs_npz.find(key);
-        ASSERT_NE(it, model_outputs_npz.end()) << "Key not found: " << key;
+    std::vector<void *> output_buffers;
+    ASSERT_NO_THROW({
+        output_buffers = LoadOutputBuffers(model_outputs_npz, 13);
+    }) << "Failed to load output buffers from NPZ";
 
-        // 获取数组数据指针（void* 指向原始数据）
-        void *data_ptr = it->second.data<void>();
-        output_buffers.push_back(data_ptr);
-    }
     // --- 调用被测方法 ---
     bool success = processor->run(&output_buffers, 640, 640,
                                   output_dims, output_scales, output_zps);
@@ -117,27 +227,9 @@ TEST_F(YoloV8SegPostProcessTest, run)
     const auto &result_group = result.group;
 
     // --- 比较检测结果 ---
-    for (size_t i = 0; i < expected_results.size(); ++i)
-    {
-        const auto &exp = expected_results[i];
-        const auto &act = result_group.results[i];
-        EXPECT_EQ(exp.cls_id, act.cls_id);
-        EXPECT_STREQ(exp.name, act.name);
-        EXPECT_NEAR(exp.prop, act.prop, 1e-4);
-        EXPECT_EQ(exp.box.left, act.box.left);
-        EXPECT_EQ(exp.box.top, act.box.top);
-        EXPECT_EQ(exp.box.right, act.box.right);
-        EXPECT_EQ(exp.box.bottom, act.box.bottom);
-    }
+    EXPECT_TRUE(CompareDetectResultVectors(expected_results, result_group.results));
 
-    // --- 比较分割结果（假设只有一个分割输出）---
-    ASSERT_EQ(result_group.results_seg.size(), 1);
-    const auto &actual_seg = result_group.results_seg[0].seg_mask;
-    ASSERT_EQ(actual_seg.size(), expected_seg.seg_mask.size());
-    for (size_t i = 0; i < actual_seg.size(); ++i)
-    {
-        EXPECT_EQ(actual_seg[i], expected_seg.seg_mask[i]) << "Mismatch at index " << i;
-    }
+    EXPECT_TRUE(CompareSegmentationResults(expected_seg, result_group.results_seg[0]));
 }
 
 int main(int argc, char **argv)
