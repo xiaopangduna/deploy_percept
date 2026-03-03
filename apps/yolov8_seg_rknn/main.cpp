@@ -201,7 +201,7 @@ int main()
     printf("Save computed detect result to %s\n", computed_out_path.c_str());
     cv::imwrite(computed_out_path, result_img);
     rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
-    // std::vector<DetectResult> expected_results = {
+    // std::vector<DetectionObject> expected_results = {
     // MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
     // MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
     // MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),

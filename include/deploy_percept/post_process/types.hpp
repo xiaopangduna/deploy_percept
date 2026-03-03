@@ -14,7 +14,7 @@ struct BoxRect {
     int bottom = 0;
 };
 
-struct DetectResult {
+struct DetectionObject {
     char name[16] = {};  // 初始化字符数组为全零
     BoxRect box{};
     float prop = 0.0f;
@@ -26,13 +26,13 @@ struct DetectResult {
 struct DetectResultGroup {
     int id = 0;
     int count = 0;
-    DetectResult results[64] = {};  // 初始化为默认值
+    std::vector<DetectionObject> results; // 使用动态数组，更灵活
 };
 
 struct ResultGroup {
     int id = 0;
     int count = 0;
-    std::vector<DetectResult> results; // 检测结果
+    std::vector<DetectionObject> results; // 检测结果
     std::vector<uint8_t> segmentation_masks; // 分割掩码，只需要一个掩码
 };
 

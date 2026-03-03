@@ -168,8 +168,8 @@ bool readExpectedResultsFromYaml(const std::string &filepath,
 }
 
 // 比较两个检测结果是否相等（考虑浮点数精度）
-bool compareDetectionResults(const deploy_percept::post_process::DetectResult &a,
-                             const deploy_percept::post_process::DetectResult &b,
+bool compareDetectionResults(const deploy_percept::post_process::DetectionObject &a,
+                             const deploy_percept::post_process::DetectionObject &b,
                              float tolerance = 0.01f)
 {
     // 比较名称

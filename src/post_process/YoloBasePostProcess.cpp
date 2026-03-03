@@ -263,7 +263,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
     // 然后绘制边界框和标签
     for (int i = 0; i < results.count; i++)
     {
-        const DetectResult *det_result = &results.results[i];
+        const DetectionObject *det_result = &results.results[i];
 
         // 获取对应类别的颜色
         cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],

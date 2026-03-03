@@ -11,8 +11,8 @@ using namespace deploy_percept::post_process;
 using namespace deploy_percept::utils;
 namespace fs = std::filesystem;
 
-bool CompareDetectResultVectors(const std::vector<DetectResult> &expected,
-                                const std::vector<DetectResult> &actual)
+bool CompareDetectResultVectors(const std::vector<DetectionObject> &expected,
+                                const std::vector<DetectionObject> &actual)
 {
     bool match = true;
     // if (expected.size() != actual.size()) {
@@ -141,10 +141,10 @@ protected:
     std::unique_ptr<deploy_percept::post_process::YoloV8SegPostProcess> processor;
     cnpy::npz_t model_outputs_npz;
     fs::path path_seg_result;
-    static DetectResult MakeDetectResult(int cls_id, const char *name_str, float conf,
+    static DetectionObject MakeDetectResult(int cls_id, const char *name_str, float conf,
                                          int x1, int y1, int x2, int y2)
     {
-        DetectResult res;
+        DetectionObject res;
         res.cls_id = cls_id;
         res.prop = conf;
         res.box = {x1, y1, x2, y2};
@@ -161,7 +161,7 @@ TEST_F(YoloV8SegPostProcessTest, run)
         expected_seg_mask = LoadSegmentationResult(path_seg_result);
     }) << "Failed to load expected segmentation mask";
 
-    std::vector<DetectResult> expected_results = {
+    std::vector<DetectionObject> expected_results = {
         MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
         MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
         MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),
