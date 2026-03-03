@@ -76,17 +76,15 @@ namespace deploy_percept
                            std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
                            std::vector<int32_t> &output_zps);
 
-            static void computeSegMask(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B);
-
-            static void resizeSegMasks(uint8_t *input_image, int input_width, int input_height, int boxes_num,
-                                               uint8_t *output_image, int target_width, int target_height);
-
-            static void mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
-                                        int *cls_id, int height, int width);
-
-            static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                                    int input_image_height, int input_image_width, int cropped_height, int cropped_width,
-                                    int ori_in_height, int ori_in_width, int y_pad, int x_pad);
+            // 移除已在基类中定义的通用函数声明，直接使用基类的实现
+            // static void computeSegMask(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B);
+            // static void resizeSegMasks(uint8_t *input_image, int input_width, int input_height, int boxes_num,
+            //                    uint8_t *output_image, int target_width, int target_height);
+            // static void mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
+            //                 int *cls_id, int height, int width);
+            // static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
+            //                 int input_image_height, int input_image_width, int cropped_height, int cropped_width,
+            //                 int ori_in_height, int ori_in_width, int y_pad, int x_pad);
 
             // 新增：处理NMS后检测结果的函数
             void collectDetectionsAfterNMS(

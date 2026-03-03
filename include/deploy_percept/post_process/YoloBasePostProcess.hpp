@@ -4,6 +4,7 @@
 #include "deploy_percept/post_process/types.hpp"
 #include <vector>
 #include <string>
+#include <opencv2/opencv.hpp>
 
 namespace deploy_percept {
 namespace post_process {
@@ -17,7 +18,7 @@ public:
      * @brief 将浮点数值钳位到指定整数范围内
      * @param val 输入的浮点数值
      * @param min 最小边界值
-     * @param max 最大边界值
+     * @param max 最大边界边界值
      * @return 钳位后的整数值
      * @details 如果val小于min则返回min，如果val大于max则返回max，否则返回val的整数部分
      */
@@ -60,7 +61,7 @@ public:
      * @param right 排序结束索引
      * @param indices 与input对应的索引数组
      * @return 排序完成后基准元素的最终位置
-     * @details 使用快速排序算法对input数组进行降序排序，同时同步调整indices数组
+     * @details 使用快速排序算法对input数组进行降序排序，同时调整indices数组
      *          主要用于NMS算法前对检测框置信度进行排序
      */
     static int quickSortIndices(std::vector<float> &input, int left, int right, std::vector<int> &indices);
@@ -94,6 +95,100 @@ public:
      */
     static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, 
                                 float xmin1, float ymin1, float xmax1, float ymax1);
+
+    /**
+     * @brief 计算分割掩码
+     * @param A 分割特征向量
+     * @param B 原型掩码
+     * @param C 输出掩码
+     * @param ROWS_A A的行数
+     * @param COLS_A A的列数
+     * @param COLS_B B的列数
+     * @details 通过矩阵乘法计算分割掩码
+     */
+    static void computeSegMask(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B);
+
+    /**
+     * @brief 调整分割掩码大小
+     * @param input_image 输入掩码图像
+     * @param input_width 输入宽度
+     * @param input_height 输入高度
+     * @param boxes_num 检测框数量
+     * @param output_image 输出掩码图像
+     * @param target_width 目标宽度
+     * @param target_height 目标高度
+     * @details 将分割掩码调整为指定尺寸
+     */
+    static void resizeSegMasks(uint8_t *input_image, int input_width, int input_height, int boxes_num,
+                              uint8_t *output_image, int target_width, int target_height);
+
+    /**
+     * @brief 合并边界框和掩码
+     * @param seg_mask 分割掩码
+     * @param all_mask_in_one 合并后的掩码
+     * @param boxes 边界框坐标
+     * @param boxes_num 检测框数量
+     * @param cls_id 类别ID
+     * @param height 图像高度
+     * @param width 图像宽度
+     * @details 将各个检测框的分割掩码合并成一个完整的分割掩码
+     */
+    static void mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
+                             int *cls_id, int height, int width);
+
+    /**
+     * @brief 反转分割掩码
+     * @param seg_mask 分割掩码
+     * @param cropped_seg 裁剪后的分割掩码
+     * @param seg_mask_real 真实分割掩码
+     * @param input_image_height 输入图像高度
+     * @param input_image_width 输入图像宽度
+     * @param cropped_height 裁剪高度
+     * @param cropped_width 裁剪宽度
+     * @param ori_in_height 原始输入高度
+     * @param ori_in_width 原始输入宽度
+     * @param y_pad y轴填充
+     * @param x_pad x轴填充
+     * @details 将裁剪后的分割掩码映射回原始图像尺寸
+     */
+    static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
+                           int input_image_height, int input_image_width, int cropped_height, int cropped_width,
+                           int ori_in_height, int ori_in_width, int y_pad, int x_pad);
+
+    /**
+     * @brief 绘制检测和分割结果
+     * @param image 要绘制的图像
+     * @param results 检测结果
+     * @details 在图像上绘制检测框和分割掩码
+     */
+    void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const;
+
+protected:
+    /**
+     * @brief 收集NMS后的检测结果
+     * @param indexArray 索引数组
+     * @param filterBoxes 过滤后的边界框
+     * @param classId 类别ID
+     * @param objProbs 置信度
+     * @param filterSegments 过滤后的分割特征
+     * @param validCount 有效数量
+     * @param filterSegments_by_nms NMS后的分割特征
+     * @param last_count 最终计数
+     * @param input_image_width 输入图像宽度（仅YOLOv8使用）
+     * @param input_image_height 输入图像高度（仅YOLOv8使用）
+     * @details 在NMS之后收集检测结果
+     */
+    void collectDetectionsAfterNMS(
+        const std::vector<int> &indexArray,
+        const std::vector<float> &filterBoxes,
+        const std::vector<int> &classId,
+        const std::vector<float> &objProbs,
+        const std::vector<float> &filterSegments,
+        int validCount,
+        std::vector<float> &filterSegments_by_nms,
+        int &last_count,
+        int input_image_width = 0,
+        int input_image_height = 0);
 };
 
 } // namespace post_process
