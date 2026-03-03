@@ -57,32 +57,41 @@ bool CompareDetectResultVectors(const std::vector<DetectResult> &expected,
     return match;
 }
 
-// 比较两个 SegmentationResult 对象（内部使用 EXPECT_* 断言）
-bool CompareSegmentationResults(const SegmentationResult &expected,
-                                const SegmentationResult &actual)
-{
+// 比较两个分割掩码向量是否相等
+bool CompareSegmentationMaskVectors(const std::vector<std::vector<uint8_t>>& expected,
+                                   const std::vector<std::vector<uint8_t>>& actual) {
     bool match = true;
-
-    // 比较大小
-    EXPECT_EQ(expected.seg_mask.size(), actual.seg_mask.size());
-    if (expected.seg_mask.size() != actual.seg_mask.size())
-    {
-        return false; // 大小不同，无需继续
+    if (expected.size() != actual.size()) {
+        EXPECT_EQ(expected.size(), actual.size());
+        return false;
     }
-
-    // 逐字节比较
-    for (size_t i = 0; i < expected.seg_mask.size(); ++i)
-    {
-        SCOPED_TRACE("Mask byte index " + std::to_string(i));
-        EXPECT_EQ(expected.seg_mask[i], actual.seg_mask[i]);
-        if (::testing::Test::HasFailure())
-        {
+    
+    for (size_t i = 0; i < expected.size(); ++i) {
+        const auto& exp_mask = expected[i];
+        const auto& act_mask = actual[i];
+        
+        ::testing::ScopedTrace trace(__FILE__, __LINE__, 
+            "Comparing segmentation mask " + std::to_string(i));
+            
+        EXPECT_EQ(exp_mask.size(), act_mask.size());
+        if (exp_mask.size() != act_mask.size()) {
             match = false;
+            continue;
+        }
+        
+        // 逐字节比较
+        for (size_t j = 0; j < exp_mask.size(); ++j) {
+            SCOPED_TRACE("Mask " + std::to_string(i) + " byte index " + std::to_string(j));
+            EXPECT_EQ(exp_mask[j], act_mask[j]);
+            if (::testing::Test::HasFailure()) {
+                match = false;
+            }
         }
     }
     return match;
 }
-SegmentationResult LoadSegmentationResult(const fs::path &file_path)
+
+std::vector<uint8_t> LoadSegmentationResult(const fs::path &file_path)
 {
     std::ifstream file(file_path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
@@ -97,10 +106,10 @@ SegmentationResult LoadSegmentationResult(const fs::path &file_path)
     }
     file.seekg(0, std::ios::beg);
 
-    SegmentationResult result;
-    result.seg_mask.resize(static_cast<size_t>(size));
+    std::vector<uint8_t> seg_mask;
+    seg_mask.resize(static_cast<size_t>(size));
 
-    if (!file.read(reinterpret_cast<char *>(result.seg_mask.data()), size))
+    if (!file.read(reinterpret_cast<char *>(seg_mask.data()), size))
     {
         throw std::runtime_error("Failed to read file: " + file_path.string());
     }
@@ -111,7 +120,7 @@ SegmentationResult LoadSegmentationResult(const fs::path &file_path)
         throw std::runtime_error("Read incomplete: " + file_path.string());
     }
 
-    return result;
+    return seg_mask; // 返回vector<uint8_t>而不是SegmentationResult
 }
 
 class YoloV8SegPostProcessTest : public ::testing::Test
@@ -147,11 +156,10 @@ protected:
 };
 
 TEST_F(YoloV8SegPostProcessTest, run)
-
 {
-    SegmentationResult expected_seg;
+    std::vector<uint8_t> expected_seg_mask; // 改为vector<uint8_t>
     ASSERT_NO_THROW({
-        expected_seg = LoadSegmentationResult(path_seg_result);
+        expected_seg_mask = LoadSegmentationResult(path_seg_result);
     }) << "Failed to load expected segmentation mask";
 
     std::vector<DetectResult> expected_results = {
@@ -212,12 +220,16 @@ TEST_F(YoloV8SegPostProcessTest, run)
     // --- 比较检测结果 ---
     EXPECT_TRUE(CompareDetectResultVectors(expected_results, result_group.results));
 
-    EXPECT_TRUE(CompareSegmentationResults(expected_seg, result.group.results_seg[0]));
-    std::string input_path = "/home/xiaopangdun/project/deploy_percept/apps/yolov8_seg_rknn/bus.jpg";
+    // 在测试结束时比较分割掩码
+    const auto& actual_results = processor->getResult().group;
+    std::vector<std::vector<uint8_t>> expected_masks = {expected_seg_mask};
+    
+    EXPECT_TRUE(CompareSegmentationMaskVectors(expected_masks, actual_results.segmentation_masks));
+    std::string input_path = "apps/yolov8_seg_rknn/bus.jpg";
     cv::Mat orig_img = cv::imread(input_path, 1);
     cv::Mat result_img = orig_img.clone();
     processor->drawDetectionResults(result_img, result_group);
-    std::string computed_out_path = "/home/xiaopangdun/project/deploy_percept/tmp/yolov8_seg_out.jpg";
+    std::string computed_out_path = "tmp/yolov8_seg_out.jpg";
     cv::imwrite(computed_out_path, result_img);
 }
 

@@ -12,7 +12,8 @@ namespace deploy_percept
         YoloV8SegPostProcess::YoloV8SegPostProcess(const Params &params) : params_(params)
         {
             result_.group.results.resize(params_.obj_numb_max_size);
-            result_.group.results_seg.resize(1); // 只需要一个分割结果
+            // 初始化分割掩码容器
+            result_.group.segmentation_masks.resize(1);
         }
 
         // 绘制检测和分割结果
@@ -47,76 +48,62 @@ namespace deploy_percept
             float alpha = 0.5f; // 透明度
 
             // 首先绘制分割掩码
-            if (results.count >= 1)
+            if (results.count >= 1 && !results.segmentation_masks.empty() && !results.segmentation_masks[0].empty())
             {
-                for (int i = 0; i < results.count; i++)
+                // 直接修改原图的像素值
+                for (int h = 0; h < height; h++)
                 {
-                    const DetectResult *det_result = &results.results[i];
-
-                    // 获取对应类别的颜色
-                    cv::Vec3b color = cv::Vec3b(class_colors[det_result->cls_id % 20][0],
-                                                class_colors[det_result->cls_id % 20][1],
-                                                class_colors[det_result->cls_id % 20][2]); // RGB格式
-
-                    // 绘制分割掩码
-                    if (results.results_seg.size() > i && !results.results_seg[i].seg_mask.empty())
+                    for (int w = 0; w < width; w++)
                     {
-                        // 直接修改原图的像素值
-                        for (int h = 0; h < height; h++)
+                        // 获取掩码值
+                        int mask_value = results.segmentation_masks[0][h * width + w];
+
+                        if (mask_value != 0)
                         {
-                            for (int w = 0; w < width; w++)
-                            {
-                                // 获取掩码值
-                                int mask_value = results.results_seg[i].seg_mask[h * width + w];
+                            // 使用掩码值来索引颜色
+                            cv::Vec3b color = cv::Vec3b(class_colors[mask_value % 20][0],
+                                                        class_colors[mask_value % 20][1],
+                                                        class_colors[mask_value % 20][2]); // RGB格式
 
-                                if (mask_value != 0)
-                                {
-                                    // 使用掩码值来索引颜色
-                                    cv::Vec3b color = cv::Vec3b(class_colors[mask_value % 20][0],
-                                                                class_colors[mask_value % 20][1],
-                                                                class_colors[mask_value % 20][2]); // RGB格式
+                            cv::Vec3b &pixel = image.at<cv::Vec3b>(h, w);
 
-                                    cv::Vec3b &pixel = image.at<cv::Vec3b>(h, w);
-
-                                    // 使用对象的类别颜色来绘制掩码
-                                    pixel[0] = (unsigned char)(color[0] * (1 - alpha) + pixel[0] * alpha); // B
-                                    pixel[1] = (unsigned char)(color[1] * (1 - alpha) + pixel[1] * alpha); // G
-                                    pixel[2] = (unsigned char)(color[2] * (1 - alpha) + pixel[2] * alpha); // R
-                                }
-                            }
+                            // 使用对象的类别颜色来绘制掩码
+                            pixel[0] = (unsigned char)(color[0] * (1 - alpha) + pixel[0] * alpha); // B
+                            pixel[1] = (unsigned char)(color[1] * (1 - alpha) + pixel[1] * alpha); // G
+                            pixel[2] = (unsigned char)(color[2] * (1 - alpha) + pixel[2] * alpha); // R
                         }
                     }
                 }
+            }
 
-                // 然后绘制边界框和标签
-                for (int i = 0; i < results.count; i++)
-                {
-                    const DetectResult *det_result = &results.results[i];
+            // 然后绘制边界框和标签
+            for (int i = 0; i < results.count; i++)
+            {
+                const DetectResult *det_result = &results.results[i];
 
-                    // 获取对应类别的颜色
-                    cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
-                                                  class_colors[det_result->cls_id % 20][1],
-                                                  class_colors[det_result->cls_id % 20][0]); // BGR格式
+                // 获取对应类别的颜色
+                cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
+                                              class_colors[det_result->cls_id % 20][1],
+                                              class_colors[det_result->cls_id % 20][0]); // BGR格式
 
-                    // 绘制边界框
-                    cv::rectangle(image,
-                                  cv::Point(det_result->box.left, det_result->box.top),
-                                  cv::Point(det_result->box.right, det_result->box.bottom),
-                                  color, 2);
+                // 绘制边界框
+                cv::rectangle(image,
+                              cv::Point(det_result->box.left, det_result->box.top),
+                              cv::Point(det_result->box.right, det_result->box.bottom),
+                              color, 2);
 
-                    // 添加标签文本
-                    std::string label = "Class " + std::to_string(det_result->cls_id) + " " +
-                                        std::to_string(det_result->prop * 100) + "%";
-                    int baseline;
-                    cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
-                    cv::rectangle(image,
-                                  cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
-                                  cv::Point(det_result->box.left + textSize.width, det_result->box.top),
-                                  color, -1);
-                    cv::putText(image, label,
-                                cv::Point(det_result->box.left, det_result->box.top - 5),
-                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-                }
+                // 添加标签文本
+                std::string label = "Class " + std::to_string(det_result->cls_id) + " " +
+                                    std::to_string(det_result->prop * 100) + "%";
+                int baseline;
+                cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+                cv::rectangle(image,
+                              cv::Point(det_result->box.left, det_result->box.top - textSize.height - 10),
+                              cv::Point(det_result->box.left + textSize.width, det_result->box.top),
+                              color, -1);
+                cv::putText(image, label,
+                            cv::Point(det_result->box.left, det_result->box.top - 5),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
             }
         }
 
@@ -395,9 +382,9 @@ namespace deploy_percept
             result_.success = false;
             result_.message.clear();
 
-            if (!result_.group.results_seg.empty())
-            {
-                result_.group.results_seg[0].seg_mask.clear();
+            // 清空分割掩码
+            if (!result_.group.segmentation_masks.empty()) {
+                result_.group.segmentation_masks[0].clear();
             }
 
             std::vector<float> filterBoxes;
@@ -585,10 +572,16 @@ namespace deploy_percept
                 input_image_height,
                 input_image_width);
 
-            result_.group.results_seg[0].seg_mask.resize(mask_size);
-            memcpy(result_.group.results_seg[0].seg_mask.data(),
-                   all_mask_in_one_.data(),
-                   mask_size);
+            // 在处理完所有检测后，分配并填充分割掩码
+            if (last_count > 0) {
+                const size_t mask_size = input_image_height * input_image_width;
+                
+                // 为分割掩码分配内存
+                result_.group.segmentation_masks[0].resize(mask_size, 0);
+                memcpy(result_.group.segmentation_masks[0].data(),
+                       all_mask_in_one_.data(),
+                       mask_size);
+            }
 
             result_.success = true;
             return true;

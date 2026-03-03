@@ -7,6 +7,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
+#include <fstream>
 
 #include "rknn_api.h"
 
@@ -176,50 +177,22 @@ int main()
     // 获取后处理结果
     auto seg_results = seg_processor.getResult().group;
 
-    // 保存分割结果到文件
-    printf("=== Saving Segmentation Results ===\n");
-    for (size_t i = 0; i < seg_results.results_seg.size(); i++)
-    {
-        const auto &seg = seg_results.results_seg[i];
-        if (!seg.seg_mask.empty())
-        {
-            std::string seg_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/segmentation_mask_" + std::to_string(i) + ".bin";
-            FILE *seg_file = fopen(seg_filename.c_str(), "wb");
-            if (seg_file)
-            {
-                size_t written = fwrite(seg.seg_mask.data(), sizeof(uint8_t), seg.seg_mask.size(), seg_file);
-                fclose(seg_file);
-                printf("Saved segmentation mask %zu to %s (size: %zu bytes)\n",
-                       i, seg_filename.c_str(), seg.seg_mask.size());
-
-                // 同时保存一些元数据信息
-                std::string meta_filename = "/home/orangepi/HectorHuang/deploy_percept/tmp/segmentation_meta_" + std::to_string(i) + ".txt";
-                FILE *meta_file = fopen(meta_filename.c_str(), "w");
-                if (meta_file)
-                {
-                    fprintf(meta_file, "Segmentation Mask %zu Metadata\n", i);
-                    fprintf(meta_file, "Mask Size: %zu bytes\n", seg.seg_mask.size());
-                    fprintf(meta_file, "Detection Index: %zu\n", i);
-                    if (i < static_cast<size_t>(seg_results.count))
-                    {
-                        const auto &det = seg_results.results[i];
-                        fprintf(meta_file, "Associated Class ID: %d\n", det.cls_id);
-                        fprintf(meta_file, "Associated Class Name: %s\n", det.name);
-                        fprintf(meta_file, "Associated Confidence: %.4f\n", det.prop);
-                        fprintf(meta_file, "Associated BBox: [%d, %d, %d, %d]\n",
-                                det.box.left, det.box.top, det.box.right, det.box.bottom);
-                    }
-                    fclose(meta_file);
-                    printf("Saved metadata to %s\n", meta_filename.c_str());
-                }
-            }
-            else
-            {
-                printf("Failed to create segmentation file: %s\n", seg_filename.c_str());
-            }
+    // 保存第0个分割结果到bin文件
+    if (!seg_results.segmentation_masks.empty() && !seg_results.segmentation_masks[0].empty()) {
+        std::string seg_result_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_result_0.bin";
+        std::ofstream seg_file(seg_result_path, std::ios::binary);
+        if (seg_file.is_open()) {
+            seg_file.write(reinterpret_cast<const char*>(seg_results.segmentation_masks[0].data()), 
+                          seg_results.segmentation_masks[0].size());
+            seg_file.close();
+            printf("Saved segmentation result (index 0) to %s, size: %zu bytes\n", 
+                   seg_result_path.c_str(), seg_results.segmentation_masks[0].size());
+        } else {
+            printf("Warning: Failed to open file for writing segmentation result: %s\n", seg_result_path.c_str());
         }
+    } else {
+        printf("Warning: No segmentation results available to save\n");
     }
-    printf("===============================\n\n");
 
     cv::Mat result_img = orig_img.clone();
     seg_processor.drawDetectionResults(result_img, seg_results);

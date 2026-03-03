@@ -21,9 +21,7 @@ struct DetectResult {
     int cls_id = 0;      // 添加类别ID字段
 };
 
-struct SegmentationResult {
-    std::vector<uint8_t> seg_mask;  // 改为vector类型，自动管理内存
-};
+// 移除SegmentationResult结构体，直接使用std::vector<uint8_t>
 
 struct DetectResultGroup {
     int id = 0;
@@ -35,7 +33,7 @@ struct ResultGroup {
     int id = 0;
     int count = 0;
     std::vector<DetectResult> results; // 检测结果
-    std::vector<SegmentationResult> results_seg; // 分割结果
+    std::vector<std::vector<uint8_t>> segmentation_masks; // 分割掩码，每个对象一个掩码
 };
 
 } // namespace post_process
