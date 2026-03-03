@@ -201,47 +201,6 @@ void YoloBasePostProcess::seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, u
     resizeSegMasks(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
 }
 
-void YoloBasePostProcess::collectDetectionsAfterNMS(
-    const std::vector<int> &indexArray,
-    const std::vector<float> &filterBoxes,
-    const std::vector<int> &classId,
-    const std::vector<float> &objProbs,
-    const std::vector<float> &filterSegments,
-    int validCount,
-    std::vector<float> &filterSegments_by_nms,
-    int &last_count,
-    int input_image_width,
-    int input_image_height)
-{
-    for (int i = 0; i < validCount; ++i)
-    {
-        // 跳过被NMS标记为冗余的检测框，或超出最大检测数量限制的框
-        if (indexArray[i] == -1 || last_count >= 100) // 默认使用100作为最大检测数，实际应该从params获取
-        {
-            continue;
-        }
-
-        int n = indexArray[i]; // 获取原始检测框的索引
-
-        // 提取并计算边界框坐标
-        float x1 = filterBoxes[n * 4 + 0];      // 左上角x
-        float y1 = filterBoxes[n * 4 + 1];      // 左上角y
-        float x2 = x1 + filterBoxes[n * 4 + 2]; // 右下角x (x1 + width)
-        float y2 = y1 + filterBoxes[n * 4 + 3]; // 右下角y (y1 + height)
-
-        int id = classId[n];          // 保存真实的类别ID
-        float obj_conf = objProbs[n]; // 获取该检测框的置信度
-
-        // 收集该检测框对应的分割特征向量
-        for (int k = 0; k < filterSegments.size() / validCount; k++) // 假设每个检测框的分割特征数量相等
-        {
-            filterSegments_by_nms.push_back(filterSegments[n * (filterSegments.size() / validCount) + k]);
-        }
-
-        last_count++; // 增加有效检测计数
-    }
-}
-
 void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup &results) const
 {
     // 定义类别颜色
@@ -273,7 +232,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
     float alpha = 0.5f; // 透明度
 
     // 首先绘制分割掩码
-    if (results.count >= 1 && !results.segmentation_masks.empty() && !results.segmentation_masks[0].empty())
+    if (results.count >= 1 && !results.segmentation_masks.empty())
     {
         // 直接修改原图的像素值
         for (int h = 0; h < height; h++)
@@ -281,7 +240,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
             for (int w = 0; w < width; w++)
             {
                 // 获取掩码值
-                int mask_value = results.segmentation_masks[0][h * width + w];
+                int mask_value = results.segmentation_masks[h * width + w];
 
                 if (mask_value != 0)
                 {

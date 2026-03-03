@@ -33,7 +33,7 @@ struct ResultGroup {
     int id = 0;
     int count = 0;
     std::vector<DetectResult> results; // 检测结果
-    std::vector<std::vector<uint8_t>> segmentation_masks; // 分割掩码，每个对象一个掩码
+    std::vector<uint8_t> segmentation_masks; // 分割掩码，只需要一个掩码
 };
 
 } // namespace post_process

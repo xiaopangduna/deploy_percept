@@ -59,9 +59,6 @@ namespace deploy_percept
                 std::vector<float> &output_scales,
                 std::vector<int32_t> &output_zps);
 
-            // 新增：绘制检测和分割结果的函数
-            void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const;
-
         private:
             Params params_;
             Result result_{};
@@ -75,6 +72,17 @@ namespace deploy_percept
                                     std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
                                     std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
                                     std::vector<int32_t> &output_zps);
+
+            // 新增：处理NMS后检测结果的函数
+            void collectDetectionsAfterNMS(
+                const std::vector<int> &indexArray,
+                const std::vector<float> &filterBoxes,
+                const std::vector<int> &classId,
+                const std::vector<float> &objProbs,
+                const std::vector<float> &filterSegments,
+                int validCount,
+                std::vector<float> &filterSegments_by_nms,
+                int &last_count);
 
             static void compute_dfl(float *tensor, int dfl_len, float *box)
             {
@@ -96,7 +104,6 @@ namespace deploy_percept
                     box[b] = acc_sum;
                 }
             }
-
         };
     } // namespace post_process
 } // namespace deploy_percept

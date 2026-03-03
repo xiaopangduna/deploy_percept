@@ -16,14 +16,6 @@ namespace deploy_percept
             result_.group.segmentation_masks.resize(1);
         }
 
-        // 绘制检测和分割结果
-        void YoloV8SegPostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup &results) const
-        {
-            YoloBasePostProcess::drawDetectionResults(image, results);
-        }
-
-        // 删除重复的quick_sort_indice_inverse函数，使用父类的quickSortIndices实现
-
         int YoloV8SegPostProcess::decodeDetectionHead(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
                                                       int stride,
                                                       std::vector<float> &boxes, std::vector<float> &segments,
@@ -145,10 +137,8 @@ namespace deploy_percept
             result_.success = false;
             result_.message.clear();
 
-            // 清空分割掩码
-            if (!result_.group.segmentation_masks.empty()) {
-                result_.group.segmentation_masks[0].clear();
-            }
+            // 删除分割掩码
+            result_.group.segmentation_masks.clear();
 
             std::vector<float> filterBoxes;
             std::vector<float> objProbs;
@@ -284,11 +274,11 @@ namespace deploy_percept
                     filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
                 }
 
-                // 填充检测结果结构体，添加边界检查
-                result_.group.results[last_count].box.left = std::max(0, static_cast<int>(x1));
-                result_.group.results[last_count].box.top = std::max(0, static_cast<int>(y1));
-                result_.group.results[last_count].box.right = std::min(input_image_width, static_cast<int>(x2));
-                result_.group.results[last_count].box.bottom = std::min(input_image_height, static_cast<int>(y2));
+                // 填充检测结果结构体（与YOLOv5版本一致，不进行边界限制）
+                result_.group.results[last_count].box.left = x1;
+                result_.group.results[last_count].box.top = y1;
+                result_.group.results[last_count].box.right = x2;
+                result_.group.results[last_count].box.bottom = y2;
 
                 result_.group.results[last_count].prop = obj_conf;
 
@@ -374,8 +364,8 @@ namespace deploy_percept
                 const size_t mask_size = input_image_height * input_image_width;
                 
                 // 为分割掩码分配内存
-                result_.group.segmentation_masks[0].resize(mask_size, 0);
-                memcpy(result_.group.segmentation_masks[0].data(),
+                result_.group.segmentation_masks.resize(mask_size, 0);
+                memcpy(result_.group.segmentation_masks.data(),
                        all_mask_in_one_.data(),
                        mask_size);
             }

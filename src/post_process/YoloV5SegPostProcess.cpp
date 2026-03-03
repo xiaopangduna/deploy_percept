@@ -16,14 +16,6 @@ namespace deploy_percept
             result_.group.segmentation_masks.resize(1);
         }
 
-        // 绘制检测和分割结果
-        void YoloV5SegPostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup &results) const
-        {
-            YoloBasePostProcess::drawDetectionResults(image, results);
-        }
-
-        // 删除重复的quick_sort_indice_inverse函数，使用父类的quickSortIndices实现
-
         int YoloV5SegPostProcess::decodeDetectionHead(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
                                                       int stride,
                                                       std::vector<float> &boxes, std::vector<float> &segments,
@@ -187,7 +179,7 @@ namespace deploy_percept
 
             // 清空分割掩码
             if (!result_.group.segmentation_masks.empty()) {
-                result_.group.segmentation_masks[0].clear();
+                result_.group.segmentation_masks.clear();
             }
 
             std::vector<float> filterBoxes;
@@ -369,8 +361,8 @@ namespace deploy_percept
                 const size_t mask_size = input_image_height * input_image_width;
                 
                 // 为分割掩码分配内存
-                result_.group.segmentation_masks[0].resize(mask_size, 0);
-                memcpy(result_.group.segmentation_masks[0].data(),
+                result_.group.segmentation_masks.resize(mask_size, 0);
+                memcpy(result_.group.segmentation_masks.data(),
                        all_mask_in_one_.data(),
                        mask_size);
             }

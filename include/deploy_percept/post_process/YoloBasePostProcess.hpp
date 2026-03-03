@@ -155,40 +155,17 @@ public:
                            int input_image_height, int input_image_width, int cropped_height, int cropped_width,
                            int ori_in_height, int ori_in_width, int y_pad, int x_pad);
 
-    /**
-     * @brief 绘制检测和分割结果
-     * @param image 要绘制的图像
-     * @param results 检测结果
-     * @details 在图像上绘制检测框和分割掩码
-     */
-    void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const;
+    void computeSegMask(
+        const std::vector<float>& protos,
+        const std::vector<float>& mask_protos,
+        int crop_width, 
+        int crop_height,
+        int ori_width,
+        int ori_height,
+        int crop_x = 0,
+        int crop_y = 0);
 
-protected:
-    /**
-     * @brief 收集NMS后的检测结果
-     * @param indexArray 索引数组
-     * @param filterBoxes 过滤后的边界框
-     * @param classId 类别ID
-     * @param objProbs 置信度
-     * @param filterSegments 过滤后的分割特征
-     * @param validCount 有效数量
-     * @param filterSegments_by_nms NMS后的分割特征
-     * @param last_count 最终计数
-     * @param input_image_width 输入图像宽度（仅YOLOv8使用）
-     * @param input_image_height 输入图像高度（仅YOLOv8使用）
-     * @details 在NMS之后收集检测结果
-     */
-    void collectDetectionsAfterNMS(
-        const std::vector<int> &indexArray,
-        const std::vector<float> &filterBoxes,
-        const std::vector<int> &classId,
-        const std::vector<float> &objProbs,
-        const std::vector<float> &filterSegments,
-        int validCount,
-        std::vector<float> &filterSegments_by_nms,
-        int &last_count,
-        int input_image_width = 0,
-        int input_image_height = 0);
+    void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const; // 绘制检测结果
 };
 
 } // namespace post_process
