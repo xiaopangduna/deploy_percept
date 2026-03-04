@@ -15,7 +15,9 @@
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "utils/environment.hpp"
-
+#include "tests/test_common/compare.hpp"
+using namespace deploy_percept::post_process;
+namespace fs = std::filesystem;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // YoloV5后处理相关测试
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -121,110 +123,6 @@ bool readParamsYaml(const std::string &filepath,
     }
 }
 
-// 从YAML文件读取预期检测结果的辅助函数
-bool readExpectedResultsFromYaml(const std::string &filepath,
-                                 deploy_percept::post_process::ResultGroup &expected_group)
-{
-    try
-    {
-        YAML::Node config = YAML::LoadFile(filepath);
-
-        // 读取检测数量
-        expected_group.count = config["detection_count"].as<int>();
-
-        // 读取检测结果
-        YAML::Node detections = config["detections"];
-        int idx = 0;
-        for (const auto &detection : detections)
-        {
-            if (idx >= 64)
-                break; // 防止越界
-
-            // 读取名称
-            std::string name = detection["name"].as<std::string>();
-            strncpy(expected_group.results[idx].name, name.c_str(), sizeof(expected_group.results[idx].name) - 1);
-            expected_group.results[idx].name[sizeof(expected_group.results[idx].name) - 1] = '\0';
-
-            // 读取边界框
-            YAML::Node box = detection["box"];
-            expected_group.results[idx].box.left = box["left"].as<int>();
-            expected_group.results[idx].box.top = box["top"].as<int>();
-            expected_group.results[idx].box.right = box["right"].as<int>();
-            expected_group.results[idx].box.bottom = box["bottom"].as<int>();
-
-            // 读取置信度
-            expected_group.results[idx].prop = detection["prop"].as<float>();
-
-            idx++;
-        }
-
-        return true;
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error reading YAML file: " << e.what() << std::endl;
-        return false;
-    }
-}
-
-// 比较两个检测结果是否相等（考虑浮点数精度）
-bool compareDetectionResults(const deploy_percept::post_process::DetectionObject &a,
-                             const deploy_percept::post_process::DetectionObject &b,
-                             float tolerance = 0.01f)
-{
-    // 比较名称
-    // if (strcmp(a.name, b.name) != 0) {
-    //     return false;
-    // }
-
-    // 比较边界框
-    if (a.box.left != b.box.left || a.box.top != b.box.top ||
-        a.box.right != b.box.right || a.box.bottom != b.box.bottom)
-    {
-        return false;
-    }
-
-    // 比较置信度，考虑浮点误差
-    if (abs(a.prop - b.prop) > tolerance)
-    {
-        return false;
-    }
-
-    return true;
-}
-
-// 比较检测结果组是否相等
-bool compareResultGroups(const deploy_percept::post_process::ResultGroup &actual,
-                         const deploy_percept::post_process::ResultGroup &expected,
-                         float tolerance = 0.01f)
-{
-    if (actual.count != expected.count)
-    {
-        std::cout << "Detection count mismatch: actual=" << actual.count << ", expected=" << expected.count << std::endl;
-        return false;
-    }
-
-    // 简单比较，按顺序对比
-    for (int i = 0; i < actual.count; ++i)
-    {
-        if (!compareDetectionResults(actual.results[i], expected.results[i], tolerance))
-        {
-            std::cout << "Detection result " << i << " mismatch:" << std::endl;
-            std::cout << "  Actual: " << actual.results[i].name
-                      << " [" << actual.results[i].box.left << "," << actual.results[i].box.top
-                      << "," << actual.results[i].box.right << "," << actual.results[i].box.bottom
-                      << "] prop=" << actual.results[i].prop << std::endl;
-            std::cout << "  Expected: " << expected.results[i].name
-                      << " [" << expected.results[i].box.left << "," << expected.results[i].box.top
-                      << "," << expected.results[i].box.right << "," << expected.results[i].box.bottom
-                      << "] prop=" << expected.results[i].prop << std::endl;
-            return false;
-        }
-    }
-
-    return true;
-}
-
 // YoloV5检测后处理测试夹具类
 class YoloV5DetectPostProcessTest : public ::testing::Test
 {
@@ -251,28 +149,35 @@ protected:
     }
 
     std::unique_ptr<deploy_percept::post_process::YoloV5DetectPostProcess> processor;
+    static DetectionObject MakeDetectResult(int cls_id, const char *name_str, float conf,
+                                            int x1, int y1, int x2, int y2)
+    {
+        DetectionObject res;
+        res.cls_id = cls_id;
+        res.prop = conf;
+        res.box = {x1, y1, x2, y2};
+        strncpy(res.name, name_str, sizeof(res.name) - 1);
+        res.name[sizeof(res.name) - 1] = '\0';
+        return res;
+    }
 };
 
 // 测试YoloV5后处理功能并与原始实现进行对比
 TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
 {
-    if (GlobalLoggerEnvironment::logger)
-    {
-        GlobalLoggerEnvironment::logger->info("Testing YoloV5DetectPostProcess run function with real data from NPZ files");
-    }
-
-    // 输出当前工作目录以进行调试
-    std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
+    std::vector<DetectionObject> expected_results = {
+        MakeDetectResult(0, "class_0", 0.8797f, 209, 243, 286, 510),
+        MakeDetectResult(0, "class_0", 0.8706f, 479, 238, 560, 526),
+        MakeDetectResult(0, "class_0", 0.8398f, 109, 238, 231, 534),
+        MakeDetectResult(5, "class_5", 0.6920f, 91, 129, 555, 464),
+        MakeDetectResult(0, "class_0", 0.3010f, 79, 353, 121, 517)};
 
     // 尝试从NPZ文件读取数据
     std::vector<int8_t> input0, input1, input2;
     std::vector<int> shape0, shape1, shape2;
 
-    // 定义项目根目录路径前缀（当前工作目录已设置为项目根目录）
-    std::filesystem::path workspaceFolder = std::filesystem::current_path().parent_path().parent_path();
-    std::cout << "Current working directory: " << workspaceFolder << std::endl;
     // 使用项目根目录作为工作路径
-    std::filesystem::path npz_path = workspaceFolder / "examples/data/yolov5_detect/yolov5_outputs.npz";
+    std::filesystem::path npz_path = "examples/data/yolov5_detect/yolov5_outputs.npz";
 
     bool success = false;
 
@@ -281,16 +186,8 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         success = readNpzFile(npz_path, input0, shape0, input1, shape1, input2, shape2);
     }
 
-    // 如果无法读取真实数据，则跳过测试
-    if (!success)
-    {
-        std::cout << "Could not load real data from NPZ file: " << npz_path << ", skipping this test." << std::endl;
-        GTEST_SKIP() << "Real NPZ data file not found";
-        return;
-    }
-
     // 使用filesystem构建参数文件路径
-    std::filesystem::path params_path = workspaceFolder / "examples/data/yolov5_detect/yolov5_params.yaml";
+    std::filesystem::path params_path = "examples/data/yolov5_detect/yolov5_params.yaml";
 
     // 读取参数YAML文件
     int model_in_h, model_in_w;
@@ -303,35 +200,11 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
                                         box_conf_threshold, nms_threshold,
                                         qnt_zps, qnt_scales);
 
-    if (!params_loaded)
-    {
-        std::cout << "Could not load parameters from file: " << params_path << ", skipping this test." << std::endl;
-        GTEST_SKIP() << "Parameters YAML file not found";
-        return;
-    }
-
-    std::cout << "Successfully loaded real data from NPZ file: " << npz_path << std::endl;
-    std::cout << "  Output0 shape: (" << shape0[0] << ", " << shape0[1] << ", " << shape0[2] << ")" << std::endl;
-    std::cout << "  Output1 shape: (" << shape1[0] << ", " << shape1[1] << ", " << shape1[2] << ")" << std::endl;
-    std::cout << "  Output2 shape: (" << shape2[0] << ", " << shape2[1] << ", " << shape2[2] << ")" << std::endl;
-    std::cout << "  Model input: " << model_in_h << "x" << model_in_w << std::endl;
-    std::cout << "  Box confidence threshold: " << box_conf_threshold << std::endl;
-    std::cout << "  NMS threshold: " << nms_threshold << std::endl;
-    std::cout << "  Quantization zps: ";
-    for (auto val : qnt_zps)
-        std::cout << val << " ";
-    std::cout << std::endl;
-    std::cout << "  Quantization scales: ";
-    for (auto val : qnt_scales)
-        std::cout << val << " ";
-    std::cout << std::endl;
-
     // 准备输入向量
-    std::vector<int8_t*> inputs = {
+    std::vector<int8_t *> inputs = {
         input0.data(),
         input1.data(),
-        input2.data()
-    };
+        input2.data()};
 
     // 执行处理
     bool result = processor->run(
@@ -345,43 +218,12 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     // 获取检测结果
     const auto &result_wrapper = processor->getResult();
     const auto &group = result_wrapper.group; // 从Result结构体中获取ResultGroup
-    std::cout << "Detection results count: " << group.count << std::endl;
-
-    // 输出检测到的对象信息
-    for (int i = 0; i < group.count; i++)
-    {
-        std::cout << "Object " << i << ": " << group.results[i].name
-                  << " at (" << group.results[i].box.left << ", " << group.results[i].box.top
-                  << ", " << group.results[i].box.right << ", " << group.results[i].box.bottom
-                  << ") with confidence " << group.results[i].prop << std::endl;
-    }
 
     // 验证group和预期结果是否一致
-    deploy_percept::post_process::ResultGroup expected_group{};  // 使用默认构造函数
 
-    std::filesystem::path results_path = workspaceFolder / "examples/data/yolov5_detect/yolov5_detect_results.yaml";
-    bool expected_loaded = readExpectedResultsFromYaml(results_path, expected_group);
+    EXPECT_TRUE(CompareDetectResultVectors(expected_results, group.results));
 
-    if (!expected_loaded)
-    {
-        std::cout << "Could not load expected results from file: " << results_path << ", skipping validation." << std::endl;
-        GTEST_SKIP() << "Expected results YAML file not found";
-        return;
-    }
-
-    std::cout << "Validating detection results against expected results..." << std::endl;
-    bool results_match = compareResultGroups(group, expected_group);
-
-    if (results_match)
-    {
-        std::cout << "Detection results match expected results!" << std::endl;
-        EXPECT_TRUE(results_match);
-    }
-    else
-    {
-        std::cout << "Detection results do not match expected results." << std::endl;
-        EXPECT_FALSE(results_match) << "Detection results do not match expected results";
-    }
+    std::filesystem::path results_path = "examples/data/yolov5_detect/yolov5_detect_results.yaml";
 }
 
 int main(int argc, char **argv)

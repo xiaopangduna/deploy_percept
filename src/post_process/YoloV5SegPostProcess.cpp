@@ -143,21 +143,20 @@ namespace deploy_percept
                 }
 
                 // 填充检测结果结构体
-                result_.group.results[last_count].box.left = x1;
-                result_.group.results[last_count].box.top = y1;
-                result_.group.results[last_count].box.right = x2;
-                result_.group.results[last_count].box.bottom = y2;
-
-                result_.group.results[last_count].prop = obj_conf;
-
+                DetectionObject det_obj{};
+                det_obj.box.left = x1;
+                det_obj.box.top = y1;
+                det_obj.box.right = x2;
+                det_obj.box.bottom = y2;
+                det_obj.prop = obj_conf;
+                
                 // 设置类别名称
-                snprintf(result_.group.results[last_count].name,
-                         sizeof(result_.group.results[last_count].name),
-                         "class_%d", id);
-
+                snprintf(det_obj.name, sizeof(det_obj.name), "class_%d", id);
+                
                 // 设置类别ID
-                result_.group.results[last_count].cls_id = id;
+                det_obj.cls_id = id;
 
+                result_.group.results.push_back(det_obj);
                 last_count++; // 增加有效检测计数
             }
         }
@@ -174,6 +173,7 @@ namespace deploy_percept
             // 0. reset state
             // ===============================
             result_.group.count = 0;
+            result_.group.results.clear(); // 清空之前的检测结果
             result_.success = false;
             result_.message.clear();
 

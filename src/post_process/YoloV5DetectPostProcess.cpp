@@ -90,6 +90,7 @@ namespace deploy_percept
 
             int last_count = 0;
             result_.group.count = 0;
+            result_.group.results.clear(); // 清空之前的结果
             /* box valid detect target */
             for (int i = 0; i < validCount; ++i)
             {
@@ -105,17 +106,21 @@ namespace deploy_percept
                 float y2 = y1 + filterBoxes[n * 4 + 3];
 
                 int id = classId[n];
-                float obj_conf = objProbs[i];
+                float obj_conf = objProbs[i]; 
 
-                result_.group.results[last_count].box.left = static_cast<int>(clamp(x1, 0, model_in_w));
-                result_.group.results[last_count].box.top = static_cast<int>(clamp(y1, 0, model_in_h));
-                result_.group.results[last_count].box.right = static_cast<int>(clamp(x2, 0, model_in_w));
-                result_.group.results[last_count].box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
-                result_.group.results[last_count].prop = obj_conf;
+                // 创建新的检测对象并添加到results中
+                DetectionObject det_obj{};
+                det_obj.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
+                det_obj.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
+                det_obj.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
+                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
+                det_obj.prop = obj_conf;
+                det_obj.cls_id = id;
 
                 // 设置标签名称，这里只是框架，实际需要从外部加载标签
-                snprintf(result_.group.results[last_count].name, params_.obj_name_max_size, "class_%d", id);
+                snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
 
+                result_.group.results.push_back(det_obj);
                 last_count++;
             }
             result_.group.count = last_count;
