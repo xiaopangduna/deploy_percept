@@ -90,7 +90,7 @@ int main()
   };
 
   processor.run(input_buffers, target_size.height, target_size.width, out_zps, out_scales);
-  processor.drawDetectionsResultGroupOnImage(orig_img, processor.getResult().group);
+  processor.drawDetectionResults(orig_img, processor.getResult().group);
 
   std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
   printf("save detect result to %s\n", out_path.c_str());

@@ -123,7 +123,7 @@ bool readParamsYaml(const std::string &filepath,
 
 // 从YAML文件读取预期检测结果的辅助函数
 bool readExpectedResultsFromYaml(const std::string &filepath,
-                                 deploy_percept::post_process::DetectResultGroup &expected_group)
+                                 deploy_percept::post_process::ResultGroup &expected_group)
 {
     try
     {
@@ -194,8 +194,8 @@ bool compareDetectionResults(const deploy_percept::post_process::DetectionObject
 }
 
 // 比较检测结果组是否相等
-bool compareResultGroups(const deploy_percept::post_process::DetectResultGroup &actual,
-                         const deploy_percept::post_process::DetectResultGroup &expected,
+bool compareResultGroups(const deploy_percept::post_process::ResultGroup &actual,
+                         const deploy_percept::post_process::ResultGroup &expected,
                          float tolerance = 0.01f)
 {
     if (actual.count != expected.count)
@@ -344,7 +344,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
 
     // 获取检测结果
     const auto &result_wrapper = processor->getResult();
-    const auto &group = result_wrapper.group; // 从Result结构体中获取DetectResultGroup
+    const auto &group = result_wrapper.group; // 从Result结构体中获取ResultGroup
     std::cout << "Detection results count: " << group.count << std::endl;
 
     // 输出检测到的对象信息
@@ -357,8 +357,7 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
     }
 
     // 验证group和预期结果是否一致
-    deploy_percept::post_process::DetectResultGroup expected_group;
-    memset(&expected_group, 0, sizeof(expected_group));
+    deploy_percept::post_process::ResultGroup expected_group{};  // 使用默认构造函数
 
     std::filesystem::path results_path = workspaceFolder / "examples/data/yolov5_detect/yolov5_detect_results.yaml";
     bool expected_loaded = readExpectedResultsFromYaml(results_path, expected_group);

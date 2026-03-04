@@ -31,7 +31,7 @@ namespace deploy_percept
             // 结果结构体
             struct Result
             {
-                DetectResultGroup group{};
+                ResultGroup group{};  // 统一使用ResultGroup，检测场景segmentation_masks为空
                 bool success = false;
                 std::string message{}; // 可选的详细信息
             };
@@ -48,18 +48,6 @@ namespace deploy_percept
                 int model_in_w,
                 std::vector<int32_t> &qnt_zps,
                 std::vector<float> &qnt_scales);
-
-            /**
-             * @brief 在图像上绘制检测结果组
-             * @param image 输入图像，会在该图像上直接绘制
-             * @param detect_result_group 检测结果组，包含所有检测框信息
-             * @param font_scale 字体缩放比例，默认为0.4
-             * @param line_thickness 线条粗细，默认为3
-             */
-            void drawDetectionsResultGroupOnImage(cv::Mat& image, 
-                                                const DetectResultGroup& detect_result_group,
-                                                double font_scale = 0.4,
-                                                int line_thickness = 3);
 
         private:
             Params params_;

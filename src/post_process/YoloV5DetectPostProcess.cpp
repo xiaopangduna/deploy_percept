@@ -30,7 +30,7 @@ namespace deploy_percept
             }
 
             // 重置结果
-            memset(&result_.group, 0, sizeof(DetectResultGroup));
+            result_.group = ResultGroup{};  // 使用默认构造函数重置，而不是memset
             result_.success = false;
             result_.message = "";
 
@@ -123,30 +123,6 @@ namespace deploy_percept
             result_.success = (last_count > 0);
             result_.message = "Processing completed successfully";
             return true;
-        }
-
-        /**
-         * @brief 在图像上绘制检测结果组
-         * @param image 输入图像，会在该图像上直接绘制
-         * @param detect_result_group 检测结果组，包含所有检测框信息
-         * @param font_scale 字体缩放比例，默认为0.4
-         * @param line_thickness 线条粗细，默认为3
-         */
-        void YoloV5DetectPostProcess::drawDetectionsResultGroupOnImage(cv::Mat& image, 
-                                                                    const DetectResultGroup& detect_result_group,
-                                                                    double font_scale,
-                                                                    int line_thickness)
-        {
-            char text[256];
-            for (int i = 0; i < detect_result_group.count; i++)
-            {
-                const auto &det_result = detect_result_group.results[i];
-                sprintf(text, "%s %.1f%%", det_result.name, det_result.prop * 100);
-                printf("%s @ (%d %d %d %d) %f\n", det_result.name, det_result.box.left, det_result.box.top,
-                       det_result.box.right, det_result.box.bottom, det_result.prop);
-                cv::rectangle(image, cv::Point(det_result.box.left, det_result.box.top), cv::Point(det_result.box.right, det_result.box.bottom), cv::Scalar(256, 0, 0, 256), line_thickness);
-                cv::putText(image, text, cv::Point(det_result.box.left, det_result.box.top + 12), cv::FONT_HERSHEY_SIMPLEX, font_scale, cv::Scalar(255, 255, 255));
-            }
         }
 
         /**

@@ -22,18 +22,13 @@ struct DetectionObject {
 };
 
 // 移除SegmentationResult结构体，直接使用std::vector<uint8_t>
-
-struct DetectResultGroup {
-    int id = 0;
-    int count = 0;
-    std::vector<DetectionObject> results; // 使用动态数组，更灵活
-};
+// 移除DetectResultGroup结构体，统一使用ResultGroup
 
 struct ResultGroup {
     int id = 0;
     int count = 0;
     std::vector<DetectionObject> results; // 检测结果
-    std::vector<uint8_t> segmentation_masks; // 分割掩码，只需要一个掩码
+    std::vector<uint8_t> segmentation_masks; // 分割掩码，对于检测场景为空
 };
 
 } // namespace post_process
