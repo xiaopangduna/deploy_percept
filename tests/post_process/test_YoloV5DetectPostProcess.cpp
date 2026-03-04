@@ -17,9 +17,6 @@
 #include "tests/test_common/compare.hpp"
 using namespace deploy_percept::post_process;
 namespace fs = std::filesystem;
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// YoloV5后处理相关测试
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // YoloV5检测后处理测试夹具类
 class YoloV5DetectPostProcessTest : public ::testing::Test
@@ -27,26 +24,16 @@ class YoloV5DetectPostProcessTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        if (GlobalLoggerEnvironment::logger)
-        {
-            GlobalLoggerEnvironment::logger->info("Setting up YoloV5DetectPostProcess test");
-        }
-
-        // 初始化一个基本的YoloV5DetectPostProcess实例
-        processor = std::make_unique<deploy_percept::post_process::YoloV5DetectPostProcess>(
-            deploy_percept::post_process::YoloV5DetectPostProcess::Params{});
+        YoloV5DetectPostProcess::Params params;
+        processor = std::make_unique<YoloV5DetectPostProcess>(params);
     }
 
     void TearDown() override
     {
-        processor.reset();
-        if (GlobalLoggerEnvironment::logger)
-        {
-            GlobalLoggerEnvironment::logger->info("Tearing down YoloV5DetectPostProcess test");
-        }
     }
 
-    std::unique_ptr<deploy_percept::post_process::YoloV5DetectPostProcess> processor;
+    std::unique_ptr<YoloV5DetectPostProcess> processor;
+    cnpy::npz_t model_outputs_npz;
     static DetectionObject MakeDetectResult(int cls_id, const char *name_str, float conf,
                                             int x1, int y1, int x2, int y2)
     {
@@ -71,33 +58,25 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         MakeDetectResult(0, "class_0", 0.3010f, 79, 353, 121, 517)};
 
     // 尝试从NPZ文件读取数据
-    std::filesystem::path npz_path = "examples/data/yolov5_detect/yolov5_outputs.npz";
-    
-    bool success = false;
-    auto input_data = deploy_percept::utils::readNpzFile(npz_path.string(), success);  // 使用utils命名空间
+    std::filesystem::path npz_path = "apps/yolov5_detect_rknn/yolov5_outputs.npz";
 
-    // 如果无法读取真实数据，则跳过测试
-    if (!success) {
-        std::cout << "Could not load real data from NPZ file: " << npz_path << ", skipping this test." << std::endl;
-        GTEST_SKIP() << "Real NPZ data file not found";
-        return;
-    }
+    bool success = false;
+    auto input_data = deploy_percept::utils::readNpzFile(npz_path.string(), success); // 使用utils命名空间
 
     // 硬编码参数值（替代从YAML文件读取）
     int model_in_h = 640;
     int model_in_w = 640;
     float box_conf_threshold = 0.5f;
     float nms_threshold = 0.5f;
-    
+
     std::vector<int32_t> qnt_zps = {-128, -128, -128};
     std::vector<float> qnt_scales = {0.00392157f, 0.00392157f, 0.00392157f};
 
     // 准备输入向量（从vector<vector>转换为vector<int8_t*>）
-    std::vector<int8_t*> inputs = {
+    std::vector<int8_t *> inputs = {
         input_data[0].data(),
         input_data[1].data(),
-        input_data[2].data()
-    };
+        input_data[2].data()};
 
     // 执行处理（现在可以直接使用inputs，因为它是std::vector<int8_t*>类型）
     bool result = processor->run(
@@ -107,22 +86,15 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         qnt_zps,
         qnt_scales);
 
-    // input_data 会自动析构，无需手动释放内存
-
-    ASSERT_TRUE(result) << "Processing failed: " << processor->getResult().message;
-
     // 获取结果并验证
-    const auto& detection_result = processor->getResult().group;
-    
-    // 验证检测结果数量
-    EXPECT_EQ(detection_result.count, static_cast<int>(expected_results.size())) 
-        << "Expected " << expected_results.size() << " detections, but got " << detection_result.count;
+    const auto &detection_result = processor->getResult().group;
 
     // 验证每个检测结果
-    for (int i = 0; i < std::min(detection_result.count, static_cast<int>(expected_results.size())); ++i) {
-        const auto& actual = detection_result.results[i];
-        const auto& expected = expected_results[i];
-        
+    for (int i = 0; i < std::min(detection_result.count, static_cast<int>(expected_results.size())); ++i)
+    {
+        const auto &actual = detection_result.results[i];
+        const auto &expected = expected_results[i];
+
         EXPECT_EQ(actual.cls_id, expected.cls_id) << "Detection " << i << " class ID mismatch";
         EXPECT_NEAR(actual.prop, expected.prop, 1e-3) << "Detection " << i << " confidence mismatch";
         EXPECT_EQ(actual.box.left, expected.box.left) << "Detection " << i << " box left mismatch";

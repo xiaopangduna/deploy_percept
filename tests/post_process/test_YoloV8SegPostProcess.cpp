@@ -120,7 +120,7 @@ TEST_F(YoloV8SegPostProcessTest, run)
     cv::Mat orig_img = cv::imread(input_path, 1);
     cv::Mat result_img = orig_img.clone();
     processor->drawDetectionResults(result_img, result_group);
-    std::string computed_out_path = "tmp/yolov8_seg_out.jpg";
+    std::string computed_out_path = "apps/yolov8_seg_rknn/yolov8_seg_result.jpg";
     cv::imwrite(computed_out_path, result_img);
 }
 
