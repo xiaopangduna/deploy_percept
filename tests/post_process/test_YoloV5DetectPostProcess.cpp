@@ -22,7 +22,7 @@ protected:
         YoloV5DetectPostProcess::Params params;
         processor = std::make_unique<YoloV5DetectPostProcess>(params);
 
-        fs::path path_model_output_npz = "apps/yolov5_detect_rknn/yolov5_outputs.npz";
+        fs::path path_model_output_npz = "apps/yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz";
         model_outputs_npz = cnpy::npz_load(path_model_output_npz);
 
         fs::path path_img = "apps/yolov5_detect_rknn/bus.jpg";
@@ -37,7 +37,7 @@ protected:
 
     std::unique_ptr<YoloV5DetectPostProcess> processor;
     cnpy::npz_t model_outputs_npz;
-    
+
     cv::Mat img;
     fs::path path_save_img_with_detect_result;
 };
