@@ -1,5 +1,7 @@
 #include "deploy_percept/post_process/YoloV8SegPostProcess.hpp"
 #include "deploy_percept/utils/npy.hpp"
+#include "deploy_percept/utils/io.hpp"
+#include "tests/test_common/compare.hpp"
 #include <gtest/gtest.h>
 #include <iostream>
 #include <vector>
@@ -54,72 +56,6 @@ bool CompareDetectResultVectors(const std::vector<DetectionObject> &expected,
         }
     }
     return match;
-}
-
-// 比较两个分割掩码向量是否相等
-bool CompareSegmentationMaskVectors(const std::vector<std::vector<uint8_t>>& expected,
-                                   const std::vector<std::vector<uint8_t>>& actual) {
-    bool match = true;
-    if (expected.size() != actual.size()) {
-        EXPECT_EQ(expected.size(), actual.size());
-        return false;
-    }
-    
-    for (size_t i = 0; i < expected.size(); ++i) {
-        const auto& exp_mask = expected[i];
-        const auto& act_mask = actual[i];
-        
-        ::testing::ScopedTrace trace(__FILE__, __LINE__, 
-            "Comparing segmentation mask " + std::to_string(i));
-            
-        EXPECT_EQ(exp_mask.size(), act_mask.size());
-        if (exp_mask.size() != act_mask.size()) {
-            match = false;
-            continue;
-        }
-        
-        // 逐字节比较
-        for (size_t j = 0; j < exp_mask.size(); ++j) {
-            SCOPED_TRACE("Mask " + std::to_string(i) + " byte index " + std::to_string(j));
-            EXPECT_EQ(exp_mask[j], act_mask[j]);
-            if (::testing::Test::HasFailure()) {
-                match = false;
-            }
-        }
-    }
-    return match;
-}
-
-std::vector<uint8_t> LoadSegmentationResult(const fs::path &file_path)
-{
-    std::ifstream file(file_path, std::ios::binary | std::ios::ate);
-    if (!file.is_open())
-    {
-        throw std::runtime_error("Cannot open file: " + file_path.string());
-    }
-
-    std::streamsize size = file.tellg();
-    if (size < 0)
-    {
-        throw std::runtime_error("Failed to get file size: " + file_path.string());
-    }
-    file.seekg(0, std::ios::beg);
-
-    std::vector<uint8_t> seg_mask;
-    seg_mask.resize(static_cast<size_t>(size));
-
-    if (!file.read(reinterpret_cast<char *>(seg_mask.data()), size))
-    {
-        throw std::runtime_error("Failed to read file: " + file_path.string());
-    }
-
-    // 可选：检查是否完整读取
-    if (file.gcount() != size)
-    {
-        throw std::runtime_error("Read incomplete: " + file_path.string());
-    }
-
-    return seg_mask; // 返回vector<uint8_t>而不是SegmentationResult
 }
 
 class YoloV8SegPostProcessTest : public ::testing::Test
@@ -221,9 +157,10 @@ TEST_F(YoloV8SegPostProcessTest, run)
 
     // 在测试结束时比较分割掩码
     const auto& actual_results = processor->getResult().group;
-    std::vector<std::vector<uint8_t>> expected_masks = {expected_seg_mask};
     
-    // EXPECT_TRUE(CompareSegmentationMaskVectors(expected_masks, actual_results.segmentation_masks));
+    // 使用修改后的函数比较一维分割掩码
+    EXPECT_TRUE(CompareSegmentationMaskVectors(expected_seg_mask, actual_results.segmentation_masks));
+    
     std::string input_path = "apps/yolov8_seg_rknn/bus.jpg";
     cv::Mat orig_img = cv::imread(input_path, 1);
     cv::Mat result_img = orig_img.clone();
