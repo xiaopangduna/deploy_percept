@@ -41,6 +41,14 @@ std::vector<int8_t*> LoadInt8OutputBuffers(const cnpy::npz_t& npz, int num_outpu
  */
 std::vector<void*> LoadOutputBuffers(const cnpy::npz_t& npz, int num_outputs);
 
+/**
+ * @brief 从NPZ文件读取三个int8_t输出数据到vector中
+ * @param filepath NPZ文件路径
+ * @param success 输出参数，指示读取是否成功
+ * @return std::vector<std::vector<int8_t>> 包含三个输出数据的向量
+ */
+std::vector<std::vector<int8_t>> readNpzFile(const std::string &filepath, bool &success);
+
 } // namespace utils
 } // namespace deploy_percept
 

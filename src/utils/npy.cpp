@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <set>
 #include <cstring>
+#include <vector>
 
 namespace deploy_percept {
 namespace utils {
@@ -146,6 +147,56 @@ std::vector<void*> LoadOutputBuffers(const cnpy::npz_t& npz, int num_outputs)
         buffers.push_back(const_cast<void *>(it->second.data<void>()));
     }
     return buffers;
+}
+
+std::vector<std::vector<int8_t>> readNpzFile(const std::string &filepath, bool &success)
+{
+    std::vector<std::vector<int8_t>> result(3);  // 初始化3个空vector
+    success = false;
+    
+    try
+    {
+        // 加载NPZ文件
+        cnpy::npz_t npzFile = cnpy::npz_load(filepath);
+
+        // 获取output0
+        cnpy::NpyArray arr0 = npzFile["output0"];
+        if (arr0.word_size != sizeof(int8_t))
+        {
+            std::cerr << "output0 data type mismatch" << std::endl;
+            return result;
+        }
+        result[0].resize(arr0.num_vals);
+        std::memcpy(result[0].data(), arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
+
+        // 获取output1
+        cnpy::NpyArray arr1 = npzFile["output1"];
+        if (arr1.word_size != sizeof(int8_t))
+        {
+            std::cerr << "output1 data type mismatch" << std::endl;
+            return result;
+        }
+        result[1].resize(arr1.num_vals);
+        std::memcpy(result[1].data(), arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
+
+        // 获取output2
+        cnpy::NpyArray arr2 = npzFile["output2"];
+        if (arr2.word_size != sizeof(int8_t))
+        {
+            std::cerr << "output2 data type mismatch" << std::endl;
+            return result;
+        }
+        result[2].resize(arr2.num_vals);
+        std::memcpy(result[2].data(), arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
+
+        success = true;
+        return result;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error reading NPZ file: " << e.what() << std::endl;
+        return result;
+    }
 }
 
 } // namespace utils
