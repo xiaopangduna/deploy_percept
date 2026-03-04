@@ -105,6 +105,31 @@ bool compareNpzFiles(const std::string& file1, const std::string& file2) {
     }
 }
 
+std::vector<int8_t*> LoadInt8OutputBuffers(const cnpy::npz_t& npz, int num_outputs)
+{
+    std::vector<int8_t *> buffers;
+    buffers.reserve(num_outputs);
+    for (int i = 0; i < num_outputs; ++i)
+    {
+        std::string key = "output" + std::to_string(i);
+        auto it = npz.find(key);
+        if (it == npz.end())
+        {
+            throw std::runtime_error("Key not found: " + key);
+        }
+        
+        // 检查数据类型是否为int8
+        if (it->second.word_size != sizeof(int8_t))
+        {
+            throw std::runtime_error("Data type mismatch for " + key + ": expected int8_t");
+        }
+        
+        // 添加 const_cast 以匹配非常量指针
+        buffers.push_back(const_cast<int8_t *>(it->second.data<int8_t>()));
+    }
+    return buffers;
+}
+
 std::vector<void*> LoadOutputBuffers(const cnpy::npz_t& npz, int num_outputs)
 {
     std::vector<void *> buffers;

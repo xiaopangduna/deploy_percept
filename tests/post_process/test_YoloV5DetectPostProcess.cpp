@@ -8,8 +8,6 @@
 #include <stdexcept>
 #include <filesystem>
 
-#include <yaml-cpp/yaml.h>
-
 #include "cnpy.h"
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
@@ -22,12 +20,12 @@ namespace fs = std::filesystem;
 // YoloV5后处理相关测试
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// 从NPZ文件读取数据的辅助函数
-bool readNpzFile(const std::string &filepath,
-                 std::vector<int8_t> &output0, std::vector<int> &shape0,
-                 std::vector<int8_t> &output1, std::vector<int> &shape1,
-                 std::vector<int8_t> &output2, std::vector<int> &shape2)
+// 从NPZ文件读取数据的辅助函数，返回std::vector<int8_t*>以便直接输入processor->run
+std::vector<int8_t*> readNpzFile(const std::string &filepath, bool &success)
 {
+    std::vector<int8_t*> result(3, nullptr);  // 初始化3个nullptr
+    success = false;
+    
     try
     {
         // 加载NPZ文件
@@ -38,88 +36,64 @@ bool readNpzFile(const std::string &filepath,
         if (arr0.word_size != sizeof(int8_t))
         {
             std::cerr << "output0 data type mismatch" << std::endl;
-            return false;
+            return result;
         }
-        output0.resize(arr0.num_vals);
-        std::memcpy(output0.data(), arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
-
-        shape0.assign(arr0.shape.begin(), arr0.shape.end());
+        result[0] = new int8_t[arr0.num_vals];
+        std::memcpy(result[0], arr0.data<int8_t>(), arr0.num_vals * sizeof(int8_t));
 
         // 获取output1
         cnpy::NpyArray arr1 = npzFile["output1"];
         if (arr1.word_size != sizeof(int8_t))
         {
             std::cerr << "output1 data type mismatch" << std::endl;
-            return false;
+            // 清理已分配的内存
+            delete[] result[0];
+            result[0] = nullptr;
+            return result;
         }
-        output1.resize(arr1.num_vals);
-        std::memcpy(output1.data(), arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
-
-        shape1.assign(arr1.shape.begin(), arr1.shape.end());
+        result[1] = new int8_t[arr1.num_vals];
+        std::memcpy(result[1], arr1.data<int8_t>(), arr1.num_vals * sizeof(int8_t));
 
         // 获取output2
         cnpy::NpyArray arr2 = npzFile["output2"];
         if (arr2.word_size != sizeof(int8_t))
         {
             std::cerr << "output2 data type mismatch" << std::endl;
-            return false;
+            // 清理已分配的内存
+            delete[] result[0];
+            delete[] result[1];
+            result[0] = nullptr;
+            result[1] = nullptr;
+            return result;
         }
-        output2.resize(arr2.num_vals);
-        std::memcpy(output2.data(), arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
+        result[2] = new int8_t[arr2.num_vals];
+        std::memcpy(result[2], arr2.data<int8_t>(), arr2.num_vals * sizeof(int8_t));
 
-        shape2.assign(arr2.shape.begin(), arr2.shape.end());
-
-        return true;
+        success = true;
+        return result;
     }
     catch (const std::exception &e)
     {
         std::cerr << "Error reading NPZ file: " << e.what() << std::endl;
-        return false;
+        // 清理已分配的内存
+        for (int i = 0; i < 3; ++i) {
+            if (result[i] != nullptr) {
+                delete[] result[i];
+                result[i] = nullptr;
+            }
+        }
+        return result;
     }
 }
 
-// 从YAML文件读取参数的辅助函数
-bool readParamsYaml(const std::string &filepath,
-                    int &model_in_h, int &model_in_w,
-                    float &box_conf_threshold, float &nms_threshold,
-                    std::vector<int32_t> &qnt_zps,
-                    std::vector<float> &qnt_scales)
+// 辅助函数：释放readNpzFile分配的内存
+void freeNpzData(std::vector<int8_t*> &data)
 {
-    try
-    {
-        YAML::Node config = YAML::LoadFile(filepath);
-
-        // 读取基本参数
-        model_in_h = config["model_h"].as<int>();
-        model_in_w = config["model_w"].as<int>();
-        box_conf_threshold = config["box_conf_threshold"].as<float>();
-        nms_threshold = config["nms_threshold"].as<float>();
-
-        // 读取量化参数
-        if (config["qnt_zps"])
-        {
-            qnt_zps.clear();
-            for (const auto &val : config["qnt_zps"])
-            {
-                qnt_zps.push_back(val.as<int32_t>());
-            }
+    for (int i = 0; i < data.size(); ++i) {
+        if (data[i] != nullptr) {
+            delete[] data[i];
+            data[i] = nullptr;
         }
-
-        if (config["qnt_scales"])
-        {
-            qnt_scales.clear();
-            for (const auto &val : config["qnt_scales"])
-            {
-                qnt_scales.push_back(val.as<float>());
-            }
-        }
-
-        return true;
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error reading YAML file: " << e.what() << std::endl;
-        return false;
     }
 }
 
@@ -173,57 +147,50 @@ TEST_F(YoloV5DetectPostProcessTest, ProcessFunctionWithRealData)
         MakeDetectResult(0, "class_0", 0.3010f, 79, 353, 121, 517)};
 
     // 尝试从NPZ文件读取数据
-    std::vector<int8_t> input0, input1, input2;
-    std::vector<int> shape0, shape1, shape2;
-
-    // 使用项目根目录作为工作路径
     std::filesystem::path npz_path = "examples/data/yolov5_detect/yolov5_outputs.npz";
-
+    
     bool success = false;
+    std::vector<int8_t*> inputs = readNpzFile(npz_path.string(), success);
 
-    if (!npz_path.empty())
-    {
-        success = readNpzFile(npz_path, input0, shape0, input1, shape1, input2, shape2);
-    }
+    // 硬编码参数值（替代从YAML文件读取）
+    int model_in_h = 640;
+    int model_in_w = 640;
+    
+    std::vector<int32_t> qnt_zps = {-128, -128, -128};
+    std::vector<float> qnt_scales = {0.00392157f, 0.00392157f, 0.00392157f};
 
-    // 使用filesystem构建参数文件路径
-    std::filesystem::path params_path = "examples/data/yolov5_detect/yolov5_params.yaml";
-
-    // 读取参数YAML文件
-    int model_in_h, model_in_w;
-    float box_conf_threshold = 0.5f, nms_threshold = 0.5f;
-    std::vector<int32_t> qnt_zps;
-    std::vector<float> qnt_scales;
-
-    bool params_loaded = readParamsYaml(params_path,
-                                        model_in_h, model_in_w,
-                                        box_conf_threshold, nms_threshold,
-                                        qnt_zps, qnt_scales);
-
-    // 准备输入向量
-    std::vector<int8_t *> inputs = {
-        input0.data(),
-        input1.data(),
-        input2.data()};
-
-    // 执行处理
+    // 执行处理（现在可以直接使用inputs，因为它是std::vector<int8_t*>类型）
     bool result = processor->run(
         inputs,
-        model_in_h, model_in_w,
-        qnt_zps, qnt_scales);
+        model_in_h,
+        model_in_w,
+        qnt_zps,
+        qnt_scales);
 
-    // 验证结果
-    EXPECT_TRUE(result); // 确保处理成功
+    // 清理内存
+    freeNpzData(inputs);
 
-    // 获取检测结果
-    const auto &result_wrapper = processor->getResult();
-    const auto &group = result_wrapper.group; // 从Result结构体中获取ResultGroup
+    ASSERT_TRUE(result) << "Processing failed: " << processor->getResult().message;
 
-    // 验证group和预期结果是否一致
+    // 获取结果并验证
+    const auto& detection_result = processor->getResult().group;
+    
+    // 验证检测结果数量
+    EXPECT_EQ(detection_result.count, static_cast<int>(expected_results.size())) 
+        << "Expected " << expected_results.size() << " detections, but got " << detection_result.count;
 
-    EXPECT_TRUE(CompareDetectResultVectors(expected_results, group.results));
-
-    std::filesystem::path results_path = "examples/data/yolov5_detect/yolov5_detect_results.yaml";
+    // 验证每个检测结果
+    for (int i = 0; i < std::min(detection_result.count, static_cast<int>(expected_results.size())); ++i) {
+        const auto& actual = detection_result.results[i];
+        const auto& expected = expected_results[i];
+        
+        EXPECT_EQ(actual.cls_id, expected.cls_id) << "Detection " << i << " class ID mismatch";
+        EXPECT_NEAR(actual.prop, expected.prop, 1e-3) << "Detection " << i << " confidence mismatch";
+        EXPECT_EQ(actual.box.left, expected.box.left) << "Detection " << i << " box left mismatch";
+        EXPECT_EQ(actual.box.top, expected.box.top) << "Detection " << i << " box top mismatch";
+        EXPECT_EQ(actual.box.right, expected.box.right) << "Detection " << i << " box right mismatch";
+        EXPECT_EQ(actual.box.bottom, expected.box.bottom) << "Detection " << i << " box bottom mismatch";
+    }
 }
 
 int main(int argc, char **argv)

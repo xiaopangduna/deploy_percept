@@ -25,6 +25,15 @@ bool areNpzObjectsIdentical(const cnpy::npz_t& npz1, const cnpy::npz_t& npz2);
 bool compareNpzFiles(const std::string& file1, const std::string& file2);
 
 /**
+ * @brief 从cnpy::npz_t对象中加载int8_t类型的输出缓冲区
+ * @param npz 包含输出数据的NPZ对象
+ * @param num_outputs 输出的数量
+ * @return std::vector<int8_t*> 包含int8_t输出缓冲区指针的向量
+ * @throws std::runtime_error 当键不存在或数据类型不匹配时抛出异常
+ */
+std::vector<int8_t*> LoadInt8OutputBuffers(const cnpy::npz_t& npz, int num_outputs);
+
+/**
  * @brief 从cnpy::npz_t对象中加载输出缓冲区
  * @param npz 包含输出数据的NPZ对象
  * @param num_outputs 输出的数量
