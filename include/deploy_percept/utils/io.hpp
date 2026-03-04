@@ -16,7 +16,7 @@ namespace utils {
  * @details 以二进制模式读取文件，将整个文件内容加载到vector中
  *          支持大文件读取，使用std::ios::ate定位到文件末尾获取大小
  */
-std::vector<uint8_t> LoadSegmentationResult(const std::filesystem::path &file_path);
+std::vector<uint8_t> LoadUint8VectorFromBinFile(const std::filesystem::path &file_path);
 
 } // namespace utils
 } // namespace deploy_percept

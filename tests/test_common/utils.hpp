@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <cstring>
 #include "deploy_percept/post_process/types.hpp"
 
 /**
@@ -22,5 +23,19 @@ bool CompareSegmentationMaskVectors(const std::vector<uint8_t>& expected,
  * @return bool 比较结果，true表示相等，false表示不相等
  * @details 比较DetectionObject结构体的各个字段，包括类别ID、名称、置信度和边界框坐标
  */
-bool CompareDetectResultVectors(const std::vector<deploy_percept::post_process::DetectionObject>& expected,
+bool isDetectionObjectVectorEqualWithinTolerance(const std::vector<deploy_percept::post_process::DetectionObject>& expected,
                                const std::vector<deploy_percept::post_process::DetectionObject>& actual);
+
+/**
+ * @brief 创建一个DetectionObject实例
+ * @param cls_id 类别ID
+ * @param name_str 类别名称字符串
+ * @param conf 置信度
+ * @param x1 边界框左上角x坐标
+ * @param y1 边界框左上角y坐标
+ * @param x2 边界框右下角x坐标
+ * @param y2 边界框右下角y坐标
+ * @return DetectionObject 创建的检测对象
+ */
+deploy_percept::post_process::DetectionObject MakeDetectResult(int cls_id, const char *name_str, float conf,
+                                                              int x1, int y1, int x2, int y2);

@@ -28,12 +28,6 @@ namespace deploy_percept
                 int proto_height = 160;
                 int proto_weight = 160;
 
-                // Anchor参数
-                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
-                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
-                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
-
-                // 模型结构参数
                 int prop_box_size = 5; // 边界框坐标(xywh) + 置信度
             };
 
@@ -41,8 +35,6 @@ namespace deploy_percept
             struct Result
             {
                 ResultGroup group{}; // 使用统一的ResultGroup
-                bool success = false;
-                std::string message{}; // 可选的详细信息
             };
 
             // 使用参数结构体的构造函数
@@ -52,7 +44,7 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(
-                std::vector<void *> *outputs,
+                const std::vector<int8_t*>& outputs,
                 int input_image_width,
                 int input_image_height,
                 std::vector<std::vector<int>> &output_dims,
@@ -66,23 +58,13 @@ namespace deploy_percept
             std::vector<uint8_t> seg_mask_;
             std::vector<uint8_t> all_mask_in_one_;
 
-            int decodeDetectionHead(std::vector<void *> *all_input, int input_id, int *anchor, int grid_h, int grid_w,
+            int decodeDetectionAndSegmentionHead(const std::vector<int8_t*>* all_input, int input_id,  int grid_h, int grid_w,
                                     int stride,
                                     std::vector<float> &boxes, std::vector<float> &segments,
                                     std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                    std::vector<std::vector<int>> &output_dims, std::vector<float> &output_scales,
+                                    int dfl_len, std::vector<float> &output_scales,
                                     std::vector<int32_t> &output_zps);
 
-            // 新增：处理NMS后检测结果的函数
-            void collectDetectionsAfterNMS(
-                const std::vector<int> &indexArray,
-                const std::vector<float> &filterBoxes,
-                const std::vector<int> &classId,
-                const std::vector<float> &objProbs,
-                const std::vector<float> &filterSegments,
-                int validCount,
-                std::vector<float> &filterSegments_by_nms,
-                int &last_count);
 
             static void compute_dfl(float *tensor, int dfl_len, float *box)
             {

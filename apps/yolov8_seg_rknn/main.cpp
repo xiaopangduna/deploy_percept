@@ -178,15 +178,15 @@ int main()
     auto seg_results = seg_processor.getResult().group;
 
     // 保存第0个分割结果到bin文件
-    if (!seg_results.segmentation_masks.empty()) {
+    if (!seg_results.segmentation_mask.empty()) {
         std::string seg_result_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_result_0.bin";
         std::ofstream seg_file(seg_result_path, std::ios::binary);
         if (seg_file.is_open()) {
-            seg_file.write(reinterpret_cast<const char*>(seg_results.segmentation_masks.data()), 
-                          seg_results.segmentation_masks.size());
+            seg_file.write(reinterpret_cast<const char*>(seg_results.segmentation_mask.data()), 
+                          seg_results.segmentation_mask.size());
             seg_file.close();
             printf("Saved segmentation result (index 0) to %s, size: %zu bytes\n", 
-                   seg_result_path.c_str(), seg_results.segmentation_masks.size());
+                   seg_result_path.c_str(), seg_results.segmentation_mask.size());
         } else {
             printf("Warning: Failed to open file for writing segmentation result: %s\n", seg_result_path.c_str());
         }

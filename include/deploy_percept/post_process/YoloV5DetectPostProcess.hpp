@@ -52,7 +52,7 @@ namespace deploy_percept
         private:
             Params params_;
             Result result_{};
-            int processYoloOutput(int8_t *input, int *anchor, int grid_h, int grid_w,
+            int decodeDetectionHead(int8_t *input, int *anchor, int grid_h, int grid_w,
                                   int height, int width, int stride,
                                   std::vector<float> &boxes, std::vector<float> &objProbs,
                                   std::vector<int> &classId, float threshold,

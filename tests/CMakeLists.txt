@@ -8,7 +8,7 @@ find_package(GTestCustom REQUIRED)
 
 # 创建测试辅助库
 add_library(test_utils STATIC
-  test_common/compare.cpp)
+  test_common/utils.cpp)
 
 # 设置测试辅助库的包含目录
 target_include_directories(test_utils PUBLIC

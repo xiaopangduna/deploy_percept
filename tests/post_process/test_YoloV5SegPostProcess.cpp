@@ -6,7 +6,7 @@
 
 #include "cnpy.h"
 
-#include "deploy_percept/post_process/YoloV8SegPostProcess.hpp"
+#include "deploy_percept/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
 #include "tests/test_common/utils.hpp"
@@ -16,39 +16,31 @@ namespace fs = std::filesystem;
 using namespace deploy_percept::post_process;
 using namespace deploy_percept::utils;
 
-class YoloV8SegPostProcessTest : public ::testing::Test
+class YoloV5SegPostProcessTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
-        YoloV8SegPostProcess::Params params;
-        processor = std::make_unique<YoloV8SegPostProcess>(params);
+        YoloV5SegPostProcess::Params params;
+        processor = std::make_unique<YoloV5SegPostProcess>(params);
 
-        fs::path path_model_outputs_npz = "apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
+        fs::path path_model_outputs_npz = "examples/data/yolov5_seg/yolov5_seg_output.npz";
         model_outputs_npz = cnpy::npz_load(path_model_outputs_npz);
 
-        path_seg_result = "apps/yolov8_seg_rknn/yolov8_seg_result_mask.bin";
-
-        fs::path path_img = "apps/yolov8_seg_rknn/bus.jpg";
-        img = cv::imread(path_img);
-
-        path_save_img_with_detect_result = "tmp/yolov8_seg_result.jpg";
+        path_seg_result = "examples/data/yolov5_seg/seg_mask_0.bin";
     }
 
     void TearDown() override
     {
     }
-    std::vector<uint8_t> expected_seg_mask;
 
-    std::unique_ptr<deploy_percept::post_process::YoloV8SegPostProcess> processor;
+    std::unique_ptr<deploy_percept::post_process::YoloV5SegPostProcess> processor;
     cnpy::npz_t model_outputs_npz;
     fs::path path_seg_result;
-
-    cv::Mat img;
-    fs::path path_save_img_with_detect_result;
+    std::vector<uint8_t> expected_seg_mask;
 };
 
-TEST_F(YoloV8SegPostProcessTest, run)
+TEST_F(YoloV5SegPostProcessTest, run)
 {
     std::vector<DetectionObject> expected_results = {
         MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
@@ -119,11 +111,15 @@ TEST_F(YoloV8SegPostProcessTest, run)
 
     const auto &actual_results = processor->getResult().group;
 
+    // 使用修改后的函数比较一维分割掩码
     // EXPECT_TRUE(CompareSegmentationMaskVectors(expected_seg_mask, actual_results.segmentation_masks));
 
-    processor->drawDetectionResults(img, result_group);
-
-    cv::imwrite(path_save_img_with_detect_result, img);
+    std::string input_path = "apps/yolov8_seg_rknn/bus.jpg";
+    cv::Mat orig_img = cv::imread(input_path, 1);
+    cv::Mat result_img = orig_img.clone();
+    processor->drawDetectionResults(result_img, result_group);
+    std::string computed_out_path = "apps/yolov8_seg_rknn/yolov8_seg_result.jpg";
+    cv::imwrite(computed_out_path, result_img);
 }
 
 int main(int argc, char **argv)

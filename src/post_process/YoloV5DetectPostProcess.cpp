@@ -43,7 +43,7 @@ namespace deploy_percept
             int grid_h0 = model_in_h / stride0;
             int grid_w0 = model_in_w / stride0;
             int validCount0 = 0;
-            validCount0 = processYoloOutput(inputs[0], params_.anchor_stride8.data(), grid_h0, grid_w0,
+            validCount0 = decodeDetectionHead(inputs[0], params_.anchor_stride8.data(), grid_h0, grid_w0,
                                             model_in_h, model_in_w, stride0, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[0], qnt_scales[0]);
 
@@ -52,7 +52,7 @@ namespace deploy_percept
             int grid_h1 = model_in_h / stride1;
             int grid_w1 = model_in_w / stride1;
             int validCount1 = 0;
-            validCount1 = processYoloOutput(inputs[1], params_.anchor_stride16.data(), grid_h1, grid_w1,
+            validCount1 = decodeDetectionHead(inputs[1], params_.anchor_stride16.data(), grid_h1, grid_w1,
                                             model_in_h, model_in_w, stride1, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[1], qnt_scales[1]);
 
@@ -61,7 +61,7 @@ namespace deploy_percept
             int grid_h2 = model_in_h / stride2;
             int grid_w2 = model_in_w / stride2;
             int validCount2 = 0;
-            validCount2 = processYoloOutput(inputs[2], params_.anchor_stride32.data(), grid_h2, grid_w2,
+            validCount2 = decodeDetectionHead(inputs[2], params_.anchor_stride32.data(), grid_h2, grid_w2,
                                             model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[2], qnt_scales[2]);
 
@@ -90,7 +90,7 @@ namespace deploy_percept
 
             int last_count = 0;
             result_.group.count = 0;
-            result_.group.results.clear(); // 清空之前的结果
+            result_.group.detection_objects.clear(); // 清空之前的结果
             /* box valid detect target */
             for (int i = 0; i < validCount; ++i)
             {
@@ -120,7 +120,7 @@ namespace deploy_percept
                 // 设置标签名称，这里只是框架，实际需要从外部加载标签
                 snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
 
-                result_.group.results.push_back(det_obj);
+                result_.group.detection_objects.push_back(det_obj);
                 last_count++;
             }
             result_.group.count = last_count;
@@ -130,27 +130,7 @@ namespace deploy_percept
             return true;
         }
 
-        /**
-         * @brief 处理YoloV5模型的单个输出层
-         *
-         * 解析模型输出的特征图，提取目标边界框、置信度和类别信息
-         *
-         * @param input 模型输出数据指针
-         * @param anchor 当前尺度的锚框尺寸
-         * @param grid_h 特征图网格高度
-         * @param grid_w 特征图网格宽度
-         * @param height 原始输入图像高度
-         * @param width 原始输入图像宽度
-         * @param stride 特征图相对于原图的缩放步长
-         * @param boxes 输出的边界框坐标集合 (x, y, w, h)
-         * @param objProbs 输出的目标置信度集合
-         * @param classId 输出的类别ID集合
-         * @param threshold 置信度阈值
-         * @param zp 量化零点参数
-         * @param scale 量化缩放参数
-         * @return 有效检测框的数量
-         */
-        int YoloV5DetectPostProcess::processYoloOutput(int8_t *input, int *anchor, int grid_h, int grid_w,
+        int YoloV5DetectPostProcess::decodeDetectionHead(int8_t *input, int *anchor, int grid_h, int grid_w,
                                                        int height, int width, int stride,
                                                        std::vector<float> &boxes, std::vector<float> &objProbs,
                                                        std::vector<int> &classId, float threshold,

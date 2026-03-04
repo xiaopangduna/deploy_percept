@@ -232,7 +232,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
     float alpha = 0.5f; // 透明度
 
     // 首先绘制分割掩码
-    if (results.count >= 1 && !results.segmentation_masks.empty())
+    if (results.count >= 1 && !results.segmentation_mask.empty())
     {
         // 直接修改原图的像素值
         for (int h = 0; h < height; h++)
@@ -240,7 +240,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
             for (int w = 0; w < width; w++)
             {
                 // 获取掩码值
-                int mask_value = results.segmentation_masks[h * width + w];
+                int mask_value = results.segmentation_mask[h * width + w];
 
                 if (mask_value != 0)
                 {
@@ -263,7 +263,7 @@ void YoloBasePostProcess::drawDetectionResults(cv::Mat &image, const ResultGroup
     // 然后绘制边界框和标签
     for (int i = 0; i < results.count; i++)
     {
-        const DetectionObject *det_result = &results.results[i];
+        const DetectionObject *det_result = &results.detection_objects[i];
 
         // 获取对应类别的颜色
         cv::Scalar color = cv::Scalar(class_colors[det_result->cls_id % 20][2],
