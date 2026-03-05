@@ -1,10 +1,12 @@
 #include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <memory>
 #include <vector>
 #include <sys/time.h>
 #include <chrono>
+#include <fstream>
 
 #include "rknn_api.h"
 
@@ -12,6 +14,8 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
+
+#include "cnpy.h"
 
 #include "deploy_percept/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
@@ -63,8 +67,30 @@ int main()
   gettimeofday(&stop_time, NULL);
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-  // 为兼容新的post_process函数接口，创建std::vector<void*>并提取输出张量属性
+  // 保存outputs为NPZ格式
+  {
+      std::string output_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_seg_outputs.npz";
+      
+      for (int i = 0; i < engine.model_io_num_.n_output; i++) {
+          std::string key = "output_" + std::to_string(i);
+          std::vector<size_t> shape = {
+              static_cast<size_t>(engine.model_output_attrs_[i].dims[0]),
+              static_cast<size_t>(engine.model_output_attrs_[i].dims[1]),
+              static_cast<size_t>(engine.model_output_attrs_[i].dims[2]),
+              static_cast<size_t>(engine.model_output_attrs_[i].dims[3])
+          };
+          
+          // 逐个保存每个输出张量
+          std::string mode = (i == 0) ? "w" : "a";  // 第一个用"w"覆盖，后续用"a"追加
+          cnpy::npz_save(output_path, key, static_cast<int8_t*>(outputs[i].buf), shape, mode);
+      }
+      
+      printf("Saved outputs to %s\n", output_path.c_str());
+  }
+
+  // 为兼容新的post_process函数接口，创建std::vector<void*>和std::vector<int8_t*> 
   std::vector<void *> output_buffers;
+  std::vector<int8_t*> output_buffers_int8;  // 新增：用于YoloV5SegPostProcess的int8_t* vector
   std::vector<std::vector<int>> output_dims;
   std::vector<float> output_scales;
   std::vector<int32_t> output_zps;
@@ -73,6 +99,7 @@ int main()
   {
     // 添加输出缓冲区指针
     output_buffers.push_back(outputs[i].buf);
+    output_buffers_int8.push_back(static_cast<int8_t*>(outputs[i].buf));  // 转换为int8_t*
     
     // 提取张量维度信息
     std::vector<int> dims(4);
@@ -89,23 +116,69 @@ int main()
   deploy_percept::post_process::YoloV5SegPostProcess::Params params_post;
   deploy_percept::post_process::YoloV5SegPostProcess seg_processor(params_post);
 
+  // 打印后处理参数用于调试
+  printf("=== YoloV5SegPostProcess Parameters ===\n");
+  printf("Input image size: %dx%d\n", orig_img.cols, orig_img.rows);
+  printf("Number of outputs: %zu\n", output_buffers_int8.size());
+  printf("Output dimensions:\n");
+  for (size_t i = 0; i < output_dims.size(); i++) {
+      printf("  output_%zu: [%d, %d, %d, %d]\n", i, 
+             output_dims[i][0], output_dims[i][1], output_dims[i][2], output_dims[i][3]);
+  }
+  printf("Output scales:\n");
+  for (size_t i = 0; i < output_scales.size(); i++) {
+      printf("  output_%zu: %f\n", i, output_scales[i]);
+  }
+  printf("Output zero points:\n");
+  for (size_t i = 0; i < output_zps.size(); i++) {
+      printf("  output_%zu: %d\n", i, output_zps[i]);
+  }
+  printf("=====================================\n");
+
   // // 调用新的后处理类
   bool success = seg_processor.run(
-      &output_buffers,
+      output_buffers_int8,  // 使用int8_t*类型的vector
       orig_img.cols,
       orig_img.rows,
       output_dims,
       output_scales,
       output_zps);
 
-  if (!success)
-  {
-    printf("Post-processing failed: %s\n", seg_processor.getResult().message.c_str());
-    return -1;
-  }
 
   // 获取后处理结果
   auto seg_results = seg_processor.getResult().group;
+
+  // 打印目标检测结果（根据项目规范）
+  printf("=== Detection Results ===\n");
+  printf("Total detections: %d\n", seg_results.count);
+  
+  for (int i = 0; i < seg_results.count; i++) {
+      const auto& detection = seg_results.detection_objects[i];
+      printf("Detection %d:\n", i);
+      printf("  Class ID: %d\n", detection.cls_id);
+      printf("  Class Name: %s\n", detection.name);
+      printf("  Confidence: %.4f\n", detection.prop);
+      printf("  Bounding Box: [%d, %d, %d, %d]\n", 
+             detection.box.left, detection.box.top, detection.box.right, detection.box.bottom);
+      printf("  Box Size: %dx%d\n", 
+             detection.box.right - detection.box.left, detection.box.bottom - detection.box.top);
+  }
+  printf("========================\n");
+
+  // 保存分割掩码为bin文件（根据项目规范）
+  if (!seg_results.segmentation_mask.empty()) {
+      std::string mask_path = "/tmp/segmentation_mask_0.bin";
+      std::ofstream mask_file(mask_path, std::ios::binary);
+      if (mask_file.is_open()) {
+          mask_file.write(reinterpret_cast<const char*>(seg_results.segmentation_mask.data()), 
+                         seg_results.segmentation_mask.size());
+          mask_file.close();
+          printf("Saved segmentation mask to %s (size: %zu bytes)\n", 
+                 mask_path.c_str(), seg_results.segmentation_mask.size());
+      } else {
+          printf("Error: Failed to save segmentation mask to %s\n", mask_path.c_str());
+      }
+  }
 
   // 绘制计算得到的检测结果 - 使用类的成员函数
   cv::Mat result_img = orig_img.clone();

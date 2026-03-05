@@ -65,7 +65,6 @@ namespace deploy_percept
                                     int dfl_len, std::vector<float> &output_scales,
                                     std::vector<int32_t> &output_zps);
 
-
             static void compute_dfl(float *tensor, int dfl_len, float *box)
             {
                 for (int b = 0; b < 4; b++)

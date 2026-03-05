@@ -57,4 +57,5 @@ endfunction()
 # 使用函数创建测试
 enable_testing()
 create_test(test_YoloV5DetectPostProcess post_process/test_YoloV5DetectPostProcess.cpp)
+create_test(test_YoloV5SegPostProcess post_process/test_YoloV5SegPostProcess.cpp)
 create_test(test_YoloV8SegPostProcess post_process/test_YoloV8SegPostProcess.cpp)

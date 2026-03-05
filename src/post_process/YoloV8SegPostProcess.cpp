@@ -244,7 +244,7 @@ namespace deploy_percept
 
             return true;
         }
-        int YoloV8SegPostProcess::decodeDetectionAndSegmentionHead(const std::vector<int8_t *> *all_input, int input_id, int grid_h, int grid_w,
+        int YoloV8SegPostProcess::decodeDetectionAndSegmentionHead(const std::vector<int8_t*>* all_input, int input_id, int grid_h, int grid_w,
                                                                    int stride,
                                                                    std::vector<float> &boxes, std::vector<float> &segments,
                                                                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
