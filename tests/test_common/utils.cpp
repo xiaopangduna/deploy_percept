@@ -15,37 +15,43 @@ deploy_percept::post_process::DetectionObject MakeDetectResult(int cls_id, const
     return res;
 }
 
-bool CompareSegmentationMaskVectors(const std::vector<uint8_t> &expected,
-                                    const std::vector<uint8_t> &actual)
+bool isUint8VectorEqual(const std::vector<uint8_t> &expected,
+                        const std::vector<uint8_t> &actual)
 {
-    bool match = true;
-
-    ::testing::ScopedTrace trace(__FILE__, __LINE__,
-                                 "Comparing segmentation masks");
-
-    EXPECT_EQ(expected.size(), actual.size());
+    // 1. 检查大小是否一致
     if (expected.size() != actual.size())
     {
-        match = false;
-        return match;
+        std::cout << "Size mismatch: expected size = " << expected.size()
+                  << ", actual size = " << actual.size() << std::endl;
+        return false;
     }
 
-    // 逐字节比较
-    for (size_t j = 0; j < expected.size(); ++j)
+    // 2. 快速检查完全相等
+    if (memcmp(expected.data(), actual.data(), expected.size()) == 0)
     {
-        SCOPED_TRACE("Mask byte index " + std::to_string(j));
-        EXPECT_EQ(expected[j], actual[j]);
-        if (::testing::Test::HasFailure())
-        {
-            match = false;
-        }
+        return true; // 完全一致，不打印任何信息
     }
 
-    return match;
+    // 3. 大小一致但内容不同，统计一致和不一致个数
+    size_t equal_count = 0;
+    size_t not_equal_count = 0;
+
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        if (expected[i] == actual[i])
+            ++equal_count;
+        else
+            ++not_equal_count;
+    }
+
+    // 4. 打印统计信息并返回 false
+    std::cout << "Vectors are not equal: " << equal_count << " equal, "
+              << not_equal_count << " unequal elements." << std::endl;
+    return false;
 }
 
 bool isDetectionObjectVectorEqualWithinTolerance(const std::vector<DetectionObject> &expected,
-                                const std::vector<DetectionObject> &actual)
+                                                 const std::vector<DetectionObject> &actual)
 {
     if (expected.size() != actual.size())
     {
@@ -77,6 +83,55 @@ bool isDetectionObjectVectorEqualWithinTolerance(const std::vector<DetectionObje
         }
 
         // name 字段被忽略，不进行比较
+    }
+
+    return true;
+}
+
+bool isUint8VectorEqualWithTolerance(const std::vector<uint8_t> &expected,
+                                     const std::vector<uint8_t> &actual,
+                                     double tolerance) // 默认容忍度 3%
+{
+    // 大小不同则直接认为不一致
+    if (expected.size() != actual.size())
+        return false;
+
+    size_t size = expected.size();
+    if (size == 0)
+        return true; // 两个空向量相等
+
+    // 快速检查完全相等
+    if (memcmp(expected.data(), actual.data(), size) == 0)
+        return true;
+
+    // 3. 大小一致但内容不同，统计一致和不一致个数
+    size_t equal_count = 0;
+    size_t not_equal_count = 0;
+
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        if (expected[i] == actual[i])
+            ++equal_count;
+        else
+            ++not_equal_count;
+    }
+
+    // 4. 打印统计信息并返回 false
+    std::cout << "Vectors are not equal: " << equal_count << " equal, "
+              << not_equal_count << " unequal elements." << std::endl;
+              
+    // 计算允许的最大不同个数（向下取整）
+    size_t max_allowed = static_cast<size_t>(size * tolerance);
+
+    size_t diff_count = 0;
+    for (size_t i = 0; i < size; ++i)
+    {
+        if (expected[i] != actual[i])
+        {
+            ++diff_count;
+            if (diff_count > max_allowed)
+                return false;
+        }
     }
 
     return true;

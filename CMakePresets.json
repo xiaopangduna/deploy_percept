@@ -3,10 +3,10 @@
 
   "configurePresets": [
     {
-      "name": "x86_64-debug",
-      "displayName": "x86_64 Debug (Host)",
+      "name": "x86_64-debug-host",
+      "displayName": "x86_64-debug-host",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/x86_64-debug",
+      "binaryDir": "${sourceDir}/build/x86_64-debug-host",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/x86_64",
@@ -14,10 +14,10 @@
       }
     },
     {
-      "name": "aarch64-release",
-      "displayName": "aarch64 Release (Cross)",
+      "name": "aarch64-release-cross",
+      "displayName": "aarch64-release-cross",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/aarch64-release",
+      "binaryDir": "${sourceDir}/build/aarch64-release-cross",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-toolchain.cmake",
@@ -27,12 +27,12 @@
     },
     {
       "name": "aarch64-debug-host",
-      "displayName": "aarch64 Debug (Host)",
+      "displayName": "aarch64-debug-host",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/aarch64-debug-host",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-host",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     }
@@ -40,13 +40,13 @@
 
   "buildPresets": [
     {
-      "name": "x86_64-debug",
-      "configurePreset": "x86_64-debug",
+      "name": "x86_64-debug-host",
+      "configurePreset": "x86_64-debug-host",
       "jobs": 16
     },
     {
-      "name": "aarch64-release",
-      "configurePreset": "aarch64-release",
+      "name": "aarch64-release-cross",
+      "configurePreset": "aarch64-release-cross",
       "jobs": 16
     },
     {

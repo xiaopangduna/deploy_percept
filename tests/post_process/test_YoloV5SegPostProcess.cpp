@@ -55,8 +55,7 @@ TEST_F(YoloV5SegPostProcessTest, run)
         MakeDetectResult(5, "class_5", 0.8239f, 97, 134, 548, 461),
         MakeDetectResult(0, "class_0", 0.5007f, 79, 325, 124, 520)};
 
-    std::vector<uint8_t> expected_seg_mask;
-    expected_seg_mask = LoadUint8VectorFromBinFile(path_seg_result);
+    std::vector<uint8_t> expected_seg_mask = loadUint8VectorFromBinFile(path_seg_result);
 
     std::vector<std::vector<int>> output_dims;
     std::vector<float> output_scales;
@@ -71,15 +70,9 @@ TEST_F(YoloV5SegPostProcessTest, run)
         {1, 96, 20, 20},
         {1, 32, 160, 160}};
 
-    output_scales = {
-        0.003922f, 0.022222f, 0.003922f,
-        0.023239f, 0.003918f, 0.024074f,
-        0.022475f};
+    output_scales = {0.003922f, 0.022222f, 0.003922f, 0.023239f, 0.003918f, 0.024074f, 0.022475f};
 
-    output_zps = {
-        -128, 20, -128,
-        29, -128, 32,
-        -116};
+    output_zps = {-128, 20, -128, 29, -128, 32, -116};
 
     auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output_", 7);
     std::vector<int8_t *> inputs = {
@@ -94,15 +87,15 @@ TEST_F(YoloV5SegPostProcessTest, run)
     bool success = processor->run(inputs, 640, 640,
                                   output_dims, output_scales, output_zps);
 
-    const auto &result = processor->getResult();
-    const auto &result_group = result.group;
+    const auto &result = processor->getResult().group;
 
-    EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, result_group.detection_objects));
+    EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, result.detection_objects));
 
     const auto &actual_results = processor->getResult().group;
-    // EXPECT_TRUE(CompareSegmentationMaskVectors(expected_seg_mask, actual_results.segmentation_masks));
 
-    processor->drawDetectionResults(img, result_group);
+    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
+
+    processor->drawDetectionResults(img, result);
     cv::imwrite(path_save_img_with_detect_result, img);
 }
 

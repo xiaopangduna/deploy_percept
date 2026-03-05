@@ -79,7 +79,6 @@ int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
 
-    // 注册全局环境
     ::testing::AddGlobalTestEnvironment(new GlobalLoggerEnvironment);
 
     return RUN_ALL_TESTS();

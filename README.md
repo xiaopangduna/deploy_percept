@@ -1,6 +1,14 @@
 # deploy_percept
 
-一个基于 CMake 构建的 C++ 项目骨架，旨在提供模块化、可复用的 C++ 库开发模板。
+一个边缘AI推理框架，支持YOLO系列模型的目标检测和实例分割。
+
+## 项目简介
+
+`deploy_percept` 是一个高性能边缘AI推理框架。该项目提供了一套完整的解决方案，支持YOLOv5、YOLOv8等主流模型的目标检测和实例分割任务。框架采用模块化设计，便于扩展和维护。
+
+## 功能特性
+
+- **多模型支持**：支持YOLOv5、YOLOv8等主流目标检测和分割模型
 
 ## 项目结构
 
@@ -8,66 +16,100 @@
 deploy_percept/
 ├── CMakeLists.txt                 # 根CMakeLists.txt，配置整个项目
 ├── README.md
+├── apps/                          # 示例应用
+│   ├── yolov5_detect_rknn/        # YOLOv5目标检测示例
+│   ├── yolov5_seg_rknn/           # YOLOv5实例分割示例
+│   └── yolov8_seg_rknn/           # YOLOv8实例分割示例
+├── cmake/                         # CMake模块
+│   ├── Find*.cmake                # 第三方库查找脚本
+│   └── aarch64-toolchain.cmake    # ARM交叉编译工具链
+├── examples/                      # 示例数据
+│   └── data/
 ├── include/                       # 公共头文件
-│   └── deploy_percept/             # 项目名作为子目录
-│       └── calculator/
-│           └── Calculator.hpp    # Calculator类声明
+│   └── deploy_percept/
+│       ├── engine/                # 推理引擎接口
+│       ├── post_process/          # 后处理算法
+│       ├── pre_process/           # 预处理算法
+│       ├── utils/                 # 工具函数
+│       └── deploy_percept.hpp     # 主要入口头文件
+├── scripts/                       # 构建脚本
+│   ├── build.sh                   # 构建脚本
+│   ├── test.sh                    # 测试脚本
+│   └── third_party_builders/      # 第三方库构建脚本
 ├── src/                           # 源代码
-│   ├── CMakeLists.txt            # 源码构建配置
-│   └── calculator/
-│       └── Calculator.cpp        # Calculator类实现
+│   ├── engine/                    # 推理引擎实现
+│   ├── post_process/              # 后处理算法实现
+│   ├── pre_process/               # 预处理算法实现
+│   └── utils/                     # 工具函数实现
 ├── tests/                         # 测试代码
-│   ├── CMakeLists.txt
-│   └── calculator_test.cpp       # Calculator类测试
-└── third_party/                   # 第三方依赖
+│   ├── post_process/              # 后处理算法测试
+│   ├── test_common/               # 测试通用组件
+│   └── utils/                     # 测试工具函数
+└── third_party/                   # 第三方依赖（可能在.gitignore中）
 ```
 
+## 依赖项
+
+- **RKNN Toolkit**：瑞芯微神经网络推理工具包
+- **OpenCV**：计算机视觉库
+- **CMake**：构建系统
+- **spdlog**：日志库
+- **yaml-cpp**：YAML解析库
+- **cnpy**：NumPy数组读写库
+
 ## 编译步骤
+
+### 环境准备
+
+安装第三方库：
+
+```bash
+# aarch64
+bash scripts/third_party_builder.sh aarch64 --libs all
+# x86_64
+bash scripts/third_party_builder.sh x86_64 --libs all
+
+bash scripts/third_party_builder.sh aarch64 --libs cnpy,gtest,opencv,rga,rknpu,spdlog,yaml-cpp
+```
 
 ### 标准构建
 
 ```bash
-mkdir build && cd build
-cmake ..
-make
+# 配置
+cmake --preset=x86_64-debug-host
+# 构建
+cmake --build --preset=x86_64-debug-host
+# 安装
+cmake --install build/x86_64-debug-host
+--preset=x86_64-debug-host/aarch64-release-cross/aarch64-debug-host
 ```
 
-### 运行测试
+### 交叉编译（针对ARM平台）
 
 ```bash
-./tests/calculator_test
+cmake --preset=aarch64-release-cross
+cmake --build --preset=aarch64-release-cross
 ```
 
-或者使用CTest运行所有测试:
-
+### 测试
 ```bash
-ctest
+cd build/x86_64-debug-host && ctest
 ```
 
-## 使用 find_package 的方式（推荐）
+## 使用示例
 
-这是标准 CMake 生态中，使用包配置文件（package config）让其他项目「找到并使用你的库」。
+项目提供了几个使用示例：
+### rknn
+1. **yolov5_detect_rknn**：YOLOv5目标检测示例
+2. **yolov5_seg_rknn**：YOLOv5实例分割示例
+3. **yolov8_seg_rknn**：YOLOv8实例分割示例
 
-编译步骤
-在你的库项目中，配置并安装 package config 文件：
+## 性能优化
 
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
-make
-make install
-```
+- 使用RKNN硬件加速推理
+- 优化内存分配和数据传输
+- 采用高效的后处理算法
 
-这会把库文件、头文件和 cmake 配置文件安装到指定路径。
+## 许可证
 
-## 其他项目使用
-
-```cmake
-list(APPEND CMAKE_PREFIX_PATH "/path/to/install")  # 告诉 CMake 去哪里找包
-
-find_package(deploy_percept REQUIRED)
-
-target_link_libraries(myExecutable PRIVATE deploy_percept::deploy_percept)
-```
-
-这样你的库 deploy_percept 就像 OpenCV、Boost 一样被其他模块方便调用，且自动处理依赖和头文件路径。
+本项目采用 MIT 许可证，请参阅 LICENSE 文件获取更多信息。
