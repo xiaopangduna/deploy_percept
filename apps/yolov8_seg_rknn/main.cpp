@@ -21,11 +21,52 @@
 #include "deploy_percept/post_process/YoloV8SegPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
-#include "deploy_percept/utils/npy.hpp" 
+#include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
 
 using namespace deploy_percept::utils;
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
+
+/**
+ * @brief 将RKNN输出数组转换为NPZ格式
+ * @param outputs RKNN输出数组指针
+ * @param output_count 输出tensor数量
+ * @param output_attrs 输出tensor属性向量
+ * @param prefix 键名前缀，默认为"output_"
+ * @return cnpy::npz_t 转换后的NPZ对象
+ * @throws std::runtime_error 当转换过程中发生错误时抛出异常
+ */
+cnpy::npz_t convertRknnOutputsToNpz(const rknn_output *outputs,
+                                    uint32_t output_count,
+                                    const std::vector<rknn_tensor_attr> &output_attrs,
+                                    const std::string &prefix = "output_")
+{
+    cnpy::npz_t npz_result;
+
+    for (uint32_t i = 0; i < output_count; ++i)
+    {
+        const auto &attr = output_attrs[i];
+
+        // 创建键名
+        std::string key = prefix + std::to_string(i);
+
+        // 获取数据信息
+        size_t data_size = attr.n_elems;
+        const int8_t *data_ptr = static_cast<const int8_t *>(outputs[i].buf);
+
+        // 创建NpyArray对象 - 使用正确的构造函数
+        std::vector<size_t> shape(attr.dims, attr.dims + attr.n_dims);
+        cnpy::NpyArray array(shape, sizeof(int8_t), false); // false表示C-order
+
+        // 复制数据
+        std::memcpy(array.data<int8_t>(), data_ptr, data_size * sizeof(int8_t));
+
+        // 添加到NPZ对象
+        npz_result[key] = std::move(array);
+    }
+
+    return npz_result;
+}
 
 /**
  * @brief 验证模型输出与参考文件是否一致
@@ -46,31 +87,11 @@ bool validateModelOutput(const rknn_output *outputs,
             return false;
         }
 
-        // 将当前RKNN输出转换为NPZ格式
-        cnpy::npz_t current_npz;
-        uint32_t output_count = engine.model_io_num_.n_output;
-
-        for (uint32_t i = 0; i < output_count; ++i)
-        {
-            auto &attr = engine.model_output_attrs_[i];
-
-            // 创建键名
-            std::string key = "output_" + std::to_string(i);
-
-            // 获取数据信息
-            size_t data_size = attr.n_elems;
-            const int8_t *data_ptr = static_cast<const int8_t *>(outputs[i].buf);
-
-            // 创建NpyArray对象 - 使用正确的构造函数
-            std::vector<size_t> shape(attr.dims, attr.dims + attr.n_dims);
-            cnpy::NpyArray array(shape, sizeof(int8_t), false); // false表示C-order
-
-            // 复制数据
-            std::memcpy(array.data<int8_t>(), data_ptr, data_size * sizeof(int8_t));
-
-            // 添加到NPZ对象
-            current_npz[key] = std::move(array);
-        }
+        // 使用新函数转换输出
+        cnpy::npz_t current_npz = convertRknnOutputsToNpz(
+            outputs,
+            engine.model_io_num_.n_output,
+            engine.model_output_attrs_);
 
         // 加载参考数据
         cnpy::npz_t reference_npz = cnpy::npz_load(reference_file);
@@ -80,7 +101,7 @@ bool validateModelOutput(const rknn_output *outputs,
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error validating model output: " << e.what() << std::endl;
+        std::cerr << "Error in validateModelOutput: " << e.what() << std::endl;
         return false;
     }
 }
@@ -88,15 +109,13 @@ bool validateModelOutput(const rknn_output *outputs,
 int main()
 {
     std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov8_seg.rknn";
-
+    std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov8_seg_rknn/bus.jpg";
+    std::filesystem::path reference_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
+    std::string computed_out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_out.jpg";
     deploy_percept::engine::RknnEngine::Params params;
     params.model_path = model_name;
 
     deploy_percept::engine::RknnEngine engine(params);
-
-    // 读取图片
-    std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov8_seg_rknn/bus.jpg";
-    printf("Read %s ...\n", input_path.c_str());
 
     cv::Mat orig_img = cv::imread(input_path, 1);
 
@@ -129,20 +148,24 @@ int main()
     gettimeofday(&stop_time, NULL);
     printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
+    bool validation_result = validateModelOutput(outputs, engine, reference_path.string());
+    if (validation_result)
+    {
+        printf("Model output validation passed.\n");
+    }
+    else
+    {
+        printf("Model output validation failed.\n");
+    }
 
-    std::filesystem::path project_root = std::filesystem::current_path().parent_path().parent_path();
-    // std::filesystem::path reference_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov8_seg/yolov8_seg_outputs.npz";
-
-    // bool validation_result = validateModelOutput(outputs, engine, reference_path.string());
-
-    std::vector<int8_t*> output_buffers_int8;  
+    std::vector<int8_t *> output_buffers_int8;
     std::vector<std::vector<int>> output_dims;
     std::vector<float> output_scales;
     std::vector<int32_t> output_zps;
 
     for (int i = 0; i < engine.model_io_num_.n_output; i++)
     {
-        output_buffers_int8.push_back(static_cast<int8_t*>(outputs[i].buf));  // 转换为int8_t*
+        output_buffers_int8.push_back(static_cast<int8_t *>(outputs[i].buf)); // 转换为int8_t*
 
         // 提取张量维度信息
         std::vector<int> dims(4);
@@ -154,13 +177,12 @@ int main()
         output_scales.push_back(engine.model_output_attrs_[i].scale);
         output_zps.push_back(engine.model_output_attrs_[i].zp);
     }
-    // 使用YoloV5SegPostProcess类进行后处理
+
     deploy_percept::post_process::YoloV8SegPostProcess::Params params_post;
     deploy_percept::post_process::YoloV8SegPostProcess seg_processor(params_post);
 
-    // // 调用新的后处理类
     bool success = seg_processor.run(
-        output_buffers_int8,  // 使用int8_t*类型的vector
+        output_buffers_int8,
         orig_img.cols,
         orig_img.rows,
         output_dims,
@@ -173,14 +195,13 @@ int main()
     std::filesystem::path path_save_mask_bin = "tmp/yolov8_seg_mask.bin";
     saveUint8VectorToBinFile(seg_results.segmentation_mask, path_save_mask_bin);
 
-
     cv::Mat result_img = orig_img.clone();
     seg_processor.drawDetectionResults(result_img, seg_results);
 
-    std::string computed_out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_out.jpg";
-    printf("Save computed detect result to %s\n", computed_out_path.c_str());
     cv::imwrite(computed_out_path, result_img);
+    printf("Save computed detect result to %s\n", computed_out_path.c_str());
     rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
+    
     // std::vector<DetectionObject> expected_results = {
     // MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
     // MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
