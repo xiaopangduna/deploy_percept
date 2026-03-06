@@ -21,8 +21,10 @@
 #include "deploy_percept/post_process/YoloV8SegPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
-#include "deploy_percept/utils/npy.hpp" // 包含新的工具函数
+#include "deploy_percept/utils/npy.hpp" 
+#include "deploy_percept/utils/io.hpp"
 
+using namespace deploy_percept::utils;
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
 /**
@@ -127,25 +129,19 @@ int main()
     gettimeofday(&stop_time, NULL);
     printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-    // 使用极简的验证接口
-    std::cout << "\n=== Simple NPZ Validation ===" << std::endl;
 
     std::filesystem::path project_root = std::filesystem::current_path().parent_path().parent_path();
     // std::filesystem::path reference_path = "/home/orangepi/HectorHuang/deploy_percept/examples/data/yolov8_seg/yolov8_seg_outputs.npz";
 
     // bool validation_result = validateModelOutput(outputs, engine, reference_path.string());
 
-    // 为兼容新的post_process函数接口，创建std::vector<void*>并提取输出张量属性
-    std::vector<void *> output_buffers;
-    std::vector<int8_t*> output_buffers_int8;  // 新增：用于YoloV8SegPostProcess的int8_t* vector
+    std::vector<int8_t*> output_buffers_int8;  
     std::vector<std::vector<int>> output_dims;
     std::vector<float> output_scales;
     std::vector<int32_t> output_zps;
 
     for (int i = 0; i < engine.model_io_num_.n_output; i++)
     {
-        // 添加输出缓冲区指针
-        output_buffers.push_back(outputs[i].buf);
         output_buffers_int8.push_back(static_cast<int8_t*>(outputs[i].buf));  // 转换为int8_t*
 
         // 提取张量维度信息
@@ -174,22 +170,9 @@ int main()
     // 获取后处理结果
     auto seg_results = seg_processor.getResult().group;
 
-    // // 保存第0个分割结果到bin文件
-    // if (!seg_results.segmentation_mask.empty()) {
-    //     std::string seg_result_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_result_0.bin";
-    //     std::ofstream seg_file(seg_result_path, std::ios::binary);
-    //     if (seg_file.is_open()) {
-    //         seg_file.write(reinterpret_cast<const char*>(seg_results.segmentation_mask.data()), 
-    //                       seg_results.segmentation_mask.size());
-    //         seg_file.close();
-    //         printf("Saved segmentation result (index 0) to %s, size: %zu bytes\n", 
-    //                seg_result_path.c_str(), seg_results.segmentation_mask.size());
-    //     } else {
-    //         printf("Warning: Failed to open file for writing segmentation result: %s\n", seg_result_path.c_str());
-    //     }
-    // } else {
-    //     printf("Warning: No segmentation results available to save\n");
-    // }
+    std::filesystem::path path_save_mask_bin = "tmp/yolov8_seg_mask.bin";
+    saveUint8VectorToBinFile(seg_results.segmentation_mask, path_save_mask_bin);
+
 
     cv::Mat result_img = orig_img.clone();
     seg_processor.drawDetectionResults(result_img, seg_results);

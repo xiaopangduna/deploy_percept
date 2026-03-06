@@ -56,7 +56,7 @@ TEST_F(YoloV8SegPostProcessTest, run)
         MakeDetectResult(0, "class_0", 0.8655f, 477, 232, 559, 519),
         MakeDetectResult(0, "class_0", 0.5403f, 79, 327, 125, 514),
         MakeDetectResult(27, "class_27", 0.2741f, 248, 284, 259, 310)};
-        
+
     std::vector<uint8_t> expected_seg_mask = loadUint8VectorFromBinFile(path_seg_result);
 
     std::vector<std::vector<int>> output_dims;
@@ -115,7 +115,17 @@ TEST_F(YoloV8SegPostProcessTest, run)
 
     const auto &actual_results = processor->getResult().group;
 
-    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask,0.03));
+    std::filesystem::path path_save_mask_bin = "tmp/yolov8_seg_mask_test.bin";
+    saveUint8VectorToBinFile(result.segmentation_mask, path_save_mask_bin);
+
+    // std::filesystem::path path_1 = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_mask_test.bin";
+    // std::vector<uint8_t> expected_seg_mask_1 = loadUint8VectorFromBinFile(path_1);
+    // std::filesystem::path path_2 = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_mask.bin";
+    // std::vector<uint8_t> expected_seg_mask_2 = loadUint8VectorFromBinFile(path_2);
+    // EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask_1, expected_seg_mask_2));
+    // EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask_1, expected_seg_mask));
+
+    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
 
     processor->drawDetectionResults(img, result);
 

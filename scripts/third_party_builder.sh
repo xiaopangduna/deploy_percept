@@ -156,6 +156,8 @@ case "${PLATFORM}" in
     aarch64)
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/aarch64-toolchain.cmake
         ;;
+    x86_64)
+        ;;
     *)
         echo "错误: 不支持的平台 '${PLATFORM}'"
         echo "支持的平台: aarch64, x86_64"
