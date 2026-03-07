@@ -13,6 +13,7 @@ add_library(test_utils STATIC
 # 设置测试辅助库的包含目录
 target_include_directories(test_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    $<TARGET_PROPERTY:GTest::gtest,INTERFACE_INCLUDE_DIRECTORIES>  # 添加gtest头文件目录
 )
 
 # 定义创建测试的函数
@@ -28,21 +29,10 @@ function(create_test TEST_NAME)
   
   # 链接库
   if(GTest_FOUND)
-    if(TARGET GTest::gtest_main)
-      # 如果找到了GTest目标，则使用目标链接
       target_link_libraries(${TEST_NAME} PRIVATE
           deploy_percept
           test_utils
           GTest::gtest_main)
-    else()
-      # 否则直接链接库文件
-      target_include_directories(${TEST_NAME} PRIVATE ${GTEST_INCLUDE_DIRS})
-      target_link_libraries(${TEST_NAME} PRIVATE
-          deploy_percept
-          test_utils
-          ${GTEST_MAIN_LIBRARIES}
-          ${GTEST_LIBRARIES})
-    endif()
   else()
     message(FATAL_ERROR "未找到Google Test库，无法编译测试程序")
   endif()

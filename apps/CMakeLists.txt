@@ -1,3 +1,3 @@
-add_subdirectory(yolov5_detect_rknn)
-add_subdirectory(yolov5_seg_rknn)
-add_subdirectory(yolov8_seg_rknn)
+# add_subdirectory(yolov5_detect_rknn)
+# add_subdirectory(yolov5_seg_rknn)
+# add_subdirectory(yolov8_seg_rknn)

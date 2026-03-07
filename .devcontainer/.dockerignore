@@ -1,0 +1,41 @@
+# 忽略 Git
+.git
+.gitignore
+
+# 忽略 VSCode 配置
+.vscode/
+.vscode-server/
+
+# 忽略 Python 缓存
+__pycache__/
+*.pyc
+
+# 忽略构建目录
+build/
+build*/ 
+devel/
+install/
+
+# 忽略 CMake 缓存文件
+CMakeFiles/
+CMakeCache.txt
+cmake-build*/
+
+# 忽略日志文件
+*.log
+
+# 忽略大文件
+*.zip
+*.tar
+*.tar.gz
+
+# 忽略 ROS 自动生成的包
+*.bag.active
+rosbag_metadata.csv
+
+# 忽略临时文件
+*.swp
+*.tmp
+
+# 忽略 devcontainer 本地缓存
+.devcontainer/cache/

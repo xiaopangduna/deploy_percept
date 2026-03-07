@@ -61,6 +61,10 @@ deploy_percept/
 
 ### 环境准备
 
+### Vscode
+在容器中打开
+容器
+
 安装第三方库：
 
 ```bash
@@ -95,6 +99,7 @@ cmake --build --preset=aarch64-release-cross
 ```bash
 cd build/x86_64-debug-host && ctest
 ```
+
 
 ## 使用示例
 

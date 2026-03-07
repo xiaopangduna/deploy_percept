@@ -85,12 +85,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help)
             show_help
-            exit 0
+            return 0
             ;;
         *)
             echo "错误: 未知参数: $1"
             show_help
-            exit 1
+            return 1
             ;;
     esac
 done
@@ -101,7 +101,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "错误: 必须指定 --platform"
     show_help
-    exit 1
+    return 1
 fi
 
 # ------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RKNPU构建器] 平台为 x86_64，跳过 RKNPU 安装（仅适用于 Rockchip ARM）"
-    exit 0
+    return 0
 fi
 
 echo "[RKNPU构建器] 平台: $PLATFORM"
@@ -123,7 +123,7 @@ echo "[RKNPU构建器] 项目根目录: $PROJECT_ROOT"
 
 if [ ! -d "$PROJECT_ROOT" ]; then
     echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    exit 1
+    return 1
 fi
 
 # ------------------------------------------------------------------------------
@@ -202,7 +202,7 @@ fi
 # ------------------------------------------------------------------------------
 if [ ! -d "${INSTALL_DIR}/rknpu1" ] && [ ! -d "${INSTALL_DIR}/rknpu2" ]; then
     echo "[RKNPU构建器] 错误: 未成功安装任何 RKNPU 组件"
-    exit 1
+    return 1
 fi
 
 echo "[RKNPU构建器] 完成"

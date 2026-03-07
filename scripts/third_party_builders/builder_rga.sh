@@ -71,12 +71,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help)
             show_help
-            exit 0
+            return 0
             ;;
         *)
             echo "错误: 未知参数 $1"
             show_help
-            exit 1
+            return 1
             ;;
     esac
 done
@@ -87,7 +87,7 @@ done
 if [ -z "$PLATFORM" ]; then
     echo "错误: 必须指定 --platform"
     show_help
-    exit 1
+    return 1
 fi
 
 PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
@@ -99,7 +99,7 @@ echo "[RGA构建器] 安装根目录: $INSTALL_DIR"
 
 if [ ! -d "$PROJECT_ROOT" ]; then
     echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    exit 1
+    return 1
 fi
 
 # toolchain-file 仅接受，不使用
@@ -113,12 +113,12 @@ fi
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RGA构建器] x86_64 平台不支持 RGA，跳过安装"
     echo "[RGA构建器] 视为成功完成"
-    exit 0
+    return 0
 fi
 
 if [ "$PLATFORM" != "aarch64" ]; then
     echo "错误: RGA 当前仅支持 aarch64 平台"
-    exit 1
+    return 1
 fi
 
 # -------------------------
@@ -170,7 +170,7 @@ if [ -d "$RGA_INSTALL_DIR/librga" ]; then
         done
 else
     echo "[RGA构建器] 错误: RGA 安装失败，目录不存在"
-    exit 1
+    return 1
 fi
 
 echo "[RGA构建器] RGA 处理完成"

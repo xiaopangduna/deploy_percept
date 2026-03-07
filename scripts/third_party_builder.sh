@@ -1,7 +1,7 @@
+# v0.0.1-2026.03.07
 #!/bin/bash
 # 第三方库构建调度脚本
 # 用法: bash scripts/third_party_builder.sh <platform> --libs <libraries>
-# curl -I https://github.com 
 
 set -e
 
@@ -46,7 +46,6 @@ show_help() {
 LIBS_TO_BUILD=""
 PLATFORM=""
 
-# 特殊处理 --help 参数
 # 检查是否有 --help 或 -h 参数
 for arg in "$@"; do
     case "$arg" in
@@ -57,11 +56,14 @@ for arg in "$@"; do
     esac
 done
 
+PLATFORM="$1"
+shift  # 移除平台参数
+
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         --libs)
-            if [ -z "$2" ] || [[ "$2" == -* ]]; then
+            if [ -z "$2" ] ; then
                 echo "错误: --libs 参数需要一个值"
                 echo "请使用 $0 --help 查看完整用法"
                 exit 1
@@ -69,24 +71,10 @@ while [[ $# -gt 0 ]]; do
             LIBS_TO_BUILD="$2"
             shift 2
             ;;
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        -*)
-            echo "错误: 未知选项: $1"
+        *)
+            echo "错误: 未知参数: $1"
             echo "请使用 $0 --help 查看完整用法"
             exit 1
-            ;;
-        *)
-            if [ -z "$PLATFORM" ]; then
-                PLATFORM="$1"
-            else
-                echo "错误: 未知参数: $1"
-                echo "请使用 $0 --help 查看完整用法"
-                exit 1
-            fi
-            shift
             ;;
     esac
 done
@@ -143,14 +131,6 @@ if [ ! -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
     exit 1
 fi
 
-echo "================================================================"
-echo "第三方库构建系统"
-echo "================================================================"
-echo "平台: $PLATFORM"
-echo "要构建的库: $LIBS_TO_BUILD"
-echo "构建器目录: $THIRD_PARTY_BUILDERS_DIR"
-echo "================================================================"
-
 # 根据平台设置工具链文件（可选，构建器脚本可能会忽略）
 case "${PLATFORM}" in
     aarch64)
@@ -166,18 +146,9 @@ case "${PLATFORM}" in
         ;;
 esac
 
-# 创建平台对应的第三方库目录
-mkdir -p ${PROJECT_ROOT}/tmp
-mkdir -p ${PROJECT_ROOT}/third_party
-INSTALL_DIR=${PROJECT_ROOT}/third_party/
-
-echo "安装目录: $INSTALL_DIR"
-echo "使用工具链文件: $TOOLCHAIN_FILE"
-
 # 处理 "all" 参数
 if [ "$LIBS_TO_BUILD" = "all" ]; then
     echo "检测到 'all' 参数，将构建所有支持的库"
-    # 获取所有可用的构建器
     if [ -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
         # 提取所有builder_*.sh文件的库名
         ALL_LIBS=$(ls "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null | 
@@ -201,9 +172,25 @@ fi
 # 解析要构建的库列表
 IFS=',' read -ra LIBS_ARRAY <<< "$LIBS_TO_BUILD"
 
+# 创建平台对应的第三方库目录
+mkdir -p ${PROJECT_ROOT}/tmp
+mkdir -p ${PROJECT_ROOT}/third_party
+INSTALL_DIR=${PROJECT_ROOT}/third_party/
+
+echo "================================================================"
+echo "第三方库构建系统"
+echo "================================================================"
+echo "BUILD_MODE: $BUILD_MODE"
+echo "PLATFORM: $PLATFORM"
+echo "LIBS_TO_BUILD: $LIBS_TO_BUILD"
+echo "THIRD_PARTY_BUILDERS_DIR: $THIRD_PARTY_BUILDERS_DIR"
+echo "INSTALL_DIR: $INSTALL_DIR"
+echo "TOOLCHAIN_FILE: $TOOLCHAIN_FILE"
+echo "================================================================"
+
+
 # 遍历所有需要构建的库
 for lib in "${LIBS_ARRAY[@]}"; do
-    # 去除可能的空格
     lib=$(echo "$lib" | xargs)
     
     # 检查库名是否为空
@@ -217,7 +204,6 @@ for lib in "${LIBS_ARRAY[@]}"; do
     
     if [ ! -f "$build_script" ]; then
         echo "错误: 库 '$lib' 的构建脚本不存在: $build_script"
-        echo "支持的库: gtest, opencv, spdlog, rknpu, cnpy, rga"
         echo "可用构建器:"
         ls -1 "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null | 
             sed 's|.*/builder_||;s|\.sh||' | 
@@ -234,8 +220,6 @@ for lib in "${LIBS_ARRAY[@]}"; do
     echo "使用构建器: $(basename "$build_script")"
     echo "===================================================================="
     
-    # 调用具体的库构建脚本，传递所需参数
-    # 调度脚本不管理具体编译逻辑，只负责传递参数
     if ! source "$build_script" \
         --build-mode "$BUILD_MODE" \
         --platform "$PLATFORM" \
@@ -245,7 +229,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     then
         echo "错误: 构建 $lib 失败"
         echo "请检查构建日志以获取更多信息"
-        exit 1
+        continue
     fi
     
     echo "完成构建: $lib"
@@ -269,11 +253,9 @@ for lib in "${LIBS_ARRAY[@]}"; do
     if [ -n "$lib" ]; then
         # 尝试查找安装目录（不同库可能有不同的安装结构）
         if [ -d "${INSTALL_DIR}/${lib}" ]; then
-            echo "  - ${lib}: ${INSTALL_DIR}/${lib}"
-        elif [ -d "${INSTALL_DIR}/${lib}/${PLATFORM}" ]; then
-            echo "  - ${lib}: ${INSTALL_DIR}/${lib}/${PLATFORM}"
+            echo "  - ${lib}: ${INSTALL_DIR}${lib}"
         else
-            echo "  - ${lib}: 已安装，具体位置请查看对应构建器的输出"
+            echo "  - ${lib}: 安装失败"
         fi
     fi
 done

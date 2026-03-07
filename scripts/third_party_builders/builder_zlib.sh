@@ -49,11 +49,11 @@ while [[ $# -gt 0 ]]; do
         --project-root) PROJECT_ROOT="$2"; shift 2 ;;
         --install-dir)  INSTALL_DIR="$2"; shift 2 ;;
         --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
-        --help) show_help; exit 0 ;;
+        --help) show_help; return 0 ;;
         *)
             echo "错误: 未知参数 $1"
             show_help
-            exit 1
+            return 1
             ;;
     esac
 done
@@ -64,7 +64,7 @@ done
 if [ -z "$BUILD_MODE" ]; then
     echo "错误: 必须指定 --build-mode"
     show_help
-    exit 1
+    return 1
 fi
 
 # -----------------------------
@@ -73,7 +73,7 @@ fi
 PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
 if [ ! -d "$PROJECT_ROOT" ]; then
     echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    exit 1
+    return 1
 fi
 
 INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
@@ -94,7 +94,7 @@ elif [ "$BUILD_MODE" = "cross" ]; then
     if [ -z "$PLATFORM" ]; then
         echo "错误: cross 模式必须指定 --platform"
         show_help
-        exit 1
+        return 1
     fi
 
     TARGET_ARCH="$PLATFORM"
@@ -108,7 +108,7 @@ elif [ "$BUILD_MODE" = "cross" ]; then
             ;;
         *)
             echo "错误: 不支持的平台 $PLATFORM"
-            exit 1
+            return 1
             ;;
     esac
 
@@ -122,12 +122,12 @@ elif [ "$BUILD_MODE" = "cross" ]; then
 
     if ! command -v $CC &>/dev/null; then
         echo "错误: 找不到交叉编译器 $CC"
-        exit 1
+        return 1
     fi
 else
     echo "错误: 无效的 build-mode: $BUILD_MODE"
     show_help
-    exit 1
+    return 1
 fi
 
 # toolchain-file 仅提示
@@ -180,5 +180,5 @@ if [ -f "${INSTALL_DIR}/zlib/${TARGET_ARCH}/lib/libz.a" ]; then
     echo "[zlib构建器] include: ${INSTALL_DIR}/zlib/${TARGET_ARCH}/include"
 else
     echo "[zlib构建器] ✗ 构建失败，未找到 libz.a"
-    exit 1
+    return 1
 fi

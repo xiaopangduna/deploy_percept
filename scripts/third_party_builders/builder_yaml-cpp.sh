@@ -70,12 +70,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help)
             show_help
-            exit 0
+            return 0
             ;;
         *)
             echo "错误: 未知参数: $1"
             show_help
-            exit 1
+            return 1
             ;;
     esac
 done
@@ -84,7 +84,7 @@ done
 if [ -z "$BUILD_MODE" ]; then
     echo "错误: 必须指定构建模式 (--build-mode)"
     show_help
-    exit 1
+    return 1
 fi
 
 # 设置项目根目录默认值
@@ -92,7 +92,7 @@ PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
 echo "[yaml-cpp构建器] 项目根目录: $PROJECT_ROOT"
 if [ ! -d "$PROJECT_ROOT" ]; then
     echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    exit 1
+    return 1
 fi
 
 # 设置安装目录默认值
@@ -107,7 +107,7 @@ elif [ "$BUILD_MODE" = "cross" ]; then
     if [ -z "$PLATFORM" ]; then
         echo "错误: cross 模式必须指定 --platform"
         show_help
-        exit 1
+        return 1
     fi
     TARGET_ARCH="$PLATFORM"
     case "$PLATFORM" in
@@ -115,14 +115,14 @@ elif [ "$BUILD_MODE" = "cross" ]; then
         x86_64) CROSS_COMPILE_PREFIX="x86_64-linux-gnu" ;;
         *)
             echo "错误: 不支持的平台 '$PLATFORM'"
-            exit 1
+            return 1
             ;;
     esac
     echo "[yaml-cpp构建器] Cross 模式，目标架构: $TARGET_ARCH"
 else
     echo "错误: 无效的 build-mode: $BUILD_MODE"
     show_help
-    exit 1
+    return 1
 fi
 
 # 设置工具链文件（仅 cross 模式有效）

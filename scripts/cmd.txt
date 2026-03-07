@@ -1,0 +1,7 @@
+# 编译
+bash scripts/build.sh --preset x86_64-debug
+bash scripts/build.sh --preset aarch64-release
+
+# 测试
+
+# 运行

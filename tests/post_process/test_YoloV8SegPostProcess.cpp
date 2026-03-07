@@ -126,6 +126,7 @@ TEST_F(YoloV8SegPostProcessTest, run)
     // EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask_1, expected_seg_mask));
 
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
+    EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask, actual_results.segmentation_mask));
 
     processor->drawDetectionResults(img, result);
 

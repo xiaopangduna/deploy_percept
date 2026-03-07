@@ -1,0 +1,53 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+{
+    "name": "deploy_percept:20.04 ",
+    // 指定镜像
+    // "image": "ubuntu_dev:latest", 
+    "build": {
+    	"dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    // "mounts": [
+    //     {
+    //         //将服务器上的插件挂载至容器
+    //         "source": "/home/xiaopangdun/.vscode-server",
+    //         "target": "/root/.vscode-server",
+    //         //bind:绑定挂载将宿主机上的文件或目录直接挂载到容器内。 
+    //         //volume:卷挂载是一种更持久化的数据存储方式，卷由 Docker 管理，独立于容器的生命周期。当容器删除时，卷可以保留数据。
+    //         //tmpfs:临时文件系统挂载,将临时文件系统挂载到容器内。这种挂载类型的特点是数据存储在内存中，容器停止或删除后，数据会丢失。它适用于存储临时数据，如缓存文件。
+    //         "type": "bind"
+    //     }
+    // ],
+    // "workspaceMount": "source=${localWorkspaceFolder}/../../..,target=/workspaces,type=bind",
+    // 设置容器启动时默认打开的文件目录
+    // "workspaceFolder": "/workspaces/src/indoor_cleaner_nav/ud_ws",
+    "runArgs": [
+        "--env=DISPLAY=${env:DISPLAY}",
+        "--env=NO_AT_BRIDGE=1",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--network=host"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "NO_AT_BRIDGE": "1"
+
+    },
+    // 创建容器后执行
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    // 每次启动容器执行
+    "postStartCommand": "bash .devcontainer/post-start.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "Alibaba-Cloud.tongyi-lingma",
+                "SimpleToolsDev.opencv-image"
+            ]
+        }
+    }
+
+}
