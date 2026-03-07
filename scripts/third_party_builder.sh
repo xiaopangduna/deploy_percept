@@ -177,6 +177,10 @@ mkdir -p ${PROJECT_ROOT}/tmp
 mkdir -p ${PROJECT_ROOT}/third_party
 INSTALL_DIR=${PROJECT_ROOT}/third_party/
 
+# 初始化统计数组
+success_libs=()
+failed_libs=()
+
 echo "================================================================"
 echo "第三方库构建系统"
 echo "================================================================"
@@ -229,10 +233,12 @@ for lib in "${LIBS_ARRAY[@]}"; do
     then
         echo "错误: 构建 $lib 失败"
         echo "请检查构建日志以获取更多信息"
+        failed_libs+=("$lib")
         continue
     fi
     
     echo "完成构建: $lib"
+    success_libs+=("$lib")
 done
 
 # 计算并显示总耗时
@@ -247,16 +253,17 @@ echo "总耗时: ${DURATION}秒"
 echo "所有指定的库已成功构建并安装到:"
 echo "$INSTALL_DIR"
 echo ""
-echo "各个库的安装位置:"
-for lib in "${LIBS_ARRAY[@]}"; do
-    lib=$(echo "$lib" | xargs)
-    if [ -n "$lib" ]; then
-        # 尝试查找安装目录（不同库可能有不同的安装结构）
-        if [ -d "${INSTALL_DIR}/${lib}" ]; then
-            echo "  - ${lib}: ${INSTALL_DIR}${lib}"
-        else
-            echo "  - ${lib}: 安装失败"
-        fi
-    fi
-done
+echo "构建结果统计:"
+echo "  成功: ${#success_libs[@]} 个"
+if [ ${#success_libs[@]} -gt 0 ]; then
+     for lib in "${success_libs[@]}"; do
+         echo "    - $lib"
+     done
+fi
+echo "  失败: ${#failed_libs[@]} 个"
+if [ ${#failed_libs[@]} -gt 0 ]; then
+    for lib in "${failed_libs[@]}"; do
+         echo "    - $lib"
+    done
+fi
 echo "===================================================================="

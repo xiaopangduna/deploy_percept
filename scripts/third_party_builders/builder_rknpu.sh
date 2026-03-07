@@ -109,7 +109,7 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RKNPU构建器] 平台为 x86_64，跳过 RKNPU 安装（仅适用于 Rockchip ARM）"
-    return 0
+    return 1
 fi
 
 echo "[RKNPU构建器] 平台: $PLATFORM"

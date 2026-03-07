@@ -27,7 +27,6 @@ function(create_test TEST_NAME)
     ${CMAKE_CURRENT_SOURCE_DIR}/..
   )
   
-  # 链接库
   if(GTest_FOUND)
       target_link_libraries(${TEST_NAME} PRIVATE
           deploy_percept
@@ -38,6 +37,7 @@ function(create_test TEST_NAME)
   endif()
   
   add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+  
   #  设置测试工作目录
   set_tests_properties(${TEST_NAME} PROPERTIES 
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."

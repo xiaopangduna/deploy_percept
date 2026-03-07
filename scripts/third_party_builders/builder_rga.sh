@@ -112,8 +112,7 @@ fi
 # -------------------------
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RGA构建器] x86_64 平台不支持 RGA，跳过安装"
-    echo "[RGA构建器] 视为成功完成"
-    return 0
+    return 1
 fi
 
 if [ "$PLATFORM" != "aarch64" ]; then
