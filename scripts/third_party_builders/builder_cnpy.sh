@@ -1,4 +1,5 @@
 #!/bin/bash
+# v0.0.1-2026.03.07
 # 第三方库构建器：cnpy
 # 可以单独运行，也可以由 build_third_party.sh 调用
 # 支持 host / cross 两种模式

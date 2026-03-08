@@ -1,4 +1,5 @@
 #!/bin/bash
+# v0.0.1-2026.03.07
 # 第三方库构建器：RGA (Rockchip Graphics Acceleration)
 # 可以单独运行，也可以由 third_party_builder.sh 调用
 # 注意：RGA 是预编译库，此脚本仅负责获取源代码，不进行编译

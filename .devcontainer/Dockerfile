@@ -8,6 +8,11 @@ FROM ubuntu:22.04
 # 避免在非交互模式下出现tzdata错误
 ARG DEBIAN_FRONTEND=noninteractive
 
+# 换 apt 源
+RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list \
+ && sed -i 's@security.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/sources.list
+
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \

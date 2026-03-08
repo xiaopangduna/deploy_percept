@@ -1,4 +1,5 @@
 #!/bin/bash
+# v0.0.2-2026.03.08
 # 第三方库构建器：GTest
 # 可以单独运行，也可以由 third_party_builder.sh 调用
 # 支持 host 模式（本机编译）和 cross 模式（交叉编译）
@@ -160,7 +161,16 @@ cd "${PROJECT_ROOT}/tmp"
 # 克隆或更新代码
 if [ ! -d "googletest" ]; then
     echo "[GTest构建器] 克隆GTest代码..."
-    git clone https://gitee.com/mirrors/googletest.git -b v1.14.0
+    bash "${SCRIPT_DIR}/git_clone.sh" \
+    "git clone -b v1.14.0 https://gitee.com/mirrors/googletest.git " \
+    "git clone -b v1.14.0 https://github.com/google/googletest.git" 
+    
+    # git clone -b v1.14.0 https://github.com/google/googletest.git 
+    # git clone https://gitee.com/mirrors/googletest.git -b v1.14.0
+    if [ $? -ne 0 ]; then
+        echo "[GTest构建器] 错误：克隆GTest失败"
+        return 1
+    fi
 else
     echo "[GTest构建器] GTest目录已存在，跳过克隆"
 fi

@@ -1,4 +1,5 @@
 #!/bin/bash
+# v0.0.1-2026.03.07
 # 第三方库构建器：OpenCV
 # 可以单独运行，也可以由 third_party_builder.sh 调用
 # 支持 host 模式（本机编译）和 cross 模式（交叉编译）
@@ -159,16 +160,17 @@ cd "${PROJECT_ROOT}/tmp"
 # 克隆或更新代码
 if [ ! -d "opencv" ]; then
     echo "[OpenCV构建器] 克隆OpenCV代码..."
-    git clone https://gitee.com/opencv/opencv.git
+    # git clone https://gitee.com/opencv/opencv.git
+    git clone -b 4.5.4 --depth 1 https://github.com/opencv/opencv.git
+    if [ $? -ne 0 ]; then
+        echo "[OpenCV构建器] 错误：克隆OpenCV失败"
+        return 1
+    fi
 else
     echo "[OpenCV构建器] OpenCV目录已存在，跳过克隆"
 fi
 
 cd opencv
-
-# 切换到指定版本
-echo "[OpenCV构建器] 切换到版本 4.5.4..."
-git checkout 4.5.4
 
 # 清理旧的构建目录
 rm -rf build_${TARGET_ARCH}
@@ -197,8 +199,9 @@ fi
 cmake .. $CMAKE_ARGS
 
 # 编译和安装
-# CPU_CORES=$(nproc 2>/dev/null || echo 4)
-CPU_CORES=4
+#TODO x86 拉满，aarch 4核心
+CPU_CORES=$(nproc 2>/dev/null || echo 4)
+# CPU_CORES=16
 echo "[OpenCV构建器] 使用 $CPU_CORES 个CPU核心进行编译"
 make -j$CPU_CORES
 make install

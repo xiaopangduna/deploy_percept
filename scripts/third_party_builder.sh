@@ -1,5 +1,5 @@
-# v0.0.1-2026.03.07
 #!/bin/bash
+# v0.0.1-2026.03.07
 # 第三方库构建调度脚本
 # 用法: bash scripts/third_party_builder.sh <platform> --libs <libraries>
 

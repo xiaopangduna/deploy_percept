@@ -1,4 +1,5 @@
 #!/bin/bash
+# v0.0.1-2026.03.07
 # 第三方库构建器：yaml-cpp
 # 可以单独运行，也可以由 third_party_builder.sh 调用
 # 支持 host 模式（本机编译）和 cross 模式（交叉编译）
