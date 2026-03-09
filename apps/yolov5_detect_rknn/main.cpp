@@ -13,39 +13,76 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
-#include "cnpy.h"
 
-#include <yaml-cpp/yaml.h>
+#include "cnpy.h"
+// #include <yaml-cpp/yaml.h>
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "deploy_percept/engine/RknnEngine.hpp"
+#include "deploy_percept/utils/npy.hpp"
+#include "deploy_percept/utils/io.hpp"
 
-
+using namespace deploy_percept::utils;
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
+
+/**
+ * @brief 将RKNN输出数组转换为NPZ格式
+ * @param outputs RKNN输出数组指针
+ * @param output_count 输出tensor数量
+ * @param output_attrs 输出tensor属性向量
+ * @param prefix 键名前缀，默认为"output_"
+ * @return cnpy::npz_t 转换后的NPZ对象
+ * @throws std::runtime_error 当转换过程中发生错误时抛出异常
+ */
+cnpy::npz_t convertRknnOutputsToNpz(const rknn_output *outputs,
+                                    uint32_t output_count,
+                                    const std::vector<rknn_tensor_attr> &output_attrs,
+                                    const std::string &prefix = "output_")
+{
+  cnpy::npz_t npz_result;
+
+  for (uint32_t i = 0; i < output_count; ++i)
+  {
+    const auto &attr = output_attrs[i];
+
+    std::string key = prefix + std::to_string(i);
+
+    size_t data_size = attr.n_elems;
+    const int8_t *data_ptr = static_cast<const int8_t *>(outputs[i].buf);
+
+    std::vector<size_t> shape(attr.dims, attr.dims + attr.n_dims);
+    cnpy::NpyArray array(shape, sizeof(int8_t), false); // false表示C-order
+
+    std::memcpy(array.data<int8_t>(), data_ptr, data_size * sizeof(int8_t));
+
+    npz_result[key] = std::move(array);
+  }
+
+  return npz_result;
+}
 
 int main()
 {
-  std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov5s-640-640.rknn";
+  std::string path_model_rknn = "runs/models/RK3588/yolov5s-640-640.rknn";
+  std::string path_input_img = "apps/yolov5_detect_rknn/bus.jpg";
+  std::filesystem::path path_model_output_npz = "apps/yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz";
+
+  std::string path_save_output_img = "./tmp/yolov5_detect_out.jpg";
+  std::filesystem::path path_save_model_output_npz = "./tmp/yolov5_detect_result_model_outputs.npz";
 
   deploy_percept::engine::RknnEngine::Params params;
-  params.model_path = model_name;
+  params.model_path = path_model_rknn;
 
   deploy_percept::engine::RknnEngine engine(params);
 
-  // 读取图片
-  std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov5_detect_rknn/bus.jpg";
-  printf("Read %s ...\n", input_path.c_str());
-  cv::Mat orig_img = cv::imread(input_path, 1);
+  cv::Mat orig_img = cv::imread(path_input_img, 1);
 
   cv::Mat img;
   cv::cvtColor(orig_img, img, cv::COLOR_BGR2RGB);
 
-  cv::Size target_size(engine.model_input_attrs_[0].dims[1], engine.model_input_attrs_[0].dims[1]);
-  cv::Mat resized_img(target_size.height, target_size.width, CV_8UC3);
-  // 计算缩放比例
-  float scale_w = (float)target_size.width / img.cols;
-  float scale_h = (float)target_size.height / img.rows;
+  cv::Mat resized_img;
+  cv::resize(img, resized_img, cv::Size(engine.model_input_attrs_[0].dims[2], engine.model_input_attrs_[0].dims[1]));
 
   rknn_input inputs[engine.model_io_num_.n_input];
   memset(inputs, 0, sizeof(inputs));
@@ -70,33 +107,45 @@ int main()
   gettimeofday(&stop_time, NULL);
   printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-  std::vector<float> out_scales;
-  std::vector<int32_t> out_zps;
-  for (int i = 0; i < engine.model_io_num_.n_output; ++i)
+  cnpy::npz_t expected_model_outputs_npz = cnpy::npz_load(path_model_output_npz);
+  cnpy::npz_t model_outputs_npz = convertRknnOutputsToNpz(
+      outputs,
+      engine.model_io_num_.n_output,
+      engine.model_output_attrs_);
+  bool validation_result = deploy_percept::utils::areNpzObjectsIdentical(expected_model_outputs_npz, model_outputs_npz);
+  if (!validation_result)
   {
-    out_scales.push_back(engine.model_output_attrs_[i].scale);
-    out_zps.push_back(engine.model_output_attrs_[i].zp);
+    printf("Warning: Model output not same.\n");
   }
 
-  // 使用YoloV5DetectPostProcess类进行后处理
+  if (save_npz(path_save_model_output_npz, model_outputs_npz))
+  {
+    printf("save outputs to npz. %s\n", path_save_model_output_npz.c_str());
+  }
+
+  std::vector<int8_t *> output_buffers_int8;
+  std::vector<float> output_scales;
+  std::vector<int32_t> output_zps;
+
+  for (int i = 0; i < engine.model_io_num_.n_output; ++i)
+  {
+    output_buffers_int8.push_back(static_cast<int8_t *>(outputs[i].buf));
+    output_scales.push_back(engine.model_output_attrs_[i].scale);
+    output_zps.push_back(engine.model_output_attrs_[i].zp);
+  }
+
   deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
   deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
 
-  // 准备输入向量
-  std::vector<int8_t*> input_buffers = {
-      (int8_t *)outputs[0].buf,
-      (int8_t *)outputs[1].buf, 
-      (int8_t *)outputs[2].buf
-  };
-
-  processor.run(input_buffers, target_size.height, target_size.width, out_zps, out_scales);
-  processor.drawDetectionResults(orig_img, processor.getResult().group);
-
-  std::string out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/out.jpg";
-  printf("save detect result to %s\n", out_path.c_str());
-  imwrite(out_path, orig_img);
+  processor.run(output_buffers_int8, engine.model_input_attrs_[0].dims[2], engine.model_input_attrs_[0].dims[1], output_zps, output_scales);
 
   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
+
+  cv::Mat result_img = orig_img.clone();
+  processor.drawDetectionResults(result_img, processor.getResult().group);
+
+  imwrite(path_save_output_img, result_img);
+  printf("save detect result to %s\n", path_save_output_img.c_str());
 
   int test_count = 10;
   gettimeofday(&start_time, NULL);

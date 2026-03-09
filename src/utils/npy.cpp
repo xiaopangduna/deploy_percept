@@ -148,7 +148,7 @@ namespace deploy_percept
             {
                 const std::string &key = kv.first;
                 if (key.compare(0, prefix.size(), prefix) == 0)
-                { 
+                {
                     std::string suffix = key.substr(prefix.size());
 
                     if (!suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit))
@@ -156,7 +156,6 @@ namespace deploy_percept
                         int idx = std::stoi(suffix);
                         indices.emplace_back(idx, key);
                     }
-                    
                 }
             }
             std::sort(indices.begin(), indices.end());
@@ -177,5 +176,34 @@ namespace deploy_percept
             return result;
         }
 
+        bool save_npz(const std::string &filename, const cnpy::npz_t &npz_data)
+        {
+            if (npz_data.empty())
+                return false;
+
+            try
+            {
+                bool first = true;
+
+                for (const auto &[name, arr] : npz_data)
+                {
+                    cnpy::npz_save(
+                        filename,
+                        name,
+                        arr.data<char>(), // 原始字节数据
+                        arr.shape,
+                        first ? "w" : "a" // 第一次写入，其余追加
+                    );
+
+                    first = false;
+                }
+            }
+            catch (...)
+            {
+                return false;
+            }
+
+            return true;
+        }
     } // namespace utils
 } // namespace deploy_percept

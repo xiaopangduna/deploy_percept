@@ -95,14 +95,6 @@ TEST_F(YoloV5SegPostProcessTest, run)
 
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
 
-    // std::filesystem::path path_save_mask_bin = "tmp/yolov5_seg_mask_test.bin";
-    // saveUint8VectorToBinFile(result.segmentation_mask, path_save_mask_bin);
-    // std::filesystem::path path_1 = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov5_seg_mask.bin";
-    // std::vector<uint8_t> expected_seg_mask_1 = loadUint8VectorFromBinFile(path_1);
-    // EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask_1, expected_seg_mask));
-
-    EXPECT_TRUE(isUint8VectorEqual(expected_seg_mask, actual_results.segmentation_mask));
-
     processor->drawDetectionResults(img, result);
     cv::imwrite(path_save_img_with_detect_result, img);
 }

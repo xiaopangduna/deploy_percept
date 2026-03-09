@@ -1,5 +1,4 @@
-#ifndef DEPLOY_PERCEPT_UTILS_NPY_HPP
-#define DEPLOY_PERCEPT_UTILS_NPY_HPP
+#pragma once
 
 #include <string>
 #include <vector>
@@ -36,7 +35,8 @@ bool compareNpzFiles(const std::string& file1, const std::string& file2);
  */
 std::vector<std::vector<int8_t>> convertNpzToInt8VectorsByPrefix(const cnpy::npz_t &npz,const std::string &prefix,size_t count);
 
+bool save_npz(const std::string& filename, const cnpy::npz_t& npz_data);
+
 } // namespace utils
 } // namespace deploy_percept
 
-#endif // DEPLOY_PERCEPT_UTILS_NPY_HPP

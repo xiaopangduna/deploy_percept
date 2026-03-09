@@ -51,7 +51,7 @@ TEST_F(YoloV5DetectPostProcessTest, run)
         MakeDetectResult(0, "class_0", 0.3010f, 79, 353, 121, 517)};
 
 
-    auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output", 3); // 使用utils命名空间
+    auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output_", 3); 
 
     int model_in_h = 640;
     int model_in_w = 640;

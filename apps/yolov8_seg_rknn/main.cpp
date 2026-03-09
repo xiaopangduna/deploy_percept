@@ -47,77 +47,38 @@ cnpy::npz_t convertRknnOutputsToNpz(const rknn_output *outputs,
     {
         const auto &attr = output_attrs[i];
 
-        // 创建键名
         std::string key = prefix + std::to_string(i);
 
-        // 获取数据信息
         size_t data_size = attr.n_elems;
         const int8_t *data_ptr = static_cast<const int8_t *>(outputs[i].buf);
 
-        // 创建NpyArray对象 - 使用正确的构造函数
         std::vector<size_t> shape(attr.dims, attr.dims + attr.n_dims);
         cnpy::NpyArray array(shape, sizeof(int8_t), false); // false表示C-order
 
-        // 复制数据
         std::memcpy(array.data<int8_t>(), data_ptr, data_size * sizeof(int8_t));
 
-        // 添加到NPZ对象
         npz_result[key] = std::move(array);
     }
 
     return npz_result;
 }
 
-/**
- * @brief 验证模型输出与参考文件是否一致
- * @param outputs RKNN输出数组
- * @param engine RKNN引擎实例
- * @param reference_file 参考NPZ文件路径
- * @return bool true表示一致，false表示不一致
- */
-bool validateModelOutput(const rknn_output *outputs,
-                         const deploy_percept::engine::RknnEngine &engine,
-                         const std::string &reference_file)
-{
-    try
-    {
-        if (!std::filesystem::exists(reference_file))
-        {
-            std::cerr << "Reference file not found: " << reference_file << std::endl;
-            return false;
-        }
-
-        // 使用新函数转换输出
-        cnpy::npz_t current_npz = convertRknnOutputsToNpz(
-            outputs,
-            engine.model_io_num_.n_output,
-            engine.model_output_attrs_);
-
-        // 加载参考数据
-        cnpy::npz_t reference_npz = cnpy::npz_load(reference_file);
-
-        // 使用工具函数比较
-        return deploy_percept::utils::areNpzObjectsIdentical(current_npz, reference_npz);
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error in validateModelOutput: " << e.what() << std::endl;
-        return false;
-    }
-}
-
 int main()
 {
-    std::string model_name = "/home/orangepi/HectorHuang/deploy_percept/runs/models/RK3588/yolov8_seg.rknn";
-    std::string input_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov8_seg_rknn/bus.jpg";
-    std::filesystem::path reference_path = "/home/orangepi/HectorHuang/deploy_percept/apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
-    std::string computed_out_path = "/home/orangepi/HectorHuang/deploy_percept/tmp/yolov8_seg_out.jpg";
+    std::string path_model_rknn = "runs/models/RK3588/yolov8_seg.rknn";
+    std::string path_input_img = "apps/yolov8_seg_rknn/bus.jpg";
+    std::filesystem::path path_model_output_npz = "apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
+
+    std::string path_save_output_img = "tmp/yolov8_seg_out.jpg";
+    std::filesystem::path path_save_model_output_npz = "tmp/yolov8_seg_result_model_outputs.npz";
+    std::filesystem::path path_save_mask_bin = "tmp/yolov8_seg_mask.bin";
+
     deploy_percept::engine::RknnEngine::Params params;
-    params.model_path = model_name;
+    params.model_path = path_model_rknn;
 
     deploy_percept::engine::RknnEngine engine(params);
 
-    cv::Mat orig_img = cv::imread(input_path, 1);
+    cv::Mat orig_img = cv::imread(path_input_img, 1);
 
     cv::Mat img;
     cv::cvtColor(orig_img, img, cv::COLOR_BGR2RGB);
@@ -148,14 +109,20 @@ int main()
     gettimeofday(&stop_time, NULL);
     printf("once run use %f ms\n", (__get_us(stop_time) - __get_us(start_time)) / 1000);
 
-    bool validation_result = validateModelOutput(outputs, engine, reference_path.string());
+    cnpy::npz_t expected_model_outputs_npz = cnpy::npz_load(path_model_output_npz);
+    cnpy::npz_t model_outputs_npz = convertRknnOutputsToNpz(
+        outputs,
+        engine.model_io_num_.n_output,
+        engine.model_output_attrs_);
+    bool validation_result = deploy_percept::utils::areNpzObjectsIdentical(expected_model_outputs_npz, model_outputs_npz);
     if (validation_result)
     {
-        printf("Model output validation passed.\n");
+        printf("Model output same.\n");
     }
-    else
+
+    if (save_npz(path_save_model_output_npz, model_outputs_npz))
     {
-        printf("Model output validation failed.\n");
+        printf("save outputs to npz. %s\n", path_save_model_output_npz.c_str());
     }
 
     std::vector<int8_t *> output_buffers_int8;
@@ -165,9 +132,8 @@ int main()
 
     for (int i = 0; i < engine.model_io_num_.n_output; i++)
     {
-        output_buffers_int8.push_back(static_cast<int8_t *>(outputs[i].buf)); // 转换为int8_t*
+        output_buffers_int8.push_back(static_cast<int8_t *>(outputs[i].buf));
 
-        // 提取张量维度信息
         std::vector<int> dims(4);
         dims[0] = engine.model_output_attrs_[i].dims[0];
         dims[1] = engine.model_output_attrs_[i].dims[1];
@@ -180,7 +146,7 @@ int main()
 
     deploy_percept::post_process::YoloV8SegPostProcess::Params params_post;
     deploy_percept::post_process::YoloV8SegPostProcess seg_processor(params_post);
-
+    // output_dims 这个参数可以省略
     bool success = seg_processor.run(
         output_buffers_int8,
         orig_img.cols,
@@ -189,25 +155,20 @@ int main()
         output_scales,
         output_zps);
 
-    // 获取后处理结果
-    auto seg_results = seg_processor.getResult().group;
+    rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
 
-    std::filesystem::path path_save_mask_bin = "tmp/yolov8_seg_mask.bin";
-    saveUint8VectorToBinFile(seg_results.segmentation_mask, path_save_mask_bin);
+    auto seg_results = seg_processor.getResult().group;
 
     cv::Mat result_img = orig_img.clone();
     seg_processor.drawDetectionResults(result_img, seg_results);
 
-    cv::imwrite(computed_out_path, result_img);
-    printf("Save computed detect result to %s\n", computed_out_path.c_str());
-    rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
-    
-    // std::vector<DetectionObject> expected_results = {
-    // MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
-    // MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
-    // MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),
-    // MakeDetectResult(0, "class_0", 0.8655f, 477, 232, 559, 519),
-    // MakeDetectResult(0, "class_0", 0.5403f, 79, 327, 125, 514),
-    // MakeDetectResult(27, "class_27", 0.2741f, 248, 284, 259, 310)};
+    cv::imwrite(path_save_output_img, result_img);
+    printf("Save computed detect result to %s\n", path_save_output_img.c_str());
+
+    if (saveUint8VectorToBinFile(seg_results.segmentation_mask, path_save_mask_bin))
+    {
+        printf("Save computed segmentation mask to %s\n", path_save_mask_bin.c_str());
+    }
+
     return 0;
 }
