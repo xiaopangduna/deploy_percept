@@ -52,12 +52,12 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(
-                const std::vector<int8_t*>& outputs,
+                const std::vector<int8_t *> &outputs,
                 int input_image_width,
                 int input_image_height,
-                const std::vector<std::vector<int>>& output_dims,
-                const std::vector<float>& output_scales,
-                const std::vector<int32_t>& output_zps);
+                const std::vector<std::vector<int>> &output_dims,
+                const std::vector<float> &output_scales,
+                const std::vector<int32_t> &output_zps);
 
         private:
             Params params_;
@@ -66,12 +66,12 @@ namespace deploy_percept
             std::vector<uint8_t> seg_mask_;
             std::vector<uint8_t> all_mask_in_one_;
 
-            int decodeDetectionHead(const std::vector<int8_t*>& all_input, int input_id, int *anchor, int grid_h, int grid_w,
-                           int stride,
-                           std::vector<float> &boxes, std::vector<float> &segments,
-                           std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                           const std::vector<std::vector<int>>& output_dims, const std::vector<float>& output_scales,
-                           const std::vector<int32_t>& output_zps);
+            int decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
+                                    int stride,
+                                    std::vector<float> &boxes, std::vector<float> &segments,
+                                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                    const std::vector<float> &output_scales,
+                                    const std::vector<int32_t> &output_zps);
 
             // 新增：处理NMS后检测结果的函数
             void collectDetectionsAfterNMS(

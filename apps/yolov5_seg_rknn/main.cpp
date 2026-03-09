@@ -131,12 +131,12 @@ int main()
     {
         output_buffers_int8.push_back(static_cast<int8_t *>(outputs[i].buf));
 
-        std::vector<int> dims(4);
-        dims[0] = engine.model_output_attrs_[i].dims[0];
-        dims[1] = engine.model_output_attrs_[i].dims[1];
-        dims[2] = engine.model_output_attrs_[i].dims[2];
-        dims[3] = engine.model_output_attrs_[i].dims[3];
-        output_dims.push_back(dims);
+        std::vector<int> dims(engine.model_output_attrs_[i].n_dims);
+        for (uint32_t j = 0; j < engine.model_output_attrs_[i].n_dims; ++j)
+        {
+            dims[j] = static_cast<int>(engine.model_output_attrs_[i].dims[j]);
+        }
+        output_dims.push_back(std::move(dims));
         output_scales.push_back(engine.model_output_attrs_[i].scale);
         output_zps.push_back(engine.model_output_attrs_[i].zp);
     }

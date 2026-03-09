@@ -8,7 +8,6 @@ namespace deploy_percept
 {
     namespace post_process
     {
-        // 构造函数
         YoloV8SegPostProcess::YoloV8SegPostProcess(const Params &params) : params_(params)
         {
         }

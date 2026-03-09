@@ -18,14 +18,14 @@ namespace deploy_percept
             rknn_query(ctx_, RKNN_QUERY_IN_OUT_NUM, &model_io_num_, sizeof(model_io_num_));
             model_input_attrs_.resize(model_io_num_.n_input);
             model_output_attrs_.resize(model_io_num_.n_output);
-            // 查询输入属性
+            
             for (uint32_t i = 0; i < model_io_num_.n_input; ++i)
             {
                 model_input_attrs_[i].index = i;
                 rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &(model_input_attrs_[i]), sizeof(rknn_tensor_attr));
             }
 
-            // 查询输出属性
+            
             for (uint32_t i = 0; i < model_io_num_.n_output; ++i)
             {
                 model_output_attrs_[i].index = i;

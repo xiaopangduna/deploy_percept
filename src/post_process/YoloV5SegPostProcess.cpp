@@ -16,11 +16,11 @@ namespace deploy_percept
             result_.group.segmentation_mask.resize(1);
         }
 
-        int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t*>& all_input, int input_id, int *anchor, int grid_h, int grid_w,
+        int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
                                                       int stride,
                                                       std::vector<float> &boxes, std::vector<float> &segments,
                                                       std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                                      const std::vector<std::vector<int>> &output_dims, 
+                                                      //   const std::vector<std::vector<int>> &output_dims,
                                                       const std::vector<float> &output_scales,
                                                       const std::vector<int32_t> &output_zps)
         {
@@ -29,8 +29,8 @@ namespace deploy_percept
 
             // 原型掩码 (proto) 现由 run() 函数单独处理
 
-            const int8_t *input = all_input[input_id];  // 修复：直接使用数组访问而不是解引用
-            const int8_t *input_seg = all_input[input_id + 1];  // 修复：直接使用数组访问而不是解引用
+            const int8_t *input = all_input[input_id];         // 修复：直接使用数组访问而不是解引用
+            const int8_t *input_seg = all_input[input_id + 1]; // 修复：直接使用数组访问而不是解引用
             int32_t zp = output_zps[input_id];
             float scale = output_scales[input_id];
             int32_t zp_seg = output_zps[input_id + 1];
@@ -49,8 +49,8 @@ namespace deploy_percept
                         {
                             int offset = ((params_.prop_box_size + params_.obj_class_num) * a) * grid_len + i * grid_w + j;
                             int offset_seg = (params_.proto_channel * a) * grid_len + i * grid_w + j;
-                            const int8_t *in_ptr = input + offset;  // 使用const指针
-                            const int8_t *in_ptr_seg = input_seg + offset_seg;  // 使用const指针
+                            const int8_t *in_ptr = input + offset;             // 使用const指针
+                            const int8_t *in_ptr_seg = input_seg + offset_seg; // 使用const指针
 
                             float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
 
@@ -150,10 +150,10 @@ namespace deploy_percept
                 det_obj.box.right = x2;
                 det_obj.box.bottom = y2;
                 det_obj.prop = obj_conf;
-                
+
                 // 设置类别名称
                 snprintf(det_obj.name, sizeof(det_obj.name), "class_%d", id);
-                
+
                 // 设置类别ID
                 det_obj.cls_id = id;
 
@@ -163,7 +163,7 @@ namespace deploy_percept
         }
 
         bool YoloV5SegPostProcess::run(
-            const std::vector<int8_t*>& outputs,
+            const std::vector<int8_t *> &outputs,
             int input_image_width,
             int input_image_height,
             const std::vector<std::vector<int>> &output_dims,
@@ -179,7 +179,8 @@ namespace deploy_percept
             result_.message.clear();
 
             // 清空分割掩码
-            if (!result_.group.segmentation_mask.empty()) {
+            if (!result_.group.segmentation_mask.empty())
+            {
                 result_.group.segmentation_mask.clear();
             }
 
@@ -201,7 +202,7 @@ namespace deploy_percept
 
             if (output_dims.size() > 6)
             {
-                int8_t *input_proto = (int8_t *)outputs[6];  // 修复：移除多余的解引用操作符*
+                int8_t *input_proto = (int8_t *)outputs[6]; // 修复：移除多余的解引用操作符*
                 int32_t zp = output_zps[6];
                 float scale = output_scales[6];
 
@@ -215,46 +216,40 @@ namespace deploy_percept
             // ===============================
 
             // stride 8
-            if (output_dims.size() > 0)
-            {
-                int grid_h0 = output_dims[0][2];
-                int grid_w0 = output_dims[0][3];
-                int stride0 = input_image_height / grid_h0;
-                validCount += decodeDetectionHead(outputs, 0, params_.anchor_stride8.data(),  // 修复：直接传递引用
-                                                  grid_h0, grid_w0, stride0,
-                                                  filterBoxes, filterSegments,
-                                                  objProbs, classId,
-                                                  params_.conf_threshold,
-                                                  output_dims, output_scales, output_zps);
-            }
+
+            int grid_h0 = output_dims[0][2];
+            int grid_w0 = output_dims[0][3];
+            int stride0 = input_image_height / grid_h0;
+            validCount += decodeDetectionHead(outputs, 0, params_.anchor_stride8.data(), // 修复：直接传递引用
+                                              grid_h0, grid_w0, stride0,
+                                              filterBoxes, filterSegments,
+                                              objProbs, classId,
+                                              params_.conf_threshold,
+                                              output_scales, output_zps);
 
             // stride 16
-            if (output_dims.size() > 2)
-            {
-                int grid_h1 = output_dims[2][2];
-                int grid_w1 = output_dims[2][3];
-                int stride1 = input_image_height / grid_h1;
-                validCount += decodeDetectionHead(outputs, 2, params_.anchor_stride16.data(),  // 修复：直接传递引用
-                                                  grid_h1, grid_w1, stride1,
-                                                  filterBoxes, filterSegments,
-                                                  objProbs, classId,
-                                                  params_.conf_threshold,
-                                                  output_dims, output_scales, output_zps);
-            }
+
+            int grid_h1 = output_dims[2][2];
+            int grid_w1 = output_dims[2][3];
+            int stride1 = input_image_height / grid_h1;
+            validCount += decodeDetectionHead(outputs, 2, params_.anchor_stride16.data(), // 修复：直接传递引用
+                                              grid_h1, grid_w1, stride1,
+                                              filterBoxes, filterSegments,
+                                              objProbs, classId,
+                                              params_.conf_threshold,
+                                              output_scales, output_zps);
 
             // stride 32
-            if (output_dims.size() > 4)
-            {
-                int grid_h2 = output_dims[4][2];
-                int grid_w2 = output_dims[4][3];
-                int stride2 = input_image_height / grid_h2;
-                validCount += decodeDetectionHead(outputs, 4, params_.anchor_stride32.data(),  // 修复：直接传递引用
-                                                  grid_h2, grid_w2, stride2,
-                                                  filterBoxes, filterSegments,
-                                                  objProbs, classId,
-                                                  params_.conf_threshold,
-                                                  output_dims, output_scales, output_zps);
-            }
+
+            int grid_h2 = output_dims[4][2];
+            int grid_w2 = output_dims[4][3];
+            int stride2 = input_image_height / grid_h2;
+            validCount += decodeDetectionHead(outputs, 4, params_.anchor_stride32.data(), // 修复：直接传递引用
+                                              grid_h2, grid_w2, stride2,
+                                              filterBoxes, filterSegments,
+                                              objProbs, classId,
+                                              params_.conf_threshold,
+                                              output_scales, output_zps);
 
             if (validCount <= 0)
             {
@@ -358,9 +353,10 @@ namespace deploy_percept
                 input_image_width);
 
             // 在处理完所有检测后，分配并填充分割掩码
-            if (last_count > 0) {
+            if (last_count > 0)
+            {
                 const size_t mask_size = input_image_height * input_image_width;
-                
+
                 // 为分割掩码分配内存
                 result_.group.segmentation_mask.resize(mask_size, 0);
                 memcpy(result_.group.segmentation_mask.data(),
