@@ -33,5 +33,20 @@ namespace deploy_percept
             std::vector<uint8_t> segmentation_mask; 
         };
 
+        /** YOLOv8-Pose：检测框 + 17 个 COCO 关键点 (x, y, conf)，坐标为原图像素 */
+        struct PoseDetectionObject
+        {
+            BoxRect box{};
+            float prop = 0.f;
+            int cls_id = 0;
+            float keypoints[17][3] = {};
+        };
+
+        struct PoseResultGroup
+        {
+            int count = 0;
+            std::vector<PoseDetectionObject> objects;
+        };
+
     } // namespace post_process
 } // namespace deploy_percept

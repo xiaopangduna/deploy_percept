@@ -9,6 +9,7 @@
 // 包含后处理模块
 #include "post_process/PostProcessFactory.hpp"
 #include "post_process/YoloV5DetectPostProcess.hpp"
+#include "post_process/YoloV8PosePostProcess.hpp"
 #include "post_process/types.hpp"
 
 // 包含引擎模块
