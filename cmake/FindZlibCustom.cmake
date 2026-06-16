@@ -2,7 +2,7 @@
 # 使用 third_party 中的 zlib（静态库）
 
 set(ZLIB_ROOT
-    "${THIRD_PARTY_DIR}/zlib/${CMAKE_SYSTEM_PROCESSOR}"
+    "${THIRD_PARTY_PLATFORM_DIR}/zlib"
 )
 
 # 头文件

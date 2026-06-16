@@ -1,25 +1,32 @@
-# FindThirdParty.cmake - 第三方库路径设置模块
+# FindThirdParty.cmake - 第三方库查找入口
+#
+# THIRD_PARTY_* 路径由各 toolchain 设置，此处不重复推导。
 
-#.rst:
-# 设置THIRD_PARTY_DIR目录为第三方库的路径
+if(NOT DEFINED THIRD_PARTY_PLATFORM_DIR)
+    message(FATAL_ERROR
+        "THIRD_PARTY_PLATFORM_DIR is not set. "
+        "Please configure a toolchain file (cmake/*-toolchain.cmake).")
+endif()
 
-
-# 设置第三方库目录
-set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 message(STATUS "==============================================================================")
 message(STATUS "第三方库配置信息:")
-message(STATUS "  - THIRD_PARTY_DIR: ${THIRD_PARTY_DIR}")
+message(STATUS "  - THIRD_PARTY_PLATFORM_DIR: ${THIRD_PARTY_PLATFORM_DIR}")
 
-# # 导入自定义的查找模块
-include(FindOpenCVCustom)
+if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
+    include(FindSigmastar)
+endif()
+
 include(FindSpdlogCustom)
 include(FindYamlCppCustom)
-include(FindCnpyCustom)
-include(FindZlibCustom)
 
-include(FindRknn)
-include(FindRgaCustom)
+include(FindOpenCVCustom)
 
-include(FindGTestCustom)
+# # 导入自定义的查找模块
+# include(FindCnpyCustom)
+# include(FindZlibCustom)
+# include(FindRknn)
+# include(FindRgaCustom)
+# include(FindGTestCustom)
+# include(FindNlohmannJson)
 
 message(STATUS "已完成第三方库配置")

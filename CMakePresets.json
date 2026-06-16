@@ -3,55 +3,45 @@
 
   "configurePresets": [
     {
-      "name": "x86_64-debug-host",
-      "displayName": "x86_64-debug-host",
+      "name": "x86_64-debug",
+      "displayName": "x86_64 Debug (Host)",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/x86_64-debug-host",
+      "binaryDir": "${sourceDir}/build/x86_64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/x86_64-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/x86_64",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TESTS": "ON"
       }
     },
     {
-      "name": "aarch64-release-cross",
-      "displayName": "aarch64-release-cross",
+      "name": "armv7l-SSC375-release",
+      "displayName": "Sigmastar armv7l SSC375  Release (uclibc)",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/aarch64-release-cross",
+      "binaryDir": "${sourceDir}/build/armv7l-SSC375-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-toolchain.cmake",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "aarch64-debug-host",
-      "displayName": "aarch64-debug-host",
-      "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/aarch64-debug-host",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/armv7l-SSC375-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-SSC375",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TESTS": "OFF"
+      },
+      "environment": {
+        "PATH": "/opt/toolchains/arm-sigmastar-linux-uclibcgnueabihf-9.1.0/bin:$penv{PATH}"
       }
     }
   ],
 
   "buildPresets": [
     {
-      "name": "x86_64-debug-host",
-      "configurePreset": "x86_64-debug-host",
+      "name": "x86_64-debug",
+      "configurePreset": "x86_64-debug",
       "jobs": 16
     },
     {
-      "name": "aarch64-release-cross",
-      "configurePreset": "aarch64-release-cross",
-      "jobs": 16
-    },
-    {
-      "name": "aarch64-debug-host",
-      "configurePreset": "aarch64-debug-host",
+      "name": "armv7l-SSC375-release",
+      "configurePreset": "armv7l-SSC375-release",
       "jobs": 16
     }
   ]

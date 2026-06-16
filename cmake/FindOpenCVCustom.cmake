@@ -1,17 +1,37 @@
-# FindOpenCVCustom.cmake - 自定义OpenCV库查找模块
+# FindOpenCVCustom.cmake - 项目定制 OpenCV 查找模块
+#
+# 对外统一暴露: OpenCV_FOUND, OpenCV_LIBS, OpenCV_INCLUDE_DIRS, OpenCV_VERSION, OpenCV_CONFIG
+#
+# 1. find_package @ ${THIRD_PARTY_PLATFORM_DIR}/opencv
+# 2. armv7l-SSC375 失败时回退 SDK 预编译 (OpenCVSigmastar.cmake)
 
-# set(OpenCV_DIR ${THIRD_PARTY_DIR}/opencv/${CMAKE_SYSTEM_PROCESSOR}/lib/cmake/opencv4)
-list(INSERT CMAKE_PREFIX_PATH 0  "${THIRD_PARTY_DIR}/opencv/${CMAKE_SYSTEM_PROCESSOR}")
+list(INSERT CMAKE_PREFIX_PATH 0 "${THIRD_PARTY_PLATFORM_DIR}/opencv")
 
-find_package(OpenCV REQUIRED)
-message(STATUS "==============================================================================")
-if(OpenCV_FOUND)
-    message(STATUS "OpenCV found successfully")
-    message(STATUS "OpenCV version: ${OpenCV_VERSION}")
-    message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
-    message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
-    message(STATUS "OpenCV config file: ${OpenCV_CONFIG}")
-else()
-    message(FATAL_ERROR "OpenCV not found")
+find_package(OpenCV QUIET)
+# if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
+#     find_package(OpenCV QUIET COMPONENTS
+#         core flann imgproc ml photo dnn features2d imgcodecs
+#         videoio calib3d highgui objdetect stitching video)
+# else()
+#     find_package(OpenCV QUIET)
+# endif()
+
+if(NOT OpenCV_FOUND AND THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
+    message(STATUS "OpenCV: fallback to SDK prebuild")
+    include("${CMAKE_CURRENT_LIST_DIR}/opencv/OpenCVSigmastar.cmake")
 endif()
+
+if(NOT OpenCV_FOUND)
+    message(FATAL_ERROR
+        "==============================================================================\n"
+        "OpenCV not found: ${THIRD_PARTY_PLATFORM_DIR}/opencv\n"
+        "Build with:\n"
+        "  bash scripts/third_party_builders/builder_opencv.sh --platform ${THIRD_PARTY_PLATFORM_TAG}\n"
+        "==============================================================================")
+endif()
+
+message(STATUS "==============================================================================")
+message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+message(STATUS "  include: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "  libs: ${OpenCV_LIBS}")
 message(STATUS "==============================================================================")

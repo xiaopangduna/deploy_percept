@@ -1,220 +1,319 @@
 #!/bin/bash
-# v0.0.1-2026.03.07
 # 第三方库构建器：OpenCV
 # 可以单独运行，也可以由 third_party_builder.sh 调用
-# 支持 host 模式（本机编译）和 cross 模式（交叉编译）
+#
+# 下载失败时查看: tmp/opencv/build_<platform>/CMakeDownloadLog.txt
 
 set -e
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly OPENCV_GIT_URL="https://gitee.com/opencv/opencv.git"
+# 与 third_party/armv7l-SSC375/prebuild_libs/opencv 中 libopencv_*.a 对齐
+readonly SSC375_OPENCV_MODULES="core,flann,imgproc,ml,photo,dnn,features2d,imgcodecs,videoio,calib3d,highgui,objdetect,stitching,video"
 
-# 显示帮助信息
-show_help() {
-    echo "OpenCV 构建器脚本"
-    echo ""
-    echo "用法:"
-    echo "  $0 [选项]"
-    echo ""
-    echo "必需选项:"
-    echo "  --build-mode <host|cross>  构建模式：host（本机编译）或 cross（交叉编译） [必需]"
-    echo ""
-    echo "可选选项:"
-    echo "  --platform <平台>           目标平台，仅 cross 模式下有效 (aarch64, x86_64)"
-    echo "  --project-root <路径>       项目根目录 (默认: 当前目录)"
-    echo "  --install-dir <路径>        安装目录 (默认: \$PROJECT_ROOT/third_party)"
-    echo "  --toolchain-file <文件>     CMake工具链文件 (仅 cross 模式有效)"
-    echo "  --help                      显示此帮助信息"
-    echo ""
-    echo "示例:"
-    echo "  # host 模式编译本机架构"
-    echo "  bash scripts/third_party_builders/builder_opencv.sh --build-mode host"
-    echo ""
-    echo "  # cross 模式编译 aarch64"
-    echo "  bash scripts/third_party_builders/builder_opencv.sh \\"
-    echo "    --build-mode cross \\"
-    echo "    --platform aarch64 \\"
-    echo "    --project-root /path/to/project"
-}
-
-# 初始化变量
-BUILD_MODE=""
 PLATFORM=""
 PROJECT_ROOT=""
 INSTALL_DIR=""
 TOOLCHAIN_FILE=""
+TOOLCHAIN_ROOT=""
+TOOLCHAIN_PREFIX=""
+BUILD_JOBS=""
+USE_TOOLCHAIN_CC=1
+OPENCV_VERSION="4.5.4"
+CROSS_COMPILE_PREFIX=""
 
-# 解析参数
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --build-mode)
-            BUILD_MODE="$2"
-            shift 2
+log() { echo "[OpenCV构建器] $*"; }
+
+show_help() {
+    cat <<EOF
+OpenCV 构建器脚本
+
+用法:
+  bash $0 [选项]
+
+必需选项:
+  --platform <平台>          目标平台 (aarch64, x86_64, armv7l-SSC375)
+
+可选选项:
+  --project-root <路径>      项目根目录 (默认: 当前目录)
+  --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)
+  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/\$PLATFORM-toolchain.cmake)
+  --jobs <N>                 并行编译线程数 (默认: 平台相关)
+  --help                     显示此帮助信息
+
+OpenCV 版本:
+  aarch64 / x86_64           4.5.4
+  armv7l-SSC375              4.1.1 (与 SDK 预编译一致)
+
+示例:
+  bash scripts/third_party_builders/builder_opencv.sh --platform x86_64
+  bash scripts/third_party_builders/builder_opencv.sh --platform armv7l-SSC375 --jobs 4
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --platform)       PLATFORM="$2"; shift 2 ;;
+            --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
+            --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
+            --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
+            --jobs)           BUILD_JOBS="$2"; shift 2 ;;
+            --help)           show_help; exit 0 ;;
+            *)
+                echo "错误: 未知参数: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+configure_platform() {
+    case "${PLATFORM}" in
+        aarch64)
+            CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
+            OPENCV_VERSION="4.5.4"
             ;;
-        --platform)
-            PLATFORM="$2"
-            shift 2
+        x86_64)
+            CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
+            OPENCV_VERSION="4.5.4"
             ;;
-        --project-root)
-            PROJECT_ROOT="$2"
-            shift 2
-            ;;
-        --install-dir)
-            INSTALL_DIR="$2"
-            shift 2
-            ;;
-        --toolchain-file)
-            TOOLCHAIN_FILE="$2"
-            shift 2
-            ;;
-        --help)
-            show_help
-            return 0
+        armv7l-SSC375)
+            OPENCV_VERSION="4.1.1"
+            USE_TOOLCHAIN_CC=0
             ;;
         *)
-            echo "错误: 未知参数: $1"
-            show_help
-            return 1
+            echo "错误: 不支持的平台 '${PLATFORM}'"
+            echo "支持的平台: aarch64, x86_64, armv7l-SSC375"
+            exit 1
             ;;
     esac
-done
 
-# 检查必需参数
-if [ -z "$BUILD_MODE" ]; then
-    echo "错误: 必须指定构建模式 (--build-mode)"
-    show_help
-    return 1
-fi
-
-# 设置项目根目录默认值
-PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
-echo "[OpenCV构建器] 项目根目录: $PROJECT_ROOT"
-if [ ! -d "$PROJECT_ROOT" ]; then
-    echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    return 1
-fi
-
-# 设置安装目录默认值
-INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
-
-# 根据构建模式设置平台和交叉编译
-if [ "$BUILD_MODE" = "host" ]; then
-    TARGET_ARCH=$(uname -m)
-    echo "[OpenCV构建器] Host 模式，检测本机架构: $TARGET_ARCH"
-    CROSS_COMPILE_PREFIX=""
-elif [ "$BUILD_MODE" = "cross" ]; then
-    if [ -z "$PLATFORM" ]; then
-        echo "错误: cross 模式必须指定 --platform"
-        show_help
-        return 1
+    if [ -z "${BUILD_JOBS}" ]; then
+        local nproc
+        nproc=$(nproc 2>/dev/null || echo 4)
+        if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+            BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
+        else
+            BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
+        fi
     fi
-    TARGET_ARCH="$PLATFORM"
-    case "$PLATFORM" in
-        aarch64) CROSS_COMPILE_PREFIX="aarch64-linux-gnu" ;;
-        x86_64) CROSS_COMPILE_PREFIX="x86_64-linux-gnu" ;;
-        *)
-            echo "错误: 不支持的平台 '$PLATFORM'"
-            return 1
-            ;;
-    esac
-    echo "[OpenCV构建器] Cross 模式，目标架构: $TARGET_ARCH"
-else
-    echo "错误: 无效的 build-mode: $BUILD_MODE"
-    show_help
-    return 1
-fi
+}
 
-# 设置工具链文件（仅 cross 模式有效）
-if [ "$BUILD_MODE" = "cross" ]; then
-    if [ -z "$TOOLCHAIN_FILE" ]; then
+setup_paths() {
+    PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
+    if [ ! -d "${PROJECT_ROOT}" ]; then
+        echo "错误: 项目根目录不存在: ${PROJECT_ROOT}"
+        exit 1
+    fi
+
+    INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
+    if [ -z "${TOOLCHAIN_FILE}" ]; then
         TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/${PLATFORM}-toolchain.cmake"
-        echo "[OpenCV构建器] 使用默认工具链文件: $TOOLCHAIN_FILE"
     fi
-    if [ ! -f "$TOOLCHAIN_FILE" ]; then
-        echo "警告: 工具链文件不存在: $TOOLCHAIN_FILE"
-        echo "       CMake配置可能失败或使用系统默认编译器"
+
+    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
+        log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
-fi
+}
 
-# 设置编译器变量
-if [ "$BUILD_MODE" = "cross" ]; then
-    export CC=${CROSS_COMPILE_PREFIX}-gcc
-    export CXX=${CROSS_COMPILE_PREFIX}-g++
-    if ! command -v ${CXX} &> /dev/null; then
-        echo "警告: 未找到交叉编译工具链 $CXX"
-        echo "       CMake配置可能失败"
-    fi
-else
-    CC=$(command -v gcc)
-    CXX=$(command -v g++)
-fi
-
-echo "[OpenCV构建器] 使用编译器: CC=$CC, CXX=$CXX"
-echo "[OpenCV构建器] 安装路径: $INSTALL_DIR/opencv/$TARGET_ARCH"
-
-# 下载和构建OpenCV
-mkdir -p "${PROJECT_ROOT}/tmp"
-mkdir -p "${INSTALL_DIR}"
-
-cd "${PROJECT_ROOT}/tmp"
-
-# 克隆或更新代码
-if [ ! -d "opencv" ]; then
-    echo "[OpenCV构建器] 克隆OpenCV代码..."
-    # git clone https://gitee.com/opencv/opencv.git
-    git clone -b 4.5.4 --depth 1 https://github.com/opencv/opencv.git
-    if [ $? -ne 0 ]; then
-        echo "[OpenCV构建器] 错误：克隆OpenCV失败"
+# 从 cmake/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
+read_toolchain_vars() {
+    local key value line
+    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
+        log "错误: 工具链文件不存在: ${TOOLCHAIN_FILE}"
         return 1
     fi
-else
-    echo "[OpenCV构建器] OpenCV目录已存在，跳过克隆"
-fi
 
-cd opencv
+    for key in TOOLCHAIN_ROOT TOOLCHAIN_PREFIX; do
+        line=$(grep -E "^set\\(${key} " "${TOOLCHAIN_FILE}" | head -1)
+        if [ -z "${line}" ]; then
+            log "错误: ${TOOLCHAIN_FILE} 中未找到 set(${key} ...)"
+            return 1
+        fi
+        value=$(sed -E 's/^set\([^ ]+ "([^"]+)".*/\1/' <<< "${line}")
+        if [ -z "${value}" ] || [ "${value}" = "${line}" ]; then
+            log "错误: 无法解析 ${key}（${TOOLCHAIN_FILE}）"
+            return 1
+        fi
+        printf -v "${key}" '%s' "${value}"
+    done
+}
 
-# 清理旧的构建目录
-rm -rf build_${TARGET_ARCH}
-mkdir -p build_${TARGET_ARCH}
-cd build_${TARGET_ARCH}
+setup_toolchain_env() {
+    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+        read_toolchain_vars || exit 1
+        CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
+        export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
+    fi
 
-# 创建下载缓存目录
-OPENCV_CACHE_DIR="../../opencv_${TARGET_ARCH}_cache"
-mkdir -p ${OPENCV_CACHE_DIR}
+    if [ "${USE_TOOLCHAIN_CC}" = "1" ]; then
+        export CC="${CROSS_COMPILE_PREFIX}-gcc"
+        export CXX="${CROSS_COMPILE_PREFIX}-g++"
+    fi
 
-# 配置CMake
-echo "[OpenCV构建器] 配置CMake..."
-CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release \
--DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/opencv/${TARGET_ARCH} \
--DOPENCV_DOWNLOAD_PATH=${OPENCV_CACHE_DIR} \
--DBUILD_SHARED_LIBS=OFF \
--DBUILD_PNG=ON \
--DWITH_EIGEN=OFF \
--DPNG_LIBRARY= \
--DPNG_PNG_INCLUDE_DIR="
+    if [ -z "${CROSS_COMPILE_PREFIX}" ]; then
+        return 0
+    fi
 
-if [ "$BUILD_MODE" = "cross" ]; then
-    CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}"
-fi
+    if ! command -v "${CROSS_COMPILE_PREFIX}-g++" &>/dev/null; then
+        log "警告: 未找到 ${CROSS_COMPILE_PREFIX}-g++"
+        case "${PLATFORM}" in
+            x86_64)
+                log "  请安装: sudo apt install gcc-x86-64-linux-gnu g++-x86-64-linux-gnu"
+                ;;
+            aarch64)
+                log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
+                ;;
+            armv7l-SSC375)
+                log "  请挂载 Sigmastar 工具链: ${TOOLCHAIN_ROOT}"
+                ;;
+        esac
+    fi
+}
 
-cmake .. $CMAKE_ARGS
+setup_git_safe_directories() {
+    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
+    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/opencv" 2>/dev/null || true
+    local git_dir
+    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
+        if [ -d "${git_dir}.git" ]; then
+            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
+        fi
+    done
+}
 
-# 编译和安装
-#TODO x86 拉满，aarch 4核心
-CPU_CORES=$(nproc 2>/dev/null || echo 4)
-# CPU_CORES=16
-echo "[OpenCV构建器] 使用 $CPU_CORES 个CPU核心进行编译"
-make -j$CPU_CORES
-make install
+prepare_opencv_source() {
+    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
+    setup_git_safe_directories
 
-# 验证安装
-if [ -f "${INSTALL_DIR}/opencv/${TARGET_ARCH}/lib/libopencv_core.a" ] || \
-   [ -f "${INSTALL_DIR}/opencv/${TARGET_ARCH}/lib64/libopencv_core.a" ]; then
-    echo "[OpenCV构建器] ✓ OpenCV静态库安装成功"
-elif [ -f "${INSTALL_DIR}/opencv/${TARGET_ARCH}/lib/libopencv_core.so" ] || \
-     [ -f "${INSTALL_DIR}/opencv/${TARGET_ARCH}/lib64/libopencv_core.so" ]; then
-    echo "[OpenCV构建器] ✓ OpenCV动态库安装成功"
-else
-    echo "[OpenCV构建器] ⚠ 警告: 找不到OpenCV核心库文件，但安装命令已成功执行"
-fi
+    cd "${PROJECT_ROOT}/tmp"
+    if [ ! -d "opencv" ]; then
+        log "克隆 OpenCV 源码..."
+        git clone "${OPENCV_GIT_URL}"
+    else
+        log "OpenCV 目录已存在，跳过克隆"
+    fi
 
-echo "[OpenCV构建器] OpenCV构建完成"
+    cd opencv
+    log "切换到版本 ${OPENCV_VERSION}..."
+    git checkout "${OPENCV_VERSION}"
+}
+
+build_opencv_cmake_args() {
+    OPENCV_CMAKE_ARGS=(
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/opencv"
+        -DOPENCV_DOWNLOAD_PATH="${OPENCV_CACHE_DIR}"
+        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
+        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_PNG=ON
+        -DPNG_LIBRARY=""
+        -DPNG_PNG_INCLUDE_DIR=""
+    )
+
+    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+        OPENCV_CMAKE_ARGS+=(
+            -DBUILD_TESTS=OFF
+            -DBUILD_PERF_TESTS=OFF
+            -DBUILD_EXAMPLES=OFF
+            -DBUILD_opencv_apps=OFF
+            -DBUILD_LIST="${SSC375_OPENCV_MODULES}"
+            -DWITH_GTK=OFF
+            -DWITH_QT=OFF
+            -DWITH_FFMPEG=OFF
+            -DWITH_GSTREAMER=OFF
+            -DWITH_OPENGL=OFF
+            -DWITH_OPENCL=OFF
+            -DWITH_CUDA=OFF
+            -DWITH_V4L=ON
+            -DCPU_BASELINE=NEON
+            -DCPU_DISPATCH=
+            -DCPU_BASELINE_DISABLE=VFPV3
+        )
+    fi
+}
+
+configure_build_install() {
+    local build_dir="build_${PLATFORM}"
+    rm -rf "${build_dir}"
+    mkdir -p "${build_dir}"
+    cd "${build_dir}"
+
+    OPENCV_CACHE_DIR="../../opencv_${PLATFORM}_cache"
+    mkdir -p "${OPENCV_CACHE_DIR}"
+
+    build_opencv_cmake_args
+    log "配置 CMake (缓存: ${OPENCV_CACHE_DIR})..."
+    cmake .. "${OPENCV_CMAKE_ARGS[@]}"
+
+    log "编译 OpenCV (-j${BUILD_JOBS})..."
+    make -j"${BUILD_JOBS}"
+
+    log "安装 OpenCV..."
+    make install
+}
+
+verify_installation() {
+    local install_prefix="${INSTALL_DIR}/${PLATFORM}/opencv"
+    local lib_dir=""
+
+    if [ -f "${install_prefix}/lib/libopencv_core.a" ] || \
+       [ -f "${install_prefix}/lib/libopencv_core.so" ]; then
+        lib_dir="${install_prefix}/lib"
+    elif [ -f "${install_prefix}/lib64/libopencv_core.a" ] || \
+         [ -f "${install_prefix}/lib64/libopencv_core.so" ]; then
+        lib_dir="${install_prefix}/lib64"
+    else
+        log "⚠ 未找到 libopencv_core，请检查: ${install_prefix}"
+        return 1
+    fi
+
+    log "✓ OpenCV 已安装到 ${install_prefix}"
+
+    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+        local mod missing=0
+        IFS=',' read -ra modules <<< "${SSC375_OPENCV_MODULES}"
+        for mod in "${modules[@]}"; do
+            if [ ! -f "${lib_dir}/libopencv_${mod}.a" ]; then
+                log "✗ 缺少模块库: libopencv_${mod}.a"
+                missing=1
+            fi
+        done
+        if [ "${missing}" -eq 0 ]; then
+            log "✓ 14 个模块库与 SDK 预编译列表一致"
+        else
+            return 1
+        fi
+    fi
+}
+
+main() {
+    local start_time
+    start_time=$(date +%s)
+
+    parse_args "$@"
+
+    if [ -z "${PLATFORM}" ]; then
+        echo "错误: 必须指定平台 (--platform)"
+        show_help
+        exit 1
+    fi
+
+    configure_platform
+    setup_paths
+    setup_toolchain_env
+
+    log "平台: ${PLATFORM}  版本: ${OPENCV_VERSION}  线程: ${BUILD_JOBS}"
+    log "安装路径: ${INSTALL_DIR}/${PLATFORM}/opencv"
+    log "工具链: ${TOOLCHAIN_FILE}"
+
+    prepare_opencv_source
+    configure_build_install
+    verify_installation
+
+    local duration=$(( $(date +%s) - start_time ))
+    log "OpenCV 构建完成 (耗时 ${duration}s)"
+}
+
+main "$@"

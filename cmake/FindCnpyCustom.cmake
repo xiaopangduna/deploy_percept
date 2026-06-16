@@ -1,7 +1,7 @@
 # FindCnpyCustom.cmake - 自定义Cnpy库查找模块
 
 # 设置cnpy路径，基于当前架构
-set(CNPY_PATH ${THIRD_PARTY_DIR}/cnpy/${CMAKE_SYSTEM_PROCESSOR})
+set(CNPY_PATH ${THIRD_PARTY_PLATFORM_DIR}/cnpy)
 
 # 直接指定cnpy的头文件和库路径
 set(CNPY_INCLUDE_DIRS ${CNPY_PATH}/include)

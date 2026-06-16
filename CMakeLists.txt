@@ -1,21 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
+
 # 定义项目名称
-project(deploy_percept VERSION 0.1.0 LANGUAGES CXX)
+project(root_sdk_percept VERSION 0.1.0 LANGUAGES CXX)
 
-
-message(STATUS "CMake配置信息:")
-message(STATUS "  - CMAKE_TOOLCHAIN_FILE: ${CMAKE_TOOLCHAIN_FILE}")
-message(STATUS "  - CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "  - CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
-message(STATUS "  - CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
-message(STATUS "  - CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
-message(STATUS "  - CMAKE_SYSROOT: ${CMAKE_SYSROOT}")
-message(STATUS "  - CMAKE_CROSSCOMPILING: ${CMAKE_CROSSCOMPILING}")
-
+option(ENABLE_TESTS "Enable unit tests" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 工具链/平台变量见各 toolchain 文件；此处仅打印 project() 之后的工程配置
+message(STATUS "==============================================================================")
+message(STATUS "项目配置:")
+message(STATUS "  CMAKE_BUILD_TYPE           = ${CMAKE_BUILD_TYPE}")
+message(STATUS "  CMAKE_CXX_STANDARD         = ${CMAKE_CXX_STANDARD}")
+message(STATUS "  CMAKE_CROSSCOMPILING       = ${CMAKE_CROSSCOMPILING}")
+message(STATUS "  CMAKE_CXX_COMPILER_ID      = ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "  CMAKE_CXX_COMPILER_VERSION = ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "==============================================================================")
 
 # 将cmake目录添加到模块查找路径
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -23,92 +25,69 @@ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # 包含第三方库查找模块
 include(FindThirdParty)
 
-# 添加包含目录
-include_directories(include)
-
-
-
-# 定义基础源文件列表（不包含RGA相关文件）
-set(DEPLOY_PERCEPT_SOURCES
-    src/pre_process/image_pre_process.cpp
-    src/engine/EngineFactory.cpp
-    src/engine/BaseEngine.cpp
-    src/post_process/YoloBasePostProcess.cpp
-    src/post_process/YoloV5DetectPostProcess.cpp
-    src/post_process/YoloV5SegPostProcess.cpp
-    src/post_process/YoloV8SegPostProcess.cpp
-    src/post_process/YoloV8PosePostProcess.cpp
-    src/post_process/PostProcessFactory.cpp
-    src/utils/io.cpp
+# 定义源文件列表
+set(SOURCES_FILE
     src/utils/logger_factory.cpp
-    src/utils/npy.cpp
+    src/utils/yaml.cpp
+    src/pre_process/image_pre_process.cpp
+    src/post_process/YoloBasePostProcess.cpp
+    src/post_process/YoloV8DetectPostProcess.cpp
 )
 
 # 创建库目标
-add_library(deploy_percept STATIC ${DEPLOY_PERCEPT_SOURCES})
+add_library(root_sdk_percept STATIC ${SOURCES_FILE})
 
+target_link_libraries(root_sdk_percept PUBLIC
+    ${OpenCV_LIBS}
+    spdlog::spdlog
+    yaml-cpp::yaml-cpp
+)
 
-target_link_libraries(deploy_percept PUBLIC ${OpenCV_LIBS} spdlog::spdlog  ${CNPY_LIBRARIES} ${YAML_CPP_LIBRARIES} ZLIB::ZLIB ) 
-
-
-target_include_directories(deploy_percept PUBLIC
+# 设置库的包含目录
+target_include_directories(root_sdk_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
-    $<BUILD_INTERFACE:${CNPY_INCLUDE_DIRS}>
-    $<BUILD_INTERFACE:${YAML_CPP_INCLUDE_DIR}>
 )
 
-# RGA
-if(RGA_FOUND)
-    target_sources(deploy_percept PRIVATE src/pre_process/image_pre_process_rga.cpp)
-    target_link_libraries(deploy_percept PUBLIC ${LIBRGA})
-    target_include_directories(deploy_percept PUBLIC $<BUILD_INTERFACE:${LIBRGA_INCLUDES}>)    
-    target_compile_definitions(deploy_percept PUBLIC RGA_FOUND=1)
-endif()
-
-if(RKNN_FOUND)
-    target_sources(deploy_percept PRIVATE src/engine/RknnEngine.cpp)
-    target_link_libraries(deploy_percept PUBLIC ${LIBRKNNRT})
-    target_include_directories(deploy_percept PUBLIC $<BUILD_INTERFACE:${LIBRKNNRT_INCLUDES}>)    
-    target_compile_definitions(deploy_percept PUBLIC RKNN_FOUND=1)
-endif()
-
-# 安装规则
-install(TARGETS deploy_percept
-    EXPORT deploy_perceptTargets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include
-)
-
-install(DIRECTORY include/
-    DESTINATION include
-)
-
-install(EXPORT deploy_perceptTargets
-    FILE deploy_perceptConfig.cmake
-    NAMESPACE deploy_percept::
-    DESTINATION lib/cmake/deploy_percept
-)
-
-# 安装RKNN运行时库（如果找到）
-if(RKNN_FOUND AND LIBRKNNRT AND EXISTS ${LIBRKNNRT})
-    # 复制RKNN运行时库到安装目录
-    install(FILES ${LIBRKNNRT} DESTINATION lib)
-    
-    # 安装RKNN头文件
-    install(DIRECTORY ${LIBRKNNRT_INCLUDES}/
-        DESTINATION include
-        FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.hpp"
+# Sigmastar MI SDK（armv7l SSC375 平台后端，条件链接）
+if(SIGMASTAR_FOUND)
+    target_sources(root_sdk_percept PRIVATE
+        src/engine/SigmastarIpuEngine.cpp
     )
+    target_link_libraries(root_sdk_percept PUBLIC sigmastar::mi)
+    target_compile_definitions(root_sdk_percept PUBLIC SIGMASTAR_FOUND=1)
 endif()
 
+# # 安装规则（armv7l：不 EXPORT，MI SDK 为 INTERFACE 依赖）
+# install(TARGETS root_sdk_percept
+#     LIBRARY DESTINATION lib
+#     ARCHIVE DESTINATION lib
+#     RUNTIME DESTINATION bin
+#     INCLUDES DESTINATION include
+# )
 
-# 添加子目录
+# install(DIRECTORY include/
+#     DESTINATION include
+# )
+
+# 添加apps目录
 add_subdirectory(apps)
-# 启用测试
-enable_testing()
-add_subdirectory(tests)
+
+# 添加测试
+message(STATUS "==============================================================================")
+message(STATUS "测试配置信息:")
+message(STATUS "  - ENABLE_TESTS: ${ENABLE_TESTS}")
+message(STATUS "  - GTest_FOUND: ${GTest_FOUND}")
+message(STATUS "==============================================================================")
+if(ENABLE_TESTS )
+    if(GTest_FOUND)
+        message(STATUS "测试已被启用，开始编译测试用例")
+        enable_testing()
+        add_subdirectory(tests)
+    else()
+        message(WARNING "测试已被启用，但未找到 Google Test，测试将被跳过")
+    endif()
+else()
+    message(STATUS "测试已被禁用")
+endif()
+message(STATUS "==============================================================================")
