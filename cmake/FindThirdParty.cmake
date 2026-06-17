@@ -16,10 +16,10 @@ if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
     include(FindSigmastar)
 endif()
 
-include(FindSpdlogCustom)
-include(FindYamlCppCustom)
+# include(FindSpdlogCustom)
+# include(FindYamlCppCustom)
 
-include(FindOpenCVCustom)
+# include(FindOpenCVCustom)
 
 # # 导入自定义的查找模块
 # include(FindCnpyCustom)

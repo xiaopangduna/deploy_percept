@@ -27,7 +27,7 @@ spdlog 构建器脚本
   bash $0 [选项]
 
 必需选项:
-  --platform <平台>          目标平台 (aarch64, x86_64, armv7l-SSC375)
+  --platform <平台>          目标平台 (aarch64, aarch64-A733, x86_64, armv7l-SSC375)
 
 可选选项:
   --project-root <路径>      项目根目录 (默认: 当前目录)
@@ -71,12 +71,12 @@ configure_platform() {
         x86_64)
             CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
             ;;
-        armv7l-SSC375)
+        armv7l-SSC375|aarch64-A733)
             USE_TOOLCHAIN_CC=0
             ;;
         *)
             echo "错误: 不支持的平台 '${PLATFORM}'"
-            echo "支持的平台: aarch64, x86_64, armv7l-SSC375"
+            echo "支持的平台: aarch64, aarch64-A733, x86_64, armv7l-SSC375"
             exit 1
             ;;
     esac
@@ -84,7 +84,7 @@ configure_platform() {
     if [ -z "${BUILD_JOBS}" ]; then
         local nproc
         nproc=$(nproc 2>/dev/null || echo 4)
-        if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
             BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
         else
             BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
@@ -133,7 +133,7 @@ read_toolchain_vars() {
 }
 
 setup_toolchain_env() {
-    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
         read_toolchain_vars || exit 1
         CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
         export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
@@ -157,8 +157,8 @@ setup_toolchain_env() {
             aarch64)
                 log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
                 ;;
-            armv7l-SSC375)
-                log "  请挂载 Sigmastar 工具链: ${TOOLCHAIN_ROOT}"
+            armv7l-SSC375|aarch64-A733)
+                log "  请挂载工具链: ${TOOLCHAIN_ROOT}"
                 ;;
         esac
     fi
@@ -202,7 +202,7 @@ build_spdlog_cmake_args() {
         -DSPDLOG_BUILD_BENCH=OFF
     )
 
-    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
         SPDLOG_CMAKE_ARGS+=(
             -DSPDLOG_ENABLE_PCH=OFF
         )

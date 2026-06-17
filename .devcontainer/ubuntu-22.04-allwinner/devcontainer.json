@@ -1,0 +1,34 @@
+{
+    "name": "ubuntu-22.04-allwinner",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "../.."
+    },
+    "mounts": [
+        "source=/opt/toolchains,target=/opt/toolchains,type=bind"
+    ],
+    "runArgs": [
+        "--env=DISPLAY=${env:DISPLAY}",
+        "--env=NO_AT_BRIDGE=1",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--network=host"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "NO_AT_BRIDGE": "1"
+    },
+    "postCreateCommand": "bash .devcontainer/ubuntu-22.04-allwinner/post-create.sh",
+    "postStartCommand": "bash .devcontainer/ubuntu-22.04-allwinner/post-start.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "Alibaba-Cloud.tongyi-lingma",
+                "SimpleToolsDev.opencv-image"
+            ]
+        }
+    }
+}

@@ -30,6 +30,38 @@
       "environment": {
         "PATH": "/opt/toolchains/arm-sigmastar-linux-uclibcgnueabihf-9.1.0/bin:$penv{PATH}"
       }
+    },
+    {
+      "name": "aarch64-A733-debug",
+      "displayName": "Allwinner A733 aarch64 Debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/aarch64-A733-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-A733-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-A733",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TESTS": "OFF"
+      },
+      "environment": {
+        "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"
+      }
+    },
+    {
+      "name": "aarch64-A733-release",
+      "displayName": "Allwinner A733 aarch64 Release",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/aarch64-A733-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-A733-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-A733",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TESTS": "OFF"
+      },
+      "environment": {
+        "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"
+      }
     }
   ],
 
@@ -42,6 +74,16 @@
     {
       "name": "armv7l-SSC375-release",
       "configurePreset": "armv7l-SSC375-release",
+      "jobs": 16
+    },
+    {
+      "name": "aarch64-A733-debug",
+      "configurePreset": "aarch64-A733-debug",
+      "jobs": 16
+    },
+    {
+      "name": "aarch64-A733-release",
+      "configurePreset": "aarch64-A733-release",
       "jobs": 16
     }
   ]

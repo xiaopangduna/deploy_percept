@@ -17,7 +17,7 @@ show_help() {
     echo "  $0 --help"
     echo ""
     echo "必需参数:"
-    echo "  <platform>                 目标平台 (aarch64, x86_64)"
+    echo "  <platform>                 目标平台 (aarch64, aarch64-A733, x86_64, armv7l-SSC375)"
     echo "  --libs <libraries>         逗号分隔的库列表，或使用 'all' 构建所有库"
     echo ""
     echo "支持的库:"
@@ -136,11 +136,14 @@ case "${PLATFORM}" in
     aarch64)
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/aarch64-toolchain.cmake
         ;;
+    aarch64-A733|armv7l-SSC375)
+        TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/${PLATFORM}-toolchain.cmake
+        ;;
     x86_64)
         ;;
     *)
         echo "错误: 不支持的平台 '${PLATFORM}'"
-        echo "支持的平台: aarch64, x86_64"
+        echo "支持的平台: aarch64, aarch64-A733, x86_64, armv7l-SSC375"
         echo "请使用 $0 --help 查看完整用法"
         exit 1
         ;;

@@ -118,3 +118,9 @@ cd build/x86_64-debug-host && ctest
 ## 许可证
 
 本项目采用 MIT 许可证，请参阅 LICENSE 文件获取更多信息。
+
+全志不支持使用docker或者wsl编译OrangePi build
+https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
+拷贝gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu至/opt/toochains
+
+aarch64-linux-gnu_orangepi-a733
