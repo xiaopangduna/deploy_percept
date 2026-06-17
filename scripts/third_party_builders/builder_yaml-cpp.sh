@@ -32,7 +32,7 @@ yaml-cpp 构建器脚本
 可选选项:
   --project-root <路径>      项目根目录 (默认: 当前目录)
   --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)
-  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/\$PLATFORM-toolchain.cmake)
+  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)
   --jobs <N>                 并行编译线程数 (默认: 平台相关)
   --help                     显示此帮助信息
 
@@ -101,7 +101,7 @@ setup_paths() {
 
     INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
     if [ -z "${TOOLCHAIN_FILE}" ]; then
-        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/${PLATFORM}-toolchain.cmake"
+        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
     fi
 
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
@@ -109,7 +109,7 @@ setup_paths() {
     fi
 }
 
-# 从 cmake/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
+# 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
 read_toolchain_vars() {
     local key value line
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then

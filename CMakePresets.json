@@ -9,7 +9,7 @@
       "binaryDir": "${sourceDir}/build/x86_64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/x86_64-toolchain.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/x86_64-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/x86_64",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "ON"
@@ -22,7 +22,7 @@
       "binaryDir": "${sourceDir}/build/armv7l-SSC375-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/armv7l-SSC375-toolchain.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/armv7l-SSC375-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-SSC375",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "OFF"
@@ -32,30 +32,14 @@
       }
     },
     {
-      "name": "aarch64-A733-debug",
-      "displayName": "Allwinner A733 aarch64 Debug",
+      "name": "aarch64-linux-gnu_orange_pi_4_pro_a733-release",
+      "displayName": "Orange Pi 4 Pro A733 Release",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/aarch64-A733-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-A733-toolchain.cmake",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-A733",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "ENABLE_TESTS": "OFF"
-      },
-      "environment": {
-        "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"
-      }
-    },
-    {
-      "name": "aarch64-A733-release",
-      "displayName": "Allwinner A733 aarch64 Release",
-      "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/aarch64-A733-release",
+      "binaryDir": "${sourceDir}/build/aarch64-linux-gnu_orange_pi_4_pro_a733-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/aarch64-A733-toolchain.cmake",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-A733",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/aarch64-linux-gnu_orange_pi_4_pro_a733-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-linux-gnu_orange_pi_4_pro_a733",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "OFF"
       },
@@ -77,13 +61,8 @@
       "jobs": 16
     },
     {
-      "name": "aarch64-A733-debug",
-      "configurePreset": "aarch64-A733-debug",
-      "jobs": 16
-    },
-    {
-      "name": "aarch64-A733-release",
-      "configurePreset": "aarch64-A733-release",
+      "name": "aarch64-linux-gnu_orange_pi_4_pro_a733-release",
+      "configurePreset": "aarch64-linux-gnu_orange_pi_4_pro_a733-release",
       "jobs": 16
     }
   ]

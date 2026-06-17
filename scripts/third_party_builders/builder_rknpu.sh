@@ -20,7 +20,7 @@ show_help() {
     echo "可选选项:"
     echo "  --project-root <路径>      项目根目录 (默认: 当前目录)"
     echo "  --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)"
-    echo "  --toolchain-file <文件>    CMake工具链文件 (默认: \$PROJECT_ROOT/cmake/\$PLATFORM-toolchain.cmake)"
+    echo "  --toolchain-file <文件>    CMake工具链文件 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)"
     echo "  --help                    显示此帮助信息"
     echo ""
     echo "注意:"

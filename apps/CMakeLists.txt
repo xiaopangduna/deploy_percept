@@ -1,4 +1,4 @@
-add_subdirectory(demo)
+add_subdirectory(smoke_test)
 
 
 # add_subdirectory(yolov5_detect_rknn)

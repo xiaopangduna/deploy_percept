@@ -27,12 +27,12 @@ spdlog 构建器脚本
   bash $0 [选项]
 
 必需选项:
-  --platform <平台>          目标平台 (aarch64, aarch64-A733, x86_64, armv7l-SSC375)
+  --platform <平台>          目标平台 (aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375)
 
 可选选项:
   --project-root <路径>      项目根目录 (默认: 当前目录)
   --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)
-  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/\$PLATFORM-toolchain.cmake)
+  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)
   --jobs <N>                 并行编译线程数 (默认: 平台相关)
   --help                     显示此帮助信息
 
@@ -71,12 +71,12 @@ configure_platform() {
         x86_64)
             CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
             ;;
-        armv7l-SSC375|aarch64-A733)
+        armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
             USE_TOOLCHAIN_CC=0
             ;;
         *)
             echo "错误: 不支持的平台 '${PLATFORM}'"
-            echo "支持的平台: aarch64, aarch64-A733, x86_64, armv7l-SSC375"
+            echo "支持的平台: aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375"
             exit 1
             ;;
     esac
@@ -84,7 +84,7 @@ configure_platform() {
     if [ -z "${BUILD_JOBS}" ]; then
         local nproc
         nproc=$(nproc 2>/dev/null || echo 4)
-        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
+        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
             BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
         else
             BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
@@ -101,7 +101,7 @@ setup_paths() {
 
     INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
     if [ -z "${TOOLCHAIN_FILE}" ]; then
-        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/${PLATFORM}-toolchain.cmake"
+        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
     fi
 
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
@@ -109,7 +109,7 @@ setup_paths() {
     fi
 }
 
-# 从 cmake/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
+# 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
 read_toolchain_vars() {
     local key value line
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
@@ -133,7 +133,7 @@ read_toolchain_vars() {
 }
 
 setup_toolchain_env() {
-    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
         read_toolchain_vars || exit 1
         CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
         export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
@@ -157,7 +157,7 @@ setup_toolchain_env() {
             aarch64)
                 log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
                 ;;
-            armv7l-SSC375|aarch64-A733)
+            armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
                 log "  请挂载工具链: ${TOOLCHAIN_ROOT}"
                 ;;
         esac
@@ -202,7 +202,7 @@ build_spdlog_cmake_args() {
         -DSPDLOG_BUILD_BENCH=OFF
     )
 
-    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-A733 ]]; then
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
         SPDLOG_CMAKE_ARGS+=(
             -DSPDLOG_ENABLE_PCH=OFF
         )

@@ -20,9 +20,9 @@ deploy_percept/
 │   ├── yolov5_detect_rknn/        # YOLOv5目标检测示例
 │   ├── yolov5_seg_rknn/           # YOLOv5实例分割示例
 │   └── yolov8_seg_rknn/           # YOLOv8实例分割示例
-├── cmake/                         # CMake模块
-│   ├── Find*.cmake                # 第三方库查找脚本
-│   └── aarch64-toolchain.cmake    # ARM交叉编译工具链
+├── cmake/                         # CMake 配置
+│   ├── toolchains/                # 交叉编译工具链
+│   └── modules/                   # Find*.cmake 第三方库查找模块
 ├── examples/                      # 示例数据
 │   └── data/
 ├── include/                       # 公共头文件
@@ -123,4 +123,4 @@ cd build/x86_64-debug-host && ctest
 https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
 拷贝gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu至/opt/toochains
 
-aarch64-linux-gnu_orangepi-a733
+aarch64-linux-gnu_orange_pi_4_pro_a733-release

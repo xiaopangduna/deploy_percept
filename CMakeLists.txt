@@ -21,7 +21,7 @@ message(STATUS "  CMAKE_CXX_COMPILER_VERSION = ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "==============================================================================")
 
 # 将cmake目录添加到模块查找路径
-list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
 if(ENABLE_ROOT_SDK)
 # 包含第三方库查找模块
@@ -94,5 +94,5 @@ else()
 endif()
 message(STATUS "==============================================================================")
 else()
-    message(STATUS "root_sdk_percept 已禁用，仅构建 apps/demo 等轻量目标")
+    message(STATUS "root_sdk_percept 已禁用，仅构建 apps/smoke_test 等轻量目标")
 endif()

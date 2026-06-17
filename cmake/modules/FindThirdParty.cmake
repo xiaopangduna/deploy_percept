@@ -5,7 +5,7 @@
 if(NOT DEFINED THIRD_PARTY_PLATFORM_DIR)
     message(FATAL_ERROR
         "THIRD_PARTY_PLATFORM_DIR is not set. "
-        "Please configure a toolchain file (cmake/*-toolchain.cmake).")
+        "Please configure a toolchain file (cmake/toolchains/*-toolchain.cmake).")
 endif()
 
 message(STATUS "==============================================================================")

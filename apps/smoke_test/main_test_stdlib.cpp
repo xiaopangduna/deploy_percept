@@ -27,7 +27,7 @@ std::string format_local_time() {
 }  // namespace
 
 int main() {
-    std::printf("deploy_percept cross-compile demo\n");
+    std::printf("deploy_percept smoke test (stdlib)\n");
     std::printf("  hostname : %s\n", read_hostname().c_str());
     std::printf("  time     : %s\n", format_local_time().c_str());
     std::printf("  pid      : %d\n", static_cast<int>(getpid()));
