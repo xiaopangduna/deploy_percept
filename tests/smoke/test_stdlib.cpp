@@ -1,5 +1,6 @@
+#include <gtest/gtest.h>
+
 #include <chrono>
-#include <cstdio>
 #include <ctime>
 #include <string>
 #include <unistd.h>
@@ -26,11 +27,8 @@ std::string format_local_time() {
 
 }  // namespace
 
-int main() {
-    std::printf("deploy_percept smoke test (stdlib)\n");
-    std::printf("  hostname : %s\n", read_hostname().c_str());
-    std::printf("  time     : %s\n", format_local_time().c_str());
-    std::printf("  pid      : %d\n", static_cast<int>(getpid()));
-    std::printf("OK\n");
-    return 0;
+TEST(Smoke, StdlibRuntime) {
+    EXPECT_FALSE(read_hostname().empty());
+    EXPECT_FALSE(format_local_time().empty());
+    EXPECT_GT(getpid(), 0);
 }

@@ -1,241 +1,259 @@
 #!/bin/bash
 # 第三方库构建器：cnpy
-# 可以单独运行，也可以由 build_third_party.sh 调用
+# 可以单独运行，也可以由 third_party_builder.sh 调用
 
 set -e
 
+readonly CNPY_GIT_URL="https://github.com/rogersce/cnpy.git"
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# 显示帮助信息
-show_help() {
-    echo "cnpy 构建器脚本"
-    echo ""
-    echo "用法:"
-    echo "bash $0 [选项]"
-    echo ""
-    echo "必需选项:"
-    echo "  --platform <平台>          目标平台 (aarch64, x86_64) [必需]"
-    echo ""
-    echo "可选选项:"
-    echo "  --project-root <路径>      项目根目录 (默认: 当前目录)"
-    echo "  --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)"
-    echo "  --toolchain-file <文件>    CMake工具链文件 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)"
-    echo "  --help                    显示此帮助信息"
-    echo ""
-    echo "cnpy 信息:"
-    echo "  cnpy 是一个用于读取和写入 NumPy .npy 和 .npz 文件的 C++ 库"
-    echo "  源代码: https://github.com/rogersce/cnpy.git"
-    echo "  安装位置: \$INSTALL_DIR/\$PLATFORM/cnpy"
-    echo ""
-    echo "示例:"
-    echo "  # 在项目根目录下运行"
-    echo "  cd /path/to/project"
-    echo "  bash scripts/third_party_builders/builder_cnpy.sh --platform x86_64"
-    echo ""
-    echo "  # 从任何位置运行"
-    echo "  bash /path/to/project/scripts/third_party_builders/builder_cnpy.sh \\"
-    echo "    --platform aarch64 \\"
-    echo "    --project-root /path/to/project"
-}
-
-# 初始化变量
 PLATFORM=""
 PROJECT_ROOT=""
 INSTALL_DIR=""
 TOOLCHAIN_FILE=""
+TOOLCHAIN_ROOT=""
+TOOLCHAIN_PREFIX=""
+BUILD_JOBS=""
+USE_TOOLCHAIN_CC=1
+CROSS_COMPILE_PREFIX=""
 
-# 解析参数
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --platform)
-            PLATFORM="$2"
-            shift 2
+log() { echo "[cnpy构建器] $*"; }
+
+show_help() {
+    cat <<EOF
+cnpy 构建器脚本
+
+用法:
+  bash $0 [选项]
+
+必需选项:
+  --platform <平台>          目标平台 (aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375)
+
+可选选项:
+  --project-root <路径>      项目根目录 (默认: 当前目录)
+  --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)
+  --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)
+  --jobs <N>                 并行编译线程数 (默认: 平台相关)
+  --help                     显示此帮助信息
+
+示例:
+  bash scripts/third_party_builders/builder_cnpy.sh --platform x86_64
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --build-mode)     shift 2 ;;
+            --platform)       PLATFORM="$2"; shift 2 ;;
+            --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
+            --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
+            --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
+            --jobs)           BUILD_JOBS="$2"; shift 2 ;;
+            --help)           show_help; exit 0 ;;
+            *)
+                echo "错误: 未知参数: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+configure_platform() {
+    case "${PLATFORM}" in
+        aarch64)
+            CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
             ;;
-        --project-root)
-            PROJECT_ROOT="$2"
-            shift 2
+        x86_64)
+            USE_TOOLCHAIN_CC=0
             ;;
-        --install-dir)
-            INSTALL_DIR="$2"
-            shift 2
-            ;;
-        --toolchain-file)
-            TOOLCHAIN_FILE="$2"
-            shift 2
-            ;;
-        --help)
-            show_help
-            exit 0
+        armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
+            USE_TOOLCHAIN_CC=0
             ;;
         *)
-            echo "错误: 未知参数: $1"
-            show_help
+            echo "错误: 不支持的平台 '${PLATFORM}'"
+            echo "支持的平台: aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375"
             exit 1
             ;;
     esac
-done
 
-# 检查必需参数
-if [ -z "$PLATFORM" ]; then
-    echo "错误: 必须指定平台 (--platform)"
-    show_help
-    exit 1
-fi
+    if [ -z "${BUILD_JOBS}" ]; then
+        local nproc
+        nproc=$(nproc 2>/dev/null || echo 4)
+        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
+            BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
+        else
+            BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
+        fi
+    fi
+}
 
-# 验证平台参数并设置交叉编译前缀
-case "${PLATFORM}" in
-    aarch64)
-        CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
-        ;;
-    x86_64)
-        CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
-        ;;
-    *)
-        echo "错误: 不支持的平台 '$PLATFORM'"
-        echo "支持的平台: aarch64, x86_64"
-        exit 1
-        ;;
-esac
-
-echo "[cnpy构建器] 平台: $PLATFORM"
-echo "[cnpy构建器] 交叉编译前缀: $CROSS_COMPILE_PREFIX"
-
-# 设置项目根目录默认值（当前工作目录）
-PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
-echo "[cnpy构建器] 项目根目录: $PROJECT_ROOT"
-
-# 检查项目根目录是否合理
-if [ ! -d "$PROJECT_ROOT" ]; then
-    echo "错误: 项目根目录不存在: $PROJECT_ROOT"
-    exit 1
-fi
-
-# 设置安装目录默认值
-INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
-
-# 设置工具链文件默认值
-if [ -z "$TOOLCHAIN_FILE" ]; then
-    TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
-    echo "[cnpy构建器] 使用默认工具链文件: $TOOLCHAIN_FILE"
-fi
-
-# 检查工具链文件是否存在
-if [ ! -f "$TOOLCHAIN_FILE" ]; then
-    echo "警告: 工具链文件不存在: $TOOLCHAIN_FILE"
-    echo "       CMake配置可能失败或使用系统默认编译器"
-fi
-
-# 设置编译器变量
-export CC=${CROSS_COMPILE_PREFIX}-gcc
-export CXX=${CROSS_COMPILE_PREFIX}-g++
-
-# 检查编译器是否存在（仅警告，不终止）
-if ! command -v ${CXX} &> /dev/null; then
-    echo "警告: 未找到交叉编译工具链 $CXX"
-    echo "       CMake配置可能失败"
-    echo "       x86_64平台请安装: sudo apt install gcc-x86-64-linux-gnu g++-x86-64-linux-gnu"
-    echo "       aarch64平台请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
-fi
-
-echo "[cnpy构建器] 开始构建cnpy库"
-echo "  平台: $PLATFORM"
-echo "  安装路径: $INSTALL_DIR/$PLATFORM/cnpy"
-echo "  工具链文件: $TOOLCHAIN_FILE"
-
-echo "[cnpy构建器] 构建依赖 zlib..."
-bash ${SCRIPT_DIR}/builder_zlib.sh \
-    --platform ${PLATFORM} \
-    --project-root ${PROJECT_ROOT} \
-    --install-dir ${INSTALL_DIR} \
-    --toolchain-file ${TOOLCHAIN_FILE}
-
-ZLIB_ROOT=${INSTALL_DIR}/${PLATFORM}/zlib
-
-# 下载和构建cnpy
-mkdir -p ${PROJECT_ROOT}/tmp
-mkdir -p ${PROJECT_ROOT}/third_party
-
-cd ${PROJECT_ROOT}/tmp
-
-# 克隆或更新代码
-if [ ! -d "cnpy" ]; then
-    echo "[cnpy构建器] 克隆cnpy仓库..."
-    git clone https://github.com/rogersce/cnpy.git
-    if [ $? -ne 0 ]; then
-        echo "[cnpy构建器] 错误: 克隆cnpy仓库失败"
-        echo "      请检查网络连接或git配置"
+setup_paths() {
+    PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
+    if [ ! -d "${PROJECT_ROOT}" ]; then
+        echo "错误: 项目根目录不存在: ${PROJECT_ROOT}"
         exit 1
     fi
-else
-    echo "[cnpy构建器] cnpy目录已存在，跳过克隆"
-fi
 
-cd cnpy
+    INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
+    if [ -z "${TOOLCHAIN_FILE}" ]; then
+        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
+    fi
 
-# 清理旧的构建目录
-rm -rf build_${PLATFORM}
-mkdir -p build_${PLATFORM}
-cd build_${PLATFORM}
+    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
+        log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
+    fi
+}
 
-# 配置和构建cnpy
-echo "[cnpy构建器] 配置cmake..."
-cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}/${PLATFORM}/cnpy \
-    -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DZLIB_ROOT=${ZLIB_ROOT} \
-    -DZLIB_LIBRARY=${ZLIB_ROOT}/lib/libz.a \
-    -DZLIB_INCLUDE_DIR=${ZLIB_ROOT}/include
+read_toolchain_vars() {
+    local key value line
+    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
+        log "错误: 工具链文件不存在: ${TOOLCHAIN_FILE}"
+        return 1
+    fi
 
-if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy配置失败"
-    echo "      请检查工具链文件和编译器设置"
-    exit 1
-fi
+    for key in TOOLCHAIN_ROOT TOOLCHAIN_PREFIX; do
+        line=$(grep -E "^set\\(${key} " "${TOOLCHAIN_FILE}" | head -1)
+        if [ -z "${line}" ]; then
+            log "错误: ${TOOLCHAIN_FILE} 中未找到 set(${key} ...)"
+            return 1
+        fi
+        value=$(sed -E 's/^set\([^ ]+ "([^"]+)".*/\1/' <<< "${line}")
+        if [ -z "${value}" ] || [ "${value}" = "${line}" ]; then
+            log "错误: 无法解析 ${key}（${TOOLCHAIN_FILE}）"
+            return 1
+        fi
+        printf -v "${key}" '%s' "${value}"
+    done
+}
 
-echo "[cnpy构建器] 开始编译..."
-CPU_CORES=$(nproc 2>/dev/null || echo 4)
-echo "[cnpy构建器] 使用 $CPU_CORES 个CPU核心进行编译"
-make -j$CPU_CORES
+setup_toolchain_env() {
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
+        read_toolchain_vars || exit 1
+        CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
+        export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
+    fi
 
-if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy编译失败"
-    echo "      请检查依赖和编译器错误"
-    exit 1
-fi
+    if [ "${USE_TOOLCHAIN_CC}" = "1" ]; then
+        export CC="${CROSS_COMPILE_PREFIX}-gcc"
+        export CXX="${CROSS_COMPILE_PREFIX}-g++"
+    fi
 
-echo "[cnpy构建器] 编译完成，开始安装..."
-make install
+    if [ -z "${CROSS_COMPILE_PREFIX}" ]; then
+        return 0
+    fi
 
-if [ $? -ne 0 ]; then
-    echo "[cnpy构建器] 错误: cnpy安装失败"
-    exit 1
-fi
+    if ! command -v "${CROSS_COMPILE_PREFIX}-g++" &>/dev/null; then
+        log "警告: 未找到 ${CROSS_COMPILE_PREFIX}-g++"
+        case "${PLATFORM}" in
+            aarch64)
+                log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
+                ;;
+            armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
+                log "  请挂载工具链: ${TOOLCHAIN_ROOT}"
+                ;;
+        esac
+    fi
+}
 
-# 验证安装
-if [ -f "${INSTALL_DIR}/${PLATFORM}/cnpy/lib/libcnpy.a" ] || \
-   [ -f "${INSTALL_DIR}/${PLATFORM}/cnpy/lib64/libcnpy.a" ]; then
-    echo "[cnpy构建器] ✓ cnpy静态库安装成功"
-    echo "[cnpy构建器]   库文件位置: $(find "${INSTALL_DIR}/${PLATFORM}/cnpy" -name "*.a" -type f 2>/dev/null | head -1)"
-elif [ -f "${INSTALL_DIR}/${PLATFORM}/cnpy/lib/libcnpy.so" ] || \
-     [ -f "${INSTALL_DIR}/${PLATFORM}/cnpy/lib64/libcnpy.so" ]; then
-    echo "[cnpy构建器] ✓ cnpy动态库安装成功"
-    echo "[cnpy构建器]   库文件位置: $(find "${INSTALL_DIR}/${PLATFORM}/cnpy" -name "*.so" -type f 2>/dev/null | head -1)"
-elif [ -f "${INSTALL_DIR}/${PLATFORM}/cnpy/include/cnpy.h" ]; then
-    echo "[cnpy构建器] ✓ cnpy头文件安装成功"
-else
-    echo "[cnpy构建器] ⚠ 警告: 找不到cnpy库文件或头文件，但安装命令已成功执行"
-    echo "[cnpy构建器]   请检查安装目录: ${INSTALL_DIR}/${PLATFORM}/cnpy"
-    
-    # 尝试查找文件
-    echo "[cnpy构建器]   正在搜索文件..."
-    find "${INSTALL_DIR}/${PLATFORM}/cnpy" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | head -10
-    if [ $? -eq 0 ] && [ $(find "${INSTALL_DIR}/${PLATFORM}/cnpy" -type f \( -name "*.a" -o -name "*.so" -o -name "*.h" \) 2>/dev/null | wc -l) -gt 0 ]; then
-        echo "[cnpy构建器]   找到一些文件，安装可能成功"
+setup_git_safe_directories() {
+    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
+    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/cnpy" 2>/dev/null || true
+    local git_dir
+    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
+        if [ -d "${git_dir}.git" ]; then
+            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
+        fi
+    done
+}
+
+prepare_cnpy_source() {
+    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
+    setup_git_safe_directories
+
+    cd "${PROJECT_ROOT}/tmp"
+    if [ ! -d "cnpy" ]; then
+        log "克隆 cnpy 源码..."
+        git clone "${CNPY_GIT_URL}"
     else
-        echo "[cnpy构建器]   未找到任何文件，安装可能失败"
+        log "cnpy 目录已存在，跳过克隆"
     fi
-fi
+}
 
-echo "[cnpy构建器] cnpy构建完成"
+configure_build_install() {
+    local zlib_root="${INSTALL_DIR}/${PLATFORM}/zlib"
+    local build_dir="${PROJECT_ROOT}/tmp/cnpy/build_${PLATFORM}"
+
+    rm -rf "${build_dir}"
+    mkdir -p "${build_dir}"
+    cd "${build_dir}"
+
+    log "配置 CMake..."
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/cnpy" \
+        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DZLIB_ROOT="${zlib_root}" \
+        -DZLIB_LIBRARY="${zlib_root}/lib/libz.a" \
+        -DZLIB_INCLUDE_DIR="${zlib_root}/include"
+
+    log "编译 cnpy (-j${BUILD_JOBS})..."
+    cmake --build . -j"${BUILD_JOBS}"
+
+    log "安装 cnpy..."
+    cmake --install .
+}
+
+verify_installation() {
+    local install_prefix="${INSTALL_DIR}/${PLATFORM}/cnpy"
+    if [ -f "${install_prefix}/lib/libcnpy.a" ] || \
+       [ -f "${install_prefix}/lib64/libcnpy.a" ] || \
+       [ -f "${install_prefix}/include/cnpy.h" ]; then
+        log "✓ cnpy 已安装到 ${install_prefix}"
+        return 0
+    fi
+
+    log "⚠ 未找到 cnpy 安装产物，请检查: ${install_prefix}"
+    return 1
+}
+
+main() {
+    local start_time
+    start_time=$(date +%s)
+
+    parse_args "$@"
+
+    if [ -z "${PLATFORM}" ]; then
+        echo "错误: 必须指定平台 (--platform)"
+        show_help
+        exit 1
+    fi
+
+    configure_platform
+    setup_paths
+    setup_toolchain_env
+
+    log "平台: ${PLATFORM}  线程: ${BUILD_JOBS}"
+    log "安装路径: ${INSTALL_DIR}/${PLATFORM}/cnpy"
+    log "工具链: ${TOOLCHAIN_FILE}"
+
+    log "构建依赖 zlib..."
+    bash "${SCRIPT_DIR}/builder_zlib.sh" \
+        --platform "${PLATFORM}" \
+        --project-root "${PROJECT_ROOT}" \
+        --install-dir "${INSTALL_DIR}" \
+        --toolchain-file "${TOOLCHAIN_FILE}" \
+        --jobs "${BUILD_JOBS}"
+
+    prepare_cnpy_source
+    configure_build_install
+    verify_installation
+
+    local duration=$(( $(date +%s) - start_time ))
+    log "cnpy 构建完成 (耗时 ${duration}s)"
+}
+
+main "$@"

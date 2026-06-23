@@ -55,16 +55,7 @@ while [[ $# -gt 0 ]]; do
             PLATFORM="$2"
             shift 2
             ;;
-        --project-root)
-            PROJECT_ROOT="$2"
-            shift 2
-            ;;
-        --install-dir)
-            INSTALL_DIR="$2"
-            shift 2
-            ;;
-        --toolchain-file)
-            TOOLCHAIN_FILE="$2"
+        --build-mode|--project-root|--install-dir|--toolchain-file|--jobs)
             shift 2
             ;;
         --help)
@@ -86,10 +77,10 @@ if [ -z "$PLATFORM" ]; then
     exit 1
 fi
 
-# 检查平台：x86_64跳过，其他平台正常安装
+# 检查平台：x86_64 跳过（RKNPU 主要用于 ARM 平台）
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RKNPU构建器] 平台为 x86_64，跳过 RKNPU 库的安装（RKNPU 主要用于 ARM 平台）"
-    exit 1
+    exit 0
 fi
 
 echo "[RKNPU构建器] 平台: $PLATFORM"

@@ -6,7 +6,15 @@
 list(INSERT CMAKE_PREFIX_PATH 0 "${THIRD_PARTY_PLATFORM_DIR}/spdlog")
 
 # 使用find_package查找spdlog（Config模式）
-find_package(spdlog REQUIRED)
+if(NOT DEFINED SPDLOG_FIND_REQUIRED)
+    set(SPDLOG_FIND_REQUIRED TRUE)
+endif()
+
+if(SPDLOG_FIND_REQUIRED)
+    find_package(spdlog REQUIRED)
+else()
+    find_package(spdlog QUIET)
+endif()
 
 message(STATUS "==============================================================================")
 if(spdlog_FOUND)
@@ -15,7 +23,9 @@ if(spdlog_FOUND)
     message(STATUS "spdlog include dirs: ${spdlog_INCLUDE_DIRS}")
     message(STATUS "spdlog libraries: ${spdlog_LIBRARIES}")
     message(STATUS "spdlog config file: ${spdlog_CONFIG}")
-else()
+elseif(SPDLOG_FIND_REQUIRED)
     message(FATAL_ERROR "spdlog not found")
+else()
+    message(STATUS "spdlog not found (optional)")
 endif()
 message(STATUS "==============================================================================")

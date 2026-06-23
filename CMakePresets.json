@@ -25,7 +25,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/armv7l-SSC375-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-SSC375",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "ENABLE_TESTS": "OFF"
+        "ENABLE_TESTS": "ON"
       },
       "environment": {
         "PATH": "/opt/toolchains/arm-sigmastar-linux-uclibcgnueabihf-9.1.0/bin:$penv{PATH}"
@@ -41,7 +41,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/aarch64-linux-gnu_orange_pi_4_pro_a733-toolchain.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/aarch64-linux-gnu_orange_pi_4_pro_a733",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "ENABLE_TESTS": "OFF"
+        "ENABLE_TESTS": "ON"
       },
       "environment": {
         "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"

@@ -3,8 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 # 定义项目名称
 project(root_sdk_percept VERSION 0.1.0 LANGUAGES CXX)
 
-option(ENABLE_TESTS "Enable unit tests" ON)
-option(ENABLE_ROOT_SDK "Build root_sdk_percept library and RKNN apps" ON)
+option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -20,28 +19,36 @@ message(STATUS "  CMAKE_CXX_COMPILER_ID      = ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "  CMAKE_CXX_COMPILER_VERSION = ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "==============================================================================")
 
-# 将cmake目录添加到模块查找路径
-list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+# cmake/ 放 FindThirdParty；cmake/modules/ 放各库 Find 模块
+list(INSERT CMAKE_MODULE_PATH 0
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
-if(ENABLE_ROOT_SDK)
 # 包含第三方库查找模块
 include(FindThirdParty)
 
 # 定义源文件列表
 set(SOURCES_FILE
     src/utils/logger_factory.cpp
-    # src/pre_process/image_pre_process.cpp
-    # src/post_process/YoloBasePostProcess.cpp
-    # src/post_process/YoloV8DetectPostProcess.cpp
+    src/utils/npy.cpp
+    src/utils/io.cpp
+    src/pre_process/image_pre_process.cpp
+    src/post_process/YoloBasePostProcess.cpp
+    src/post_process/YoloV5DetectPostProcess.cpp
+    src/post_process/YoloV5SegPostProcess.cpp
+    src/post_process/YoloV8PosePostProcess.cpp
+    src/post_process/YoloV8SegPostProcess.cpp
 )
 
 # 创建库目标
 add_library(root_sdk_percept STATIC ${SOURCES_FILE})
 
 target_link_libraries(root_sdk_percept PUBLIC
-    # ${OpenCV_LIBS}
-    # spdlog::spdlog
-    # yaml-cpp::yaml-cpp
+    ${OpenCV_LIBS}
+    spdlog::spdlog
+    yaml-cpp::yaml-cpp
+    cnpy::cnpy
+    ZLIB::ZLIB
 )
 
 # 设置库的包含目录
@@ -70,29 +77,19 @@ endif()
 # install(DIRECTORY include/
 #     DESTINATION include
 # )
-endif()
 
 # 添加apps目录
 add_subdirectory(apps)
 
-if(ENABLE_ROOT_SDK)
 message(STATUS "==============================================================================")
 message(STATUS "测试配置信息:")
 message(STATUS "  - ENABLE_TESTS: ${ENABLE_TESTS}")
-message(STATUS "  - GTest_FOUND: ${GTest_FOUND}")
 message(STATUS "==============================================================================")
-if(ENABLE_TESTS )
-    if(GTest_FOUND)
-        message(STATUS "测试已被启用，开始编译测试用例")
-        enable_testing()
-        add_subdirectory(tests)
-    else()
-        message(WARNING "测试已被启用，但未找到 Google Test，测试将被跳过")
-    endif()
+if(ENABLE_TESTS)
+    message(STATUS "测试已被启用，开始编译测试用例")
+    enable_testing()
+    add_subdirectory(tests)
 else()
     message(STATUS "测试已被禁用")
 endif()
 message(STATUS "==============================================================================")
-else()
-    message(STATUS "root_sdk_percept 已禁用，仅构建 apps/smoke_test 等轻量目标")
-endif()

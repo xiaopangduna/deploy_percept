@@ -1,46 +1,33 @@
 # FindZlibCustom.cmake
 # 使用 third_party 中的 zlib（静态库）
+#
+# 交叉编译下不用 find_library/find_path，避免 FIND_ROOT_PATH_MODE 导致查找失败
 
-set(ZLIB_ROOT
-    "${THIRD_PARTY_PLATFORM_DIR}/zlib"
-)
+set(ZLIB_ROOT "${THIRD_PARTY_PLATFORM_DIR}/zlib")
+get_filename_component(ZLIB_ROOT "${ZLIB_ROOT}" ABSOLUTE)
+set(ZLIB_INCLUDE_DIR "${ZLIB_ROOT}/include")
+set(ZLIB_LIBRARY "${ZLIB_ROOT}/lib/libz.a")
 
-# 头文件
-find_path(ZLIB_INCLUDE_DIR
-    NAMES zlib.h
-    PATHS
-        ${ZLIB_ROOT}/include
-    NO_DEFAULT_PATH
-)
+if(NOT EXISTS "${ZLIB_LIBRARY}" OR NOT EXISTS "${ZLIB_INCLUDE_DIR}/zlib.h")
+    message(FATAL_ERROR
+        "zlib not found in ${ZLIB_ROOT}\n"
+        "Build with:\n"
+        "  bash scripts/third_party_builder.sh ${THIRD_PARTY_PLATFORM_TAG} --libs cnpy")
+endif()
 
-# 静态库（优先）
-find_library(ZLIB_LIBRARY
-    NAMES z
-    PATHS
-        ${ZLIB_ROOT}/lib
-    NO_DEFAULT_PATH
-)
+set(ZlibCustom_FOUND TRUE)
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(ZlibCustom
-    REQUIRED_VARS
-        ZLIB_LIBRARY
-        ZLIB_INCLUDE_DIR
-)
+message(STATUS "==============================================================================")
+message(STATUS "ZLIB found successfully")
+message(STATUS "  ZLIB root        : ${ZLIB_ROOT}")
+message(STATUS "  ZLIB include dir : ${ZLIB_INCLUDE_DIR}")
+message(STATUS "  ZLIB library     : ${ZLIB_LIBRARY}")
+message(STATUS "==============================================================================")
 
-if(ZlibCustom_FOUND)
-    message(STATUS "==============================================================================")
-    message(STATUS "ZLIB found successfully")
-    message(STATUS "ZLIB include dir : ${ZLIB_INCLUDE_DIR}")
-    message(STATUS "ZLIB library     : ${ZLIB_LIBRARY}")
-    message(STATUS "ZLIB root        : ${ZLIB_ROOT}")
-    message(STATUS "==============================================================================")
-
-    if(NOT TARGET ZLIB::ZLIB)
-        add_library(ZLIB::ZLIB STATIC IMPORTED)
-        set_target_properties(ZLIB::ZLIB PROPERTIES
-            IMPORTED_LOCATION "${ZLIB_LIBRARY}"
-            INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIR}"
-        )
-    endif()
+if(NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB STATIC IMPORTED)
+    set_target_properties(ZLIB::ZLIB PROPERTIES
+        IMPORTED_LOCATION "${ZLIB_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIR}"
+    )
 endif()

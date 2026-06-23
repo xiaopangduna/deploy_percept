@@ -16,17 +16,20 @@ if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
     include(FindSigmastar)
 endif()
 
-# include(FindSpdlogCustom)
-# include(FindYamlCppCustom)
+include(FindSpdlogCustom)
+include(FindYamlCppCustom)
 
-# include(FindOpenCVCustom)
+include(FindOpenCVCustom)
 
 # # 导入自定义的查找模块
-# include(FindCnpyCustom)
 # include(FindZlibCustom)
+include(FindCnpyCustom)
+
 # include(FindRknn)
 # include(FindRgaCustom)
-# include(FindGTestCustom)
+
 # include(FindNlohmannJson)
+
+include(FindGTestCustom)
 
 message(STATUS "已完成第三方库配置")

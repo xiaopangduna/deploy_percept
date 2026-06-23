@@ -1,51 +1,16 @@
-cmake_minimum_required(VERSION 3.10)
+list(APPEND CMAKE_MODULE_PATH
+    "${CMAKE_SOURCE_DIR}/cmake/modules"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# 在测试目录中查找GTest
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/modules")
-
-# 使用自定义的查找宏
 find_package(GTestCustom REQUIRED)
+include(TestHelpers)
 
-# 创建测试辅助库
-add_library(test_utils STATIC
-  test_common/utils.cpp)
-
-# 设置测试辅助库的包含目录
+add_library(test_utils STATIC test_common/utils.cpp)
 target_include_directories(test_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    $<TARGET_PROPERTY:GTest::gtest,INTERFACE_INCLUDE_DIRECTORIES>  # 添加gtest头文件目录
-)
+    ${CMAKE_SOURCE_DIR}/include
+    $<TARGET_PROPERTY:GTest::gtest,INTERFACE_INCLUDE_DIRECTORIES>)
 
-# 定义创建测试的函数
-function(create_test TEST_NAME)
-  # 创建测试可执行文件
-  add_executable(${TEST_NAME} ${ARGN})
-  
-  # 设置包含目录 - 添加项目根目录以便正确找到头文件
-  target_include_directories(${TEST_NAME} PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-  )
-  
-  if(GTest_FOUND)
-      target_link_libraries(${TEST_NAME} PRIVATE
-          deploy_percept
-          test_utils
-          GTest::gtest_main)
-  else()
-    message(FATAL_ERROR "未找到Google Test库，无法编译测试程序")
-  endif()
-  
-  add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-  
-  #  设置测试工作目录
-  set_tests_properties(${TEST_NAME} PROPERTIES 
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
-  )
-endfunction()
-
-# 使用函数创建测试
-enable_testing()
-create_test(test_YoloV5DetectPostProcess post_process/test_YoloV5DetectPostProcess.cpp)
-create_test(test_YoloV5SegPostProcess post_process/test_YoloV5SegPostProcess.cpp)
-create_test(test_YoloV8SegPostProcess post_process/test_YoloV8SegPostProcess.cpp)
+add_subdirectory(smoke)
+add_subdirectory(unit)
+add_subdirectory(integration)

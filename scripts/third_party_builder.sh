@@ -140,6 +140,7 @@ case "${PLATFORM}" in
         TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake
         ;;
     x86_64)
+        TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/toolchains/x86_64-toolchain.cmake
         ;;
     *)
         echo "错误: 不支持的平台 '${PLATFORM}'"
@@ -154,8 +155,8 @@ if [ "$LIBS_TO_BUILD" = "all" ]; then
     echo "检测到 'all' 参数，将构建所有支持的库"
     if [ -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
         # 提取所有builder_*.sh文件的库名
-        ALL_LIBS=$(ls "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null | 
-                   sed 's|.*/builder_||;s|\.sh||' | 
+        ALL_LIBS=$(ls "$THIRD_PARTY_BUILDERS_DIR"/builder_*.sh 2>/dev/null |
+                   sed 's|.*/builder_||;s|\.sh||' |
                    tr '\n' ',' | 
                    sed 's/,$//')
         
@@ -227,7 +228,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     echo "使用构建器: $(basename "$build_script")"
     echo "===================================================================="
     
-    if ! source "$build_script" \
+    if ! bash "$build_script" \
         --build-mode "$BUILD_MODE" \
         --platform "$PLATFORM" \
         --project-root "$PROJECT_ROOT" \

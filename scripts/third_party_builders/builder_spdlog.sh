@@ -48,6 +48,7 @@ EOF
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --build-mode)   shift 2 ;;
             --platform)       PLATFORM="$2"; shift 2 ;;
             --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
             --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
@@ -69,7 +70,7 @@ configure_platform() {
             CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
             ;;
         x86_64)
-            CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
+            USE_TOOLCHAIN_CC=0
             ;;
         armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
             USE_TOOLCHAIN_CC=0

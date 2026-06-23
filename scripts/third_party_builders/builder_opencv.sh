@@ -31,7 +31,7 @@ OpenCV 构建器脚本
   bash $0 [选项]
 
 必需选项:
-  --platform <平台>          目标平台 (aarch64, x86_64, armv7l-SSC375)
+  --platform <平台>          目标平台 (aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375)
 
 可选选项:
   --project-root <路径>      项目根目录 (默认: 当前目录)
@@ -41,11 +41,12 @@ OpenCV 构建器脚本
   --help                     显示此帮助信息
 
 OpenCV 版本:
-  aarch64 / x86_64           4.5.4
-  armv7l-SSC375              4.1.1 (与 SDK 预编译一致)
+  aarch64 / x86_64 / aarch64-linux-gnu_orange_pi_4_pro_a733  4.5.4
+  armv7l-SSC375                                              4.1.1 (与 SDK 预编译一致)
 
 示例:
   bash scripts/third_party_builders/builder_opencv.sh --platform x86_64
+  bash scripts/third_party_builders/builder_opencv.sh --platform aarch64-linux-gnu_orange_pi_4_pro_a733 --jobs 4
   bash scripts/third_party_builders/builder_opencv.sh --platform armv7l-SSC375 --jobs 4
 EOF
 }
@@ -53,6 +54,7 @@ EOF
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --build-mode)   shift 2 ;;
             --platform)       PLATFORM="$2"; shift 2 ;;
             --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
             --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
@@ -74,9 +76,13 @@ configure_platform() {
             CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
             OPENCV_VERSION="4.5.4"
             ;;
-        x86_64)
-            CROSS_COMPILE_PREFIX="x86_64-linux-gnu"
+        aarch64-linux-gnu_orange_pi_4_pro_a733)
             OPENCV_VERSION="4.5.4"
+            USE_TOOLCHAIN_CC=0
+            ;;
+        x86_64)
+            OPENCV_VERSION="4.5.4"
+            USE_TOOLCHAIN_CC=0
             ;;
         armv7l-SSC375)
             OPENCV_VERSION="4.1.1"
@@ -84,7 +90,7 @@ configure_platform() {
             ;;
         *)
             echo "错误: 不支持的平台 '${PLATFORM}'"
-            echo "支持的平台: aarch64, x86_64, armv7l-SSC375"
+            echo "支持的平台: aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375"
             exit 1
             ;;
     esac
@@ -92,8 +98,8 @@ configure_platform() {
     if [ -z "${BUILD_JOBS}" ]; then
         local nproc
         nproc=$(nproc 2>/dev/null || echo 4)
-        if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
-            BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
+        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
+            BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
         else
             BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
         fi
@@ -117,7 +123,7 @@ setup_paths() {
     fi
 }
 
-# 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
+# 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX
 read_toolchain_vars() {
     local key value line
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
@@ -141,7 +147,7 @@ read_toolchain_vars() {
 }
 
 setup_toolchain_env() {
-    if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
+    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
         read_toolchain_vars || exit 1
         CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
         export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
@@ -165,8 +171,8 @@ setup_toolchain_env() {
             aarch64)
                 log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
                 ;;
-            armv7l-SSC375)
-                log "  请挂载 Sigmastar 工具链: ${TOOLCHAIN_ROOT}"
+            armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
+                log "  请挂载工具链: ${TOOLCHAIN_ROOT}"
                 ;;
         esac
     fi
