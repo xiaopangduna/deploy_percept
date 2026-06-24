@@ -4,7 +4,7 @@ project(yolov8_pose_rknn)
 
 add_executable(yolov8_pose_rknn main.cpp)
 
-target_link_libraries(yolov8_pose_rknn PRIVATE root_sdk_percept)
+target_link_libraries(yolov8_pose_rknn PRIVATE deploy_percept)
 
 install(TARGETS yolov8_pose_rknn
     RUNTIME DESTINATION bin

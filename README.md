@@ -164,7 +164,7 @@ bash scripts/test.sh --board orangepi@192.168.0.103:~/deploy_percept
 ```
 install/<platform>/
 ├── bin/                         # 测试可执行文件
-├── lib/libroot_sdk_percept.a    # 静态库
+├── lib/libdeploy_percept.a      # 静态库
 ├── include/deploy_percept/      # 头文件
 ├── share/percept/apps/          # 示例/测试数据（唯一来源：源码 apps/）
 └── var/percept/output/          # 测试输出（运行时自动创建）

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # 定义项目名称
-project(root_sdk_percept VERSION 0.1.0 LANGUAGES CXX)
+project(deploy_percept VERSION 0.1.0 LANGUAGES CXX)
 
 option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 option(BUILD_RKNN_APPS "Build RKNN demo applications (requires RKNN runtime)" OFF)
@@ -42,10 +42,9 @@ set(SOURCES_FILE
 )
 
 # 创建库目标
-add_library(root_sdk_percept STATIC ${SOURCES_FILE})
-add_library(deploy_percept ALIAS root_sdk_percept)
+add_library(deploy_percept STATIC ${SOURCES_FILE})
 
-target_link_libraries(root_sdk_percept PUBLIC
+target_link_libraries(deploy_percept PUBLIC
     ${OpenCV_LIBS}
     spdlog::spdlog
     yaml-cpp::yaml-cpp
@@ -54,18 +53,18 @@ target_link_libraries(root_sdk_percept PUBLIC
 )
 
 # 设置库的包含目录
-target_include_directories(root_sdk_percept PUBLIC
+target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
 # Sigmastar MI SDK（armv7l SSC375 平台后端，条件链接）
 if(SIGMASTAR_FOUND)
-    target_sources(root_sdk_percept PRIVATE
+    target_sources(deploy_percept PRIVATE
         src/engine/SigmastarIpuEngine.cpp
     )
-    target_link_libraries(root_sdk_percept PUBLIC sigmastar::mi)
-    target_compile_definitions(root_sdk_percept PUBLIC SIGMASTAR_FOUND=1)
+    target_link_libraries(deploy_percept PUBLIC sigmastar::mi)
+    target_compile_definitions(deploy_percept PUBLIC SIGMASTAR_FOUND=1)
 endif()
 
 # 添加apps目录

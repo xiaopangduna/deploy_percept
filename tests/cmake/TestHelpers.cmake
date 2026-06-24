@@ -5,7 +5,7 @@
 #       NAME test_foo
 #       TIER unit                    # smoke | unit | integration
 #       SOURCES path/to/test.cpp
-#       LINK_LIBS root_sdk_percept   # 可选
+#       LINK_LIBS deploy_percept     # 可选
 #       USE_CUSTOM_MAIN              # 可选，源文件自带 main 时设置
 #   )
 

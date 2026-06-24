@@ -60,7 +60,7 @@ INSTALL_DIR="$(grep -E '^CMAKE_INSTALL_PREFIX:' "${BUILD_DIR}/CMakeCache.txt" | 
 echo ""
 echo "安装完成: ${INSTALL_DIR}"
 echo "  bin/    可执行文件"
-echo "  lib/    libroot_sdk_percept.a"
+echo "  lib/    libdeploy_percept.a"
 echo "  include/deploy_percept/"
 echo "  share/percept/apps/  示例与测试数据"
 echo ""

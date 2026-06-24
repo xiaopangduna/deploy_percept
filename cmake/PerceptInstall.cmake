@@ -1,6 +1,6 @@
 include(GNUInstallDirs)
 
-install(TARGETS root_sdk_percept
+install(TARGETS deploy_percept
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(DIRECTORY include/deploy_percept
