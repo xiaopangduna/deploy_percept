@@ -5,6 +5,9 @@ list(APPEND CMAKE_MODULE_PATH
 find_package(GTestCustom REQUIRED)
 include(TestHelpers)
 
+add_library(percept_test_paths STATIC test_common/paths.cpp)
+target_include_directories(percept_test_paths PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_library(test_utils STATIC test_common/utils.cpp)
 target_include_directories(test_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

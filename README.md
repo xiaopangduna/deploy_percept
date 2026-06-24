@@ -32,9 +32,10 @@ deploy_percept/
 │       ├── pre_process/           # 预处理算法
 │       ├── utils/                 # 工具函数
 │       └── deploy_percept.hpp     # 主要入口头文件
-├── scripts/                       # 构建脚本
-│   ├── build.sh                   # 构建脚本
-│   ├── test.sh                    # 测试脚本
+├── scripts/                       # 构建与测试脚本
+│   ├── build.sh                   # 编译（cmake configure + build）
+│   ├── install.sh                 # 安装（cmake install → install/<platform>/）
+│   ├── test.sh                    # 测试（ctest / install 包 / 开发板 SSH）
 │   └── third_party_builders/      # 第三方库构建脚本
 ├── src/                           # 源代码
 │   ├── engine/                    # 推理引擎实现
@@ -57,47 +58,116 @@ deploy_percept/
 - **yaml-cpp**：YAML解析库
 - **cnpy**：NumPy数组读写库
 
-## 编译步骤
+## 编译与测试
+
+### 脚本职责
+
+| 脚本 | 作用 |
+|------|------|
+| `scripts/build.sh` | 仅编译，产物在 `build/<preset>/` |
+| `scripts/install.sh` | 仅安装，打包到 `install/<platform>/`（需先 build） |
+| `scripts/test.sh` | 仅测试：build tree `ctest`、本地 install 包、开发板 SSH |
 
 ### 环境准备
 
-### Vscode
-在容器中打开
-容器
+在 devcontainer 中打开项目。Orange Pi 4 Pro (A733) 交叉工具链：
+
+```bash
+# 工具链: gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu
+# 挂载至容器 /opt/toolchains
+# 参考: https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
+```
 
 安装第三方库：
 
 ```bash
-# aarch64
-bash scripts/third_party_builder.sh aarch64 --libs all
-# x86_64
+# 宿主机 x86_64
 bash scripts/third_party_builder.sh x86_64 --libs all
 
-bash scripts/third_party_builder.sh aarch64 --libs cnpy,gtest,opencv,rga,rknpu,spdlog,yaml-cpp
+# Orange Pi A733 交叉编译
+bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,gtest,opencv,spdlog,yaml-cpp
 ```
 
-### 标准构建
+### 宿主机开发（x86_64）
 
 ```bash
-# 配置
-cmake --preset=x86_64-debug-host
-# 构建
-cmake --build --preset=x86_64-debug-host
-# 安装
-cmake --install build/x86_64-debug-host
---preset=x86_64-debug-host/aarch64-release-cross/aarch64-debug-host
+bash scripts/build.sh --preset x86_64-debug
+bash scripts/test.sh --preset x86_64-debug
 ```
 
-### 交叉编译（针对ARM平台）
+### 交叉编译（Orange Pi 4 Pro A733）
 
 ```bash
-cmake --preset=aarch64-release-cross
-cmake --build --preset=aarch64-release-cross
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+```
+
+也可直接使用 CMake preset：
+
+```bash
+cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
+cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
+cmake --install build/aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
 ### 测试
+
+#### 1. build tree（宿主机日常开发）
+
 ```bash
-cd build/x86_64-debug-host && ctest
+bash scripts/build.sh --preset x86_64-debug
+bash scripts/test.sh --preset x86_64-debug
+```
+
+等价于在 `build/x86_64-debug/` 下执行 `ctest --output-on-failure`。
+
+#### 2. install tree（验证安装包）
+
+```bash
+bash scripts/build.sh --preset x86_64-debug
+bash scripts/install.sh --preset x86_64-debug
+bash scripts/test.sh --install-dir install/x86_64
+```
+
+#### 3. 开发板（交叉编译产物上板验证）
+
+将 install 包同步到板子，在 PC 上通过 SSH 远程触发测试（板子无需 cmake/ctest/源码）：
+
+```bash
+# 1. 交叉编译 + 打 install 包
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+
+# 2. 拷贝 install 目录到开发板
+rsync -avz install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
+  orangepi@192.168.0.103:~/deploy_percept/
+
+# 3. PC 上远程跑测（输出回显到 PC 终端）
+bash scripts/test.sh --board orangepi@192.168.0.103:~/deploy_percept
+```
+
+**PC 依赖**：`ssh` 客户端，能登录板子（密码或 SSH 密钥）。
+
+**板子依赖**：完整 install 目录（`bin/`、`share/percept/apps/`），以及系统基础库（`libc`、`libstdc++`）。无需安装 CMake 或拷贝源码树。
+
+路径可使用 `~/deploy_percept` 或绝对路径 `/home/orangepi/deploy_percept`。
+
+**预期结果**（4 项测试均 `[  PASSED  ]`）：
+
+- `smoke_tests`
+- `test_YoloV5DetectPostProcess`
+- `test_YoloV5SegPostProcess`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
+- `test_YoloV8SegPostProcess`
+
+### install 目录结构
+
+```
+install/<platform>/
+├── bin/                         # 测试可执行文件
+├── lib/libroot_sdk_percept.a    # 静态库
+├── include/deploy_percept/      # 头文件
+├── share/percept/apps/          # 示例/测试数据（唯一来源：源码 apps/）
+└── var/percept/output/          # 测试输出（运行时自动创建）
 ```
 
 
@@ -118,9 +188,3 @@ cd build/x86_64-debug-host && ctest
 ## 许可证
 
 本项目采用 MIT 许可证，请参阅 LICENSE 文件获取更多信息。
-
-全志不支持使用docker或者wsl编译OrangePi build
-https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
-拷贝gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu至/opt/toochains
-
-aarch64-linux-gnu_orange_pi_4_pro_a733-release

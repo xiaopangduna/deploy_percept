@@ -7,6 +7,8 @@ set -e
 readonly CNPY_GIT_URL="https://github.com/rogersce/cnpy.git"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 PLATFORM=""
 PROJECT_ROOT=""
@@ -105,6 +107,8 @@ setup_paths() {
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
         log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
+
+    init_modules_tmp
 }
 
 read_toolchain_vars() {
@@ -158,22 +162,10 @@ setup_toolchain_env() {
     fi
 }
 
-setup_git_safe_directories() {
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/cnpy" 2>/dev/null || true
-    local git_dir
-    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
-        if [ -d "${git_dir}.git" ]; then
-            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
-        fi
-    done
-}
-
 prepare_cnpy_source() {
-    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
     setup_git_safe_directories
 
-    cd "${PROJECT_ROOT}/tmp"
+    cd "${TMP_MODULES_DIR}"
     if [ ! -d "cnpy" ]; then
         log "克隆 cnpy 源码..."
         git clone "${CNPY_GIT_URL}"
@@ -184,7 +176,7 @@ prepare_cnpy_source() {
 
 configure_build_install() {
     local zlib_root="${INSTALL_DIR}/${PLATFORM}/zlib"
-    local build_dir="${PROJECT_ROOT}/tmp/cnpy/build_${PLATFORM}"
+    local build_dir="${TMP_MODULES_DIR}/cnpy/build_${PLATFORM}"
 
     rm -rf "${build_dir}"
     mkdir -p "${build_dir}"

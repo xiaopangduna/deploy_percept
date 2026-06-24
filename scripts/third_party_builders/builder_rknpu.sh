@@ -4,6 +4,10 @@
 
 set -e
 
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 # 显示帮助信息
 show_help() {
     echo "RKNPU 构建器脚本"
@@ -110,10 +114,10 @@ echo "  平台: $PLATFORM"
 echo "  安装路径: $INSTALL_DIR"
 
 # 创建临时目录和安装目录
-mkdir -p ${PROJECT_ROOT}/tmp
+init_modules_tmp
 mkdir -p ${INSTALL_DIR}
 
-cd ${PROJECT_ROOT}/tmp
+cd ${TMP_MODULES_DIR}
 
 # 克隆或更新rknn_model_zoo仓库（使用sparse-checkout只获取需要的目录）
 if [ ! -d "rknn_model_zoo" ]; then
@@ -161,7 +165,7 @@ else
     echo "[RGA构建器] librga目录已存在，跳过克隆"
 fi
 
-cd ${PROJECT_ROOT}/tmp/rknn_model_zoo
+cd ${TMP_MODULES_DIR}/rknn_model_zoo
 echo "[RKNPU构建器] 开始拷贝RKNPU库文件到third_party目录..."
 mkdir -p ${INSTALL_DIR}/${PLATFORM}
 

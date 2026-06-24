@@ -4,6 +4,10 @@
 
 set -e
 
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 # 显示帮助信息
 show_help() {
     echo "RGA 构建器脚本"
@@ -106,10 +110,10 @@ echo "  平台: $PLATFORM"
 echo "  安装路径: $INSTALL_DIR/$PLATFORM/rga"
 
 # 创建临时目录和安装目录
-mkdir -p ${PROJECT_ROOT}/tmp
+init_modules_tmp
 mkdir -p ${INSTALL_DIR}
 
-cd ${PROJECT_ROOT}/tmp
+cd ${TMP_MODULES_DIR}
 
 # 克隆或更新librga仓库
 if [ ! -d "librga" ]; then
@@ -125,7 +129,7 @@ else
 
 fi
 
-cd ${PROJECT_ROOT}/tmp/librga
+cd ${TMP_MODULES_DIR}/librga
 echo "[RGA构建器] 开始拷贝librga库文件到third_party目录..."
 
 mkdir -p ${INSTALL_DIR}/${PLATFORM}

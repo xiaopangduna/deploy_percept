@@ -36,7 +36,7 @@ show_help() {
     echo ""
     echo "注意:"
     echo "  1. 必须在项目根目录下运行，或者通过--project-root指定项目根目录"
-    echo "  2. 构建过程中会下载源代码到tmp目录，请确保有足够的磁盘空间"
+    echo "  2. 构建过程中会下载源代码到 tmp/modules 目录，请确保有足够的磁盘空间"
     echo "  3. 构建的库将安装到third_party/<库名>/<平台>/目录"
     echo "  4. 具体每个库的平台支持由各个库的构建器脚本决定"
     echo ""
@@ -177,7 +177,7 @@ fi
 IFS=',' read -ra LIBS_ARRAY <<< "$LIBS_TO_BUILD"
 
 # 创建平台对应的第三方库目录
-mkdir -p ${PROJECT_ROOT}/tmp
+mkdir -p ${PROJECT_ROOT}/tmp/modules
 mkdir -p ${PROJECT_ROOT}/third_party
 INSTALL_DIR=${PROJECT_ROOT}/third_party/
 

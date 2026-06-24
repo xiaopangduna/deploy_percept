@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 project(root_sdk_percept VERSION 0.1.0 LANGUAGES CXX)
 
 option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
+option(BUILD_RKNN_APPS "Build RKNN demo applications (requires RKNN runtime)" OFF)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -42,6 +43,7 @@ set(SOURCES_FILE
 
 # 创建库目标
 add_library(root_sdk_percept STATIC ${SOURCES_FILE})
+add_library(deploy_percept ALIAS root_sdk_percept)
 
 target_link_libraries(root_sdk_percept PUBLIC
     ${OpenCV_LIBS}
@@ -66,18 +68,6 @@ if(SIGMASTAR_FOUND)
     target_compile_definitions(root_sdk_percept PUBLIC SIGMASTAR_FOUND=1)
 endif()
 
-# # 安装规则（armv7l：不 EXPORT，MI SDK 为 INTERFACE 依赖）
-# install(TARGETS root_sdk_percept
-#     LIBRARY DESTINATION lib
-#     ARCHIVE DESTINATION lib
-#     RUNTIME DESTINATION bin
-#     INCLUDES DESTINATION include
-# )
-
-# install(DIRECTORY include/
-#     DESTINATION include
-# )
-
 # 添加apps目录
 add_subdirectory(apps)
 
@@ -92,4 +82,6 @@ if(ENABLE_TESTS)
 else()
     message(STATUS "测试已被禁用")
 endif()
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PerceptInstall.cmake)
 message(STATUS "==============================================================================")

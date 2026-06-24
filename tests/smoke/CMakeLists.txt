@@ -23,5 +23,4 @@ install(TARGETS smoke_tests RUNTIME DESTINATION bin)
 
 add_test(NAME smoke_tests COMMAND smoke_tests)
 set_tests_properties(smoke_tests PROPERTIES
-    LABELS "smoke"
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    LABELS "smoke")

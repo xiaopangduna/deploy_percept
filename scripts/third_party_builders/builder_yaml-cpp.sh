@@ -4,6 +4,10 @@
 
 set -e
 
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 readonly YAML_CPP_GIT_URL="https://github.com/jbeder/yaml-cpp.git"
 readonly YAML_CPP_VERSION="0.8.0"
 
@@ -108,6 +112,8 @@ setup_paths() {
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
         log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
+
+    init_modules_tmp
 }
 
 # 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX
@@ -162,22 +168,10 @@ setup_toolchain_env() {
     fi
 }
 
-setup_git_safe_directories() {
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/yaml-cpp" 2>/dev/null || true
-    local git_dir
-    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
-        if [ -d "${git_dir}.git" ]; then
-            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
-        fi
-    done
-}
-
 prepare_yaml_cpp_source() {
-    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
     setup_git_safe_directories
 
-    cd "${PROJECT_ROOT}/tmp"
+    cd "${TMP_MODULES_DIR}"
     if [ ! -d "yaml-cpp" ]; then
         log "克隆 yaml-cpp 源码..."
         git clone "${YAML_CPP_GIT_URL}"

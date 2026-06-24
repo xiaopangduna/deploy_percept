@@ -29,10 +29,15 @@ function(add_percept_test)
         ${CMAKE_SOURCE_DIR}
     )
 
+    target_compile_definitions(${PARSED_NAME} PRIVATE
+        "PERCEPT_ROOT=\"${CMAKE_SOURCE_DIR}\"")
+
     if(PARSED_USE_CUSTOM_MAIN)
-        target_link_libraries(${PARSED_NAME} PRIVATE GTest::gtest ${PARSED_LINK_LIBS})
+        target_link_libraries(${PARSED_NAME} PRIVATE
+            GTest::gtest percept_test_paths ${PARSED_LINK_LIBS})
     else()
-        target_link_libraries(${PARSED_NAME} PRIVATE GTest::gtest_main ${PARSED_LINK_LIBS})
+        target_link_libraries(${PARSED_NAME} PRIVATE
+            GTest::gtest_main percept_test_paths ${PARSED_LINK_LIBS})
     endif()
 
     install(TARGETS ${PARSED_NAME} RUNTIME DESTINATION bin)
@@ -40,5 +45,6 @@ function(add_percept_test)
     add_test(NAME ${PARSED_NAME} COMMAND ${PARSED_NAME})
     set_tests_properties(${PARSED_NAME} PROPERTIES
         LABELS "${PARSED_TIER}"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        ENVIRONMENT
+            "PERCEPT_ROOT=${CMAKE_SOURCE_DIR};PERCEPT_OUTPUT_DIR=${CMAKE_SOURCE_DIR}/tmp")
 endfunction()

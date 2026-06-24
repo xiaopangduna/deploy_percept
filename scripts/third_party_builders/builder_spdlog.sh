@@ -4,7 +4,12 @@
 
 set -e
 
-readonly SPDLOG_GIT_URL="https://gitee.com/mirror-luyi/spdlog.git"
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+# readonly SPDLOG_GIT_URL="https://gitee.com/mirror-luyi/spdlog.git"
+readonly SPDLOG_GIT_URL="https://github.com/gabime/spdlog.git"
 readonly SPDLOG_VERSION="v1.14.1"
 
 PLATFORM=""
@@ -108,6 +113,8 @@ setup_paths() {
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
         log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
+
+    init_modules_tmp
 }
 
 # 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX（SSC375 唯一来源）
@@ -165,22 +172,10 @@ setup_toolchain_env() {
     fi
 }
 
-setup_git_safe_directories() {
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/spdlog" 2>/dev/null || true
-    local git_dir
-    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
-        if [ -d "${git_dir}.git" ]; then
-            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
-        fi
-    done
-}
-
 prepare_spdlog_source() {
-    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
     setup_git_safe_directories
 
-    cd "${PROJECT_ROOT}/tmp"
+    cd "${TMP_MODULES_DIR}"
     if [ ! -d "spdlog" ]; then
         log "克隆 spdlog 源码..."
         git clone "${SPDLOG_GIT_URL}"

@@ -1,5 +1,8 @@
-
-# add_subdirectory(yolov5_detect_rknn)
-# add_subdirectory(yolov5_seg_rknn)
-# add_subdirectory(yolov8_seg_rknn)
-# add_subdirectory(yolov8_pose_rknn)
+if(BUILD_RKNN_APPS)
+    add_subdirectory(yolov5_detect_rknn)
+    add_subdirectory(yolov5_seg_rknn)
+    add_subdirectory(yolov8_seg_rknn)
+    add_subdirectory(yolov8_pose_rknn)
+else()
+    message(STATUS "apps: BUILD_RKNN_APPS=OFF，跳过 RKNN 示例编译")
+endif()

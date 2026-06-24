@@ -4,7 +4,12 @@
 
 set -e
 
-readonly GTEST_GIT_URL="https://gitee.com/mirrors/googletest.git"
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+# readonly GTEST_GIT_URL="https://gitee.com/mirrors/googletest.git"
+readonly GTEST_GIT_URL="https://github.com/google/googletest.git"
 readonly GTEST_VERSION="v1.14.0"
 
 PLATFORM=""
@@ -105,6 +110,8 @@ setup_paths() {
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
         log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
+
+    init_modules_tmp
 }
 
 read_toolchain_vars() {
@@ -158,22 +165,10 @@ setup_toolchain_env() {
     fi
 }
 
-setup_git_safe_directories() {
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/googletest" 2>/dev/null || true
-    local git_dir
-    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
-        if [ -d "${git_dir}.git" ]; then
-            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
-        fi
-    done
-}
-
 prepare_gtest_source() {
-    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
     setup_git_safe_directories
 
-    cd "${PROJECT_ROOT}/tmp"
+    cd "${TMP_MODULES_DIR}"
     if [ ! -d "googletest" ]; then
         log "克隆 GTest 源码..."
         git clone "${GTEST_GIT_URL}" -b "${GTEST_VERSION}"
@@ -183,7 +178,7 @@ prepare_gtest_source() {
 }
 
 configure_build_install() {
-    local build_dir="${PROJECT_ROOT}/tmp/googletest/build_${PLATFORM}"
+    local build_dir="${TMP_MODULES_DIR}/googletest/build_${PLATFORM}"
     rm -rf "${build_dir}"
     mkdir -p "${build_dir}"
     cd "${build_dir}"

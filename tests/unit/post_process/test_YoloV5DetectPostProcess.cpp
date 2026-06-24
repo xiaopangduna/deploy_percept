@@ -9,26 +9,30 @@
 #include "deploy_percept/utils/npy.hpp"
 #include "utils/environment.hpp"
 #include "tests/test_common/utils.hpp"
+#include "tests/test_common/paths.hpp"
 
 namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
+using percept::test::app_data;
+using percept::test::output_dir;
 
 class YoloV5DetectPostProcessTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
+        fs::create_directories(output_dir());
+
         YoloV5DetectPostProcess::Params params;
         processor = std::make_unique<YoloV5DetectPostProcess>(params);
 
-        fs::path path_model_output_npz = "apps/yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz";
-        model_outputs_npz = cnpy::npz_load(path_model_output_npz);
+        model_outputs_npz = cnpy::npz_load(
+            app_data("yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz"));
 
-        fs::path path_img = "apps/yolov5_detect_rknn/bus.jpg";
-        img = cv::imread(path_img);
-        
-        path_save_img_with_detect_result = "tmp/yolov5_detect_result.jpg";
+        img = cv::imread(app_data("yolov5_detect_rknn/bus.jpg"));
+
+        path_save_img_with_detect_result = (output_dir() / "yolov5_detect_result.jpg").string();
     }
 
     void TearDown() override
@@ -39,7 +43,7 @@ protected:
     cnpy::npz_t model_outputs_npz;
 
     cv::Mat img;
-    fs::path path_save_img_with_detect_result;
+    std::string path_save_img_with_detect_result;
 };
 TEST_F(YoloV5DetectPostProcessTest, run)
 {

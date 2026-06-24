@@ -10,29 +10,33 @@
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
 #include "tests/test_common/utils.hpp"
+#include "tests/test_common/paths.hpp"
 
 namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
 using namespace deploy_percept::utils;
+using percept::test::app_data;
+using percept::test::output_dir;
 
 class YoloV8SegPostProcessTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
+        fs::create_directories(output_dir());
+
         YoloV8SegPostProcess::Params params;
         processor = std::make_unique<YoloV8SegPostProcess>(params);
 
-        fs::path path_model_outputs_npz = "apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz";
-        model_outputs_npz = cnpy::npz_load(path_model_outputs_npz);
+        model_outputs_npz = cnpy::npz_load(
+            app_data("yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz"));
 
-        path_seg_result = "apps/yolov8_seg_rknn/yolov8_seg_result_mask.bin";
+        path_seg_result = app_data("yolov8_seg_rknn/yolov8_seg_result_mask.bin");
 
-        fs::path path_img = "apps/yolov8_seg_rknn/bus.jpg";
-        img = cv::imread(path_img);
+        img = cv::imread(app_data("yolov8_seg_rknn/bus.jpg"));
 
-        path_save_img_with_detect_result = "tmp/yolov8_seg_result.jpg";
+        path_save_img_with_detect_result = output_dir() / "yolov8_seg_result.jpg";
     }
 
     void TearDown() override

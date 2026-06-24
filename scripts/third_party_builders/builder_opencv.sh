@@ -2,11 +2,16 @@
 # 第三方库构建器：OpenCV
 # 可以单独运行，也可以由 third_party_builder.sh 调用
 #
-# 下载失败时查看: tmp/opencv/build_<platform>/CMakeDownloadLog.txt
+# 下载失败时查看: tmp/modules/opencv/build_<platform>/CMakeDownloadLog.txt
 
 set -e
 
-readonly OPENCV_GIT_URL="https://gitee.com/opencv/opencv.git"
+SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+# readonly OPENCV_GIT_URL="https://gitee.com/opencv/opencv.git"
+readonly OPENCV_GIT_URL="https://github.com/opencv/opencv.git"
 # 与 third_party/armv7l-SSC375/prebuild_libs/opencv 中 libopencv_*.a 对齐
 readonly SSC375_OPENCV_MODULES="core,flann,imgproc,ml,photo,dnn,features2d,imgcodecs,videoio,calib3d,highgui,objdetect,stitching,video"
 
@@ -121,6 +126,8 @@ setup_paths() {
     if [ ! -f "${TOOLCHAIN_FILE}" ]; then
         log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
     fi
+
+    init_modules_tmp
 }
 
 # 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX
@@ -178,22 +185,10 @@ setup_toolchain_env() {
     fi
 }
 
-setup_git_safe_directories() {
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp" 2>/dev/null || true
-    git config --global --add safe.directory "${PROJECT_ROOT}/tmp/opencv" 2>/dev/null || true
-    local git_dir
-    for git_dir in "${PROJECT_ROOT}/tmp/"*/; do
-        if [ -d "${git_dir}.git" ]; then
-            git config --global --add safe.directory "${git_dir}" 2>/dev/null || true
-        fi
-    done
-}
-
 prepare_opencv_source() {
-    mkdir -p "${PROJECT_ROOT}/tmp" "${PROJECT_ROOT}/third_party"
     setup_git_safe_directories
 
-    cd "${PROJECT_ROOT}/tmp"
+    cd "${TMP_MODULES_DIR}"
     if [ ! -d "opencv" ]; then
         log "克隆 OpenCV 源码..."
         git clone "${OPENCV_GIT_URL}"

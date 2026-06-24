@@ -1,5 +1,9 @@
 {
   "cmake.debugConfig": {
     "cwd": "${workspaceFolder}"
-  }
+  },
+  "cmake.ctestArgs": [
+    "--output-on-failure",
+    "-V"
+  ]
 }
