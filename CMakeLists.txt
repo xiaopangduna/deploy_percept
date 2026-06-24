@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 
 # 定义项目名称
-project(deploy_percept VERSION 0.1.0 LANGUAGES CXX)
+project(deploy_percept VERSION 0.1.0 LANGUAGES CXX C)
 
 option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 option(BUILD_RKNN_APPS "Build RKNN demo applications (requires RKNN runtime)" OFF)
+option(BUILD_AWNN_APPS "Build Allwinner AWNN demo applications (requires ai-sdk VIPLite)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)

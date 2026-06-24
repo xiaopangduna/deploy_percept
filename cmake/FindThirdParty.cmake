@@ -16,6 +16,10 @@ if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
     include(FindSigmastar)
 endif()
 
+if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_orange_pi_4_pro_a733")
+    include(FindAwnn)
+endif()
+
 include(FindSpdlogCustom)
 include(FindYamlCppCustom)
 
