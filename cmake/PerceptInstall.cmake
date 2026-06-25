@@ -30,3 +30,8 @@ install(FILES
 install(FILES
     apps/yolov8_pose_rknn/bus.jpg
     DESTINATION share/percept/apps/yolov8_pose_rknn)
+
+install(FILES
+    apps/yolov5_detect_awnn/dog.jpg
+    apps/yolov5_detect_awnn/yolov5.nb
+    DESTINATION share/percept/apps/yolov5_detect_awnn)

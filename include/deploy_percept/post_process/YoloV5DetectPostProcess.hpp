@@ -49,9 +49,21 @@ namespace deploy_percept
                 std::vector<int32_t> &qnt_zps,
                 std::vector<float> &qnt_scales);
 
-        private:
+        protected:
             Params params_;
             Result result_{};
+
+            void resetResult();
+
+            bool finalizeDetections(
+                std::vector<float> &filterBoxes,
+                std::vector<float> &objProbs,
+                std::vector<int> &classId,
+                int validCount,
+                int model_in_h,
+                int model_in_w);
+
+        private:
             int decodeDetectionHead(int8_t *input, int *anchor, int grid_h, int grid_w,
                                   int height, int width, int stride,
                                   std::vector<float> &boxes, std::vector<float> &objProbs,

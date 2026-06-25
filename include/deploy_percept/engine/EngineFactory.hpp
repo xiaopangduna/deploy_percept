@@ -10,7 +10,9 @@ class EngineFactory {
 public:
     enum class EngineType {
         RKNN,
-        // 其他类型可以在这里添加
+#ifdef AWNN_FOUND
+        AWNN,
+#endif
     };
     
     static std::unique_ptr<BaseEngine> create(EngineType type);

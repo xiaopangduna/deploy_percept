@@ -15,6 +15,82 @@ namespace deploy_percept
         {
         }
 
+        void YoloV5DetectPostProcess::resetResult()
+        {
+            result_.group = ResultGroup{};
+            result_.success = false;
+            result_.message = "";
+        }
+
+        bool YoloV5DetectPostProcess::finalizeDetections(
+            std::vector<float> &filterBoxes,
+            std::vector<float> &objProbs,
+            std::vector<int> &classId,
+            int validCount,
+            int model_in_h,
+            int model_in_w)
+        {
+            if (validCount <= 0)
+            {
+                result_.message = "No objects detected";
+                return false;
+            }
+
+            std::vector<int> indexArray;
+            indexArray.reserve(validCount);
+            for (int i = 0; i < validCount; ++i)
+            {
+                indexArray.push_back(i);
+            }
+
+            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
+
+            std::set<int> class_set(classId.begin(), classId.end());
+
+            for (auto c : class_set)
+            {
+                retainHighestScoringBoxesByNMS(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
+            }
+
+            int last_count = 0;
+            result_.group.count = 0;
+            result_.group.detection_objects.clear();
+            for (int i = 0; i < validCount; ++i)
+            {
+                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
+                {
+                    continue;
+                }
+                const int n = indexArray[i];
+
+                const float x1 = filterBoxes[n * 4 + 0];
+                const float y1 = filterBoxes[n * 4 + 1];
+                const float x2 = x1 + filterBoxes[n * 4 + 2];
+                const float y2 = y1 + filterBoxes[n * 4 + 3];
+
+                const int id = classId[n];
+                const float obj_conf = objProbs[n];
+
+                DetectionObject det_obj{};
+                det_obj.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
+                det_obj.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
+                det_obj.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
+                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
+                det_obj.prop = obj_conf;
+                det_obj.cls_id = id;
+
+                snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
+
+                result_.group.detection_objects.push_back(det_obj);
+                last_count++;
+            }
+            result_.group.count = last_count;
+
+            result_.success = (last_count > 0);
+            result_.message = "Processing completed successfully";
+            return true;
+        }
+
         bool YoloV5DetectPostProcess::run(
             const std::vector<int8_t*>& inputs,
             int model_in_h,
@@ -29,10 +105,7 @@ namespace deploy_percept
                 return false;
             }
 
-            // 重置结果
-            result_.group = ResultGroup{};  // 使用默认构造函数重置，而不是memset
-            result_.success = false;
-            result_.message = "";
+            resetResult();
 
             std::vector<float> filterBoxes;
             std::vector<float> objProbs;
@@ -65,69 +138,8 @@ namespace deploy_percept
                                             model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                                             classId, params_.conf_threshold, qnt_zps[2], qnt_scales[2]);
 
-            int validCount = validCount0 + validCount1 + validCount2;
-            // no object detect
-            if (validCount <= 0)
-            {
-                result_.message = "No objects detected";
-                return false;
-            }
-
-            std::vector<int> indexArray;
-            for (int i = 0; i < validCount; ++i)
-            {
-                indexArray.push_back(i);
-            }
-
-            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
-
-            std::set<int> class_set(classId.begin(), classId.end());
-
-            for (auto c : class_set)
-            {
-                retainHighestScoringBoxesByNMS(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
-            }
-
-            int last_count = 0;
-            result_.group.count = 0;
-            result_.group.detection_objects.clear(); // 清空之前的结果
-            /* box valid detect target */
-            for (int i = 0; i < validCount; ++i)
-            {
-                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
-                {
-                    continue;
-                }
-                int n = indexArray[i];
-
-                float x1 = filterBoxes[n * 4 + 0];
-                float y1 = filterBoxes[n * 4 + 1];
-                float x2 = x1 + filterBoxes[n * 4 + 2];
-                float y2 = y1 + filterBoxes[n * 4 + 3];
-
-                int id = classId[n];
-                float obj_conf = objProbs[i]; 
-
-                // 创建新的检测对象并添加到results中
-                DetectionObject det_obj{};
-                det_obj.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
-                det_obj.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
-                det_obj.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
-                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
-                det_obj.prop = obj_conf;
-                det_obj.cls_id = id;
-
-                // 设置标签名称，这里只是框架，实际需要从外部加载标签
-                snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
-
-                result_.group.detection_objects.push_back(det_obj);
-                last_count++;
-            }
-            result_.group.count = last_count;
-
-            result_.success = (last_count > 0);
-            result_.message = "Processing completed successfully";
-            return true;
+            const int validCount = validCount0 + validCount1 + validCount2;
+            return finalizeDetections(filterBoxes, objProbs, classId, validCount, model_in_h, model_in_w);
         }
 
         int YoloV5DetectPostProcess::decodeDetectionHead(int8_t *input, int *anchor, int grid_h, int grid_w,

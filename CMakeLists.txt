@@ -5,7 +5,7 @@ project(deploy_percept VERSION 0.1.0 LANGUAGES CXX C)
 
 option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 option(BUILD_RKNN_APPS "Build RKNN demo applications (requires RKNN runtime)" OFF)
-option(BUILD_AWNN_APPS "Build Allwinner AWNN demo applications (requires ai-sdk VIPLite)" ON)
+option(BUILD_AWNN_APPS "Build Allwinner AWNN demo applications (requires VIPLite runtime)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -37,6 +37,7 @@ set(SOURCES_FILE
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
+    src/post_process/YoloV5DetectPostProcessAwnn.cpp
     src/post_process/YoloV5SegPostProcess.cpp
     src/post_process/YoloV8PosePostProcess.cpp
     src/post_process/YoloV8SegPostProcess.cpp
@@ -66,6 +67,15 @@ if(SIGMASTAR_FOUND)
     )
     target_link_libraries(deploy_percept PUBLIC sigmastar::mi)
     target_compile_definitions(deploy_percept PUBLIC SIGMASTAR_FOUND=1)
+endif()
+
+if(AWNN_FOUND)
+    target_sources(deploy_percept PRIVATE
+        src/engine/AwnnEngine.cpp
+        src/engine/AwnnTensorDequant.cpp
+    )
+    target_link_libraries(deploy_percept PUBLIC AWNN::VIPLite pthread)
+    target_compile_definitions(deploy_percept PUBLIC AWNN_FOUND=1)
 endif()
 
 # 添加apps目录

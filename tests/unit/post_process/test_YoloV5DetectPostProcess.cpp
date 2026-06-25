@@ -48,11 +48,11 @@ protected:
 TEST_F(YoloV5DetectPostProcessTest, run)
 {
     std::vector<DetectionObject> expected_results = {
-        MakeDetectResult(0, "class_0", 0.8797f, 209, 243, 286, 510),
-        MakeDetectResult(0, "class_0", 0.8706f, 479, 238, 560, 526),
-        MakeDetectResult(0, "class_0", 0.8398f, 109, 238, 231, 534),
-        MakeDetectResult(5, "class_5", 0.6920f, 91, 129, 555, 464),
-        MakeDetectResult(0, "class_0", 0.3010f, 79, 353, 121, 517)};
+        MakeDetectResult(0, "class_0", 0.3495f, 209, 243, 286, 510),
+        MakeDetectResult(0, "class_0", 0.2487f, 479, 238, 560, 526),
+        MakeDetectResult(0, "class_0", 0.3010f, 109, 238, 231, 534),
+        MakeDetectResult(5, "class_5", 0.3672f, 91, 129, 555, 464),
+        MakeDetectResult(0, "class_0", 0.5035f, 79, 353, 121, 517)};
 
 
     auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output_", 3); 

@@ -1,10 +1,9 @@
 # FindAwnn.cmake - Allwinner VIPLite（NPU 运行时）
 #
-# 准备：从官方获取 ai-sdk，拷贝 viplite-tina 至
+# 准备：将 viplite-tina 拷贝至
 #   third_party/<platform>/awnn/viplite-tina
-# 版本：对照 tmp/ai-sdk/machinfo/<chip>/config.mk，在下方硬编码 lib 路径。
 #
-# 提供：AWNN_FOUND、AWNN::VIPLite（含头文件 + libNBGlinker.so + libVIPhal.so）
+# 提供：AWNN_FOUND、AWNN::VIPLite（头文件 + libNBGlinker.so + libVIPhal.so）
 # install 打包上述 .so 至 ${CMAKE_INSTALL_LIBDIR}
 
 include(GNUInstallDirs)
@@ -30,8 +29,7 @@ if(NOT EXISTS "${AWNN_VIPLITE_INCLUDE_DIR}/vip_lite.h"
     message(STATUS "==============================================================================")
     message(STATUS "AWNN VIPLite not found: ${AWNN_VIPLITE_LIB_DIR}")
     message(STATUS "  platform: ${AWNN_PLATFORM}")
-    message(STATUS "  Prepare (see cmake/modules/FindAwnn.cmake header):")
-    message(STATUS "    cp -a tmp/ai-sdk/viplite-tina third_party/<platform>/awnn/")
+    message(STATUS "  Prepare viplite-tina under third_party/<platform>/awnn/")
     message(STATUS "==============================================================================")
     return()
 endif()

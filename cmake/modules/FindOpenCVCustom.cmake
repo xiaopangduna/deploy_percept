@@ -8,18 +8,6 @@
 list(INSERT CMAKE_PREFIX_PATH 0 "${THIRD_PARTY_PLATFORM_DIR}/opencv")
 
 find_package(OpenCV QUIET)
-# if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
-#     find_package(OpenCV QUIET COMPONENTS
-#         core flann imgproc ml photo dnn features2d imgcodecs
-#         videoio calib3d highgui objdetect stitching video)
-# else()
-#     find_package(OpenCV QUIET)
-# endif()
-
-if(NOT OpenCV_FOUND AND THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
-    message(STATUS "OpenCV: fallback to SDK prebuild")
-    include("${CMAKE_CURRENT_LIST_DIR}/opencv/OpenCVSigmastar.cmake")
-endif()
 
 if(NOT OpenCV_FOUND)
     message(FATAL_ERROR

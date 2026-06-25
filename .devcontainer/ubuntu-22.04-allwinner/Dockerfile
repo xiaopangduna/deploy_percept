@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-aarch64-linux-gnu \
     g++-aarch64-linux-gnu \
     openssh-client \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
 # 工具链挂载点（宿主机 tmp/toolchains -> /opt/toolchains）

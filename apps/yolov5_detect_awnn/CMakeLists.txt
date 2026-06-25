@@ -4,7 +4,13 @@ project(yolov5_detect_awnn LANGUAGES CXX)
 
 add_executable(yolov5_detect_awnn main.cpp)
 
-target_link_libraries(yolov5_detect_awnn PRIVATE AWNN::VIPLite)
+target_link_libraries(yolov5_detect_awnn PRIVATE
+    deploy_percept
+    ${OpenCV_LIBS})
+
+if(OpenCV_INCLUDE_DIRS)
+    target_include_directories(yolov5_detect_awnn PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
 
 install(TARGETS yolov5_detect_awnn RUNTIME DESTINATION bin)
 
