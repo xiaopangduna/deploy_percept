@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.10)
 
 project(yolov5_detect_awnn LANGUAGES CXX)
 
-add_executable(yolov5_detect_awnn main.cpp)
+add_executable(yolov5_detect_awnn main.cpp yolov5_fp32_post.cpp)
 
 target_link_libraries(yolov5_detect_awnn PRIVATE
     deploy_percept
+    AWNN::VIPLite
+    pthread
     ${OpenCV_LIBS})
 
 if(OpenCV_INCLUDE_DIRS)

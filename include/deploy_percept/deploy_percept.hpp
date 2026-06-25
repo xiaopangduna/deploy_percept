@@ -9,9 +9,6 @@
 // 包含后处理模块
 #include "post_process/PostProcessFactory.hpp"
 #include "post_process/YoloV5DetectPostProcess.hpp"
-#ifdef AWNN_FOUND
-#include "post_process/YoloV5DetectPostProcessAwnn.hpp"
-#endif
 #include "post_process/YoloV8PosePostProcess.hpp"
 #include "post_process/types.hpp"
 
