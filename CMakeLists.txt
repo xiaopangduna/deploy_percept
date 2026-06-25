@@ -37,6 +37,7 @@ set(SOURCES_FILE
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
+    src/post_process/YoloV5DetectPostProcessAwnn.cpp
     src/post_process/YoloV5SegPostProcess.cpp
     src/post_process/YoloV8PosePostProcess.cpp
     src/post_process/YoloV8SegPostProcess.cpp

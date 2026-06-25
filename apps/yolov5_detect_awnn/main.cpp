@@ -1,5 +1,5 @@
 /**
- * Allwinner YOLOv5 检测 demo（AwnnEngine + FP32/INT8 后处理）
+ * Allwinner YOLOv5 检测 demo（AwnnEngine + YoloV5DetectPostProcessAwnn）
  *
  * 默认资源：apps/yolov5_detect_awnn/ → share/percept/apps/yolov5_detect_awnn/
  * 用法：yolov5_detect_awnn [model.nb] [input.jpg] [output.jpg]
@@ -15,12 +15,11 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
-#include "yolov5_fp32_post.hpp"
+#include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
 namespace fs = std::filesystem;
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::post_process::YoloV5DetectPostProcess;
+using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 
 namespace
 {
@@ -167,27 +166,30 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (!engine.outputs_are_fp32())
+    {
+        std::fprintf(stderr, "yolov5.nb expects FP32 outputs; use INT8 path with YoloV5DetectPostProcess\n");
+        return 1;
+    }
+
     cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
     if (orig.empty())
     {
         std::fprintf(stderr, "failed to read input: %s\n", input_path.c_str());
         return 1;
     }
-    std::fprintf(stderr, "loaded input image: %dx%d\n", orig.cols, orig.rows);
 
     cv::Mat model_input;
     cv::resize(orig, model_input, cv::Size(kModelW, kModelH));
 
     std::vector<uint8_t> input_nchw = pack_nchw_rgb_uint8(model_input);
-    std::fprintf(
-        stderr,
-        "packed input: %zu bytes (model expects %u)\n",
-        input_nchw.size(),
-        engine.input_buffer_byte_size());
-
     if (input_nchw.size() < engine.input_buffer_byte_size())
     {
-        std::fprintf(stderr, "input size mismatch with model\n");
+        std::fprintf(
+            stderr,
+            "input size mismatch: got %zu, model expects %u\n",
+            input_nchw.size(),
+            engine.input_buffer_byte_size());
         return 1;
     }
 
@@ -197,73 +199,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    cv::Mat result_img = model_input.clone();
-
-    if (engine.outputs_are_fp32())
-    {
-        float **raw_outputs = engine.output_buffers_float();
-        if (raw_outputs == nullptr || engine.output_count() != 3)
-        {
-            std::fprintf(stderr, "AwnnEngine FP32 output buffers unavailable\n");
-            return 1;
-        }
-
-        float *outputs[3] = {raw_outputs[0], raw_outputs[1], raw_outputs[2]};
-        std::vector<yolov5_fp32_post::Detection> detections;
-        std::fprintf(stderr, "post process (fp32)...\n");
-        const int det_count = yolov5_fp32_post::run(outputs, kModelW, kModelH, detections);
-        yolov5_fp32_post::draw(result_img, detections);
-
-        std::error_code ec;
-        fs::create_directories(fs::path(output_path).parent_path(), ec);
-        if (!cv::imwrite(output_path, result_img))
-        {
-            std::fprintf(stderr, "failed to save output to %s\n", output_path.c_str());
-            return 1;
-        }
-
-        std::printf("detection num: %d\n", det_count);
-        std::printf("saved detect result to %s\n", output_path.c_str());
-        return 0;
-    }
-
-    if (!engine.outputs_are_int8())
-    {
-        std::fprintf(stderr, "unsupported model output format\n");
-        return 1;
-    }
-
-    int8_t **raw_outputs = engine.output_buffers();
+    float **raw_outputs = engine.output_buffers_float();
     if (raw_outputs == nullptr || engine.output_count() != 3)
     {
-        std::fprintf(stderr, "AwnnEngine output buffers unavailable\n");
+        std::fprintf(stderr, "AwnnEngine FP32 output buffers unavailable\n");
         return 1;
     }
 
-    // NPU raw INT8 → 后处理通用输入（与 yolov5_detect_rknn 一致）
-    std::vector<int8_t *> output_buffers_int8;
-    std::vector<int32_t> output_zps;
-    std::vector<float> output_scales;
-    output_buffers_int8.reserve(engine.output_count());
-    output_zps.reserve(engine.output_count());
-    output_scales.reserve(engine.output_count());
-    for (std::uint32_t i = 0; i < engine.output_count(); ++i)
-    {
-        output_buffers_int8.push_back(raw_outputs[i]);
-        output_zps.push_back(engine.output_zero_point(i));
-        output_scales.push_back(engine.output_scale(i));
-    }
+    std::vector<float *> output_buffers_fp32 = {
+        raw_outputs[0], raw_outputs[1], raw_outputs[2]};
 
-    YoloV5DetectPostProcess::Params post_params;
-    YoloV5DetectPostProcess processor(post_params);
-
-    std::fprintf(stderr, "post process (int8)...\n");
-    if (!processor.run(output_buffers_int8, kModelH, kModelW, output_zps, output_scales))
+    YoloV5DetectPostProcessAwnn::Params post_params;
+    YoloV5DetectPostProcessAwnn processor(post_params);
+    if (!processor.run(output_buffers_fp32, kModelH, kModelW))
     {
         std::fprintf(stderr, "post process failed: %s\n", processor.getResult().message.c_str());
         return 1;
     }
 
+    cv::Mat result_img = model_input.clone();
     processor.drawDetectionResults(result_img, processor.getResult().group);
 
     std::error_code ec;

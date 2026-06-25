@@ -49,4 +49,4 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 ## 模型 I/O
 
 - 输入：UINT8 NCHW 640×640
-- 输出：`yolov5.nb` 为三头 **FP32**（stride 8/16/32），走 ai-sdk 同款 sigmoid 后处理；INT8 模型仍用 `YoloV5DetectPostProcess`
+- 输出：`yolov5.nb` 为三头 **FP32**（stride 8/16/32），后处理用 `YoloV5DetectPostProcessAwnn`
