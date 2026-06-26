@@ -73,5 +73,16 @@ namespace deploy_percept
                 get_qnt_type_string(attr->qnt_type), attr->zp, attr->scale);
         }
 
+        std::vector<post_process::TensorView> RknnEngine::borrow_output_views() const
+        {
+            // TODO: wrap rknn_output[] after run(); apps still use run(inputs, outputs) + manual release
+            return {};
+        }
+
+        void RknnEngine::release_output_views()
+        {
+            // TODO: rknn_outputs_release when outputs are held internally
+        }
+
     } // namespace engine
 } // namespace deploy_percept

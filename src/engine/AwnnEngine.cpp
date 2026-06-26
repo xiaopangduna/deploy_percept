@@ -471,7 +471,7 @@ namespace deploy_percept
             return run_impl(input_buffer, input_byte_size, copy_to_host);
         }
 
-        void AwnnEngine::release_outputs()
+        void AwnnEngine::release_output_views()
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (output_storage_ != OutputStorage::Mapped)
@@ -667,6 +667,43 @@ namespace deploy_percept
                 return nullptr;
             }
             return output_ptrs_[index];
+        }
+
+        std::vector<post_process::TensorView> AwnnEngine::borrow_output_views() const
+        {
+            std::vector<post_process::TensorView> views;
+            if (!valid_ || !outputs_ready_)
+            {
+                return views;
+            }
+
+            const std::uint32_t count = output_count();
+            views.reserve(count);
+
+            for (std::uint32_t i = 0; i < count; ++i)
+            {
+                post_process::TensorView view{};
+                view.byte_size = output_buffer_byte_size(i);
+
+                if (outputs_are_fp32_ && i < output_float_ptrs_.size())
+                {
+                    view.dtype = post_process::TensorDtype::FP32;
+                    view.data = output_float_ptrs_[i];
+                }
+                else if (outputs_are_int8_ && i < output_ptrs_.size())
+                {
+                    view.dtype = post_process::TensorDtype::INT8;
+                    view.data = output_ptrs_[i];
+                }
+                else
+                {
+                    view.data = nullptr;
+                }
+
+                views.push_back(view);
+            }
+
+            return views;
         }
 
     } // namespace engine

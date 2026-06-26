@@ -7,7 +7,7 @@ namespace deploy_percept
     namespace engine
     {
 
-        bool BaseEngine::get_binary_file_size(const std::string& filepath, size_t& size)
+        bool BaseEngine::get_binary_file_size(const std::string &filepath, std::size_t &size)
         {
             std::ifstream file(filepath, std::ios::binary | std::ios::ate);
             if (!file) {
@@ -19,7 +19,7 @@ namespace deploy_percept
                 return false;
             }
 
-            size = static_cast<size_t>(file_size);
+            size = static_cast<std::size_t>(file_size);
             return true;
         }
 

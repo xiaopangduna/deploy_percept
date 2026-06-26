@@ -45,7 +45,7 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(
-                const std::vector<float *> &inputs,
+                const std::vector<TensorView> &inputs,
                 int model_in_h,
                 int model_in_w);
 

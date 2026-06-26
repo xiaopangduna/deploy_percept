@@ -16,11 +16,13 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
+#include "deploy_percept/engine/OutputAccess.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
+using deploy_percept::engine::OutputAccess;
 using deploy_percept::engine::OutputFetch;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 
@@ -53,22 +55,6 @@ std::vector<std::uint8_t> pack_nchw_rgb_uint8(
         }
     }
     return nchw;
-}
-
-std::vector<float *> collect_output_ptrs(AwnnEngine &engine)
-{
-    float **raw = engine.output_buffers_float();
-    std::vector<float *> outputs;
-    if (raw == nullptr)
-    {
-        return outputs;
-    }
-    outputs.reserve(engine.output_count());
-    for (std::uint32_t i = 0; i < engine.output_count(); ++i)
-    {
-        outputs.push_back(raw[i]);
-    }
-    return outputs;
 }
 
 bool prepare_input_nchw(
@@ -148,15 +134,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const std::vector<float *> outputs = collect_output_ptrs(engine);
-    if (outputs.empty())
+    OutputAccess out(engine);
+    if (out.empty())
     {
-        std::fprintf(stderr, "AwnnEngine output buffers unavailable\n");
+        std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
     }
 
     YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
-    if (!processor.run(outputs, model_h, model_w))
+    if (!processor.run(out.views(), model_h, model_w))
     {
         std::fprintf(stderr, "post process failed: %s\n", processor.getResult().message.c_str());
         return 1;

@@ -9,6 +9,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
+#include "deploy_percept/engine/OutputAccess.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "tests/test_common/paths.hpp"
@@ -18,6 +19,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
+using deploy_percept::engine::OutputAccess;
 using deploy_percept::engine::OutputFetch;
 using deploy_percept::post_process::DetectionObject;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
@@ -79,22 +81,6 @@ bool prepare_input_nchw(
     return true;
 }
 
-std::vector<float *> collect_output_ptrs(AwnnEngine &engine)
-{
-    float **raw = engine.output_buffers_float();
-    std::vector<float *> outputs;
-    if (raw == nullptr)
-    {
-        return outputs;
-    }
-    outputs.reserve(engine.output_count());
-    for (std::uint32_t i = 0; i < engine.output_count(); ++i)
-    {
-        outputs.push_back(raw[i]);
-    }
-    return outputs;
-}
-
 void expect_class_and_box_match(
     const std::vector<DetectionObject> &expected,
     const std::vector<DetectionObject> &actual)
@@ -153,17 +139,16 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
 
     ASSERT_TRUE(engine.run(input_nchw.data(), input_nchw.size()));
 
-    const std::vector<float *> outputs = collect_output_ptrs(engine);
-    ASSERT_FALSE(outputs.empty());
-
     const int model_h = static_cast<int>(engine.input_height());
     const int model_w = static_cast<int>(engine.input_width());
 
-    YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
-    ASSERT_TRUE(processor.run(outputs, model_h, model_w)) << processor.getResult().message;
+    OutputAccess out(engine);
+    ASSERT_FALSE(out.empty());
 
-    const std::vector<DetectionObject> &actual = processor.getResult().group.detection_objects;
-    expect_class_and_box_match(kExpectedDetections, actual);
+    YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
+    ASSERT_TRUE(processor.run(out.views(), model_h, model_w)) << processor.getResult().message;
+
+    expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detection_objects);
 }
 
 int main(int argc, char **argv)

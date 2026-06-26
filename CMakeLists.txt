@@ -37,6 +37,8 @@ set(SOURCES_FILE
     src/utils/logger_factory.cpp
     src/utils/npy.cpp
     src/utils/io.cpp
+    src/engine/BaseEngine.cpp
+    src/engine/OutputAccess.cpp
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp

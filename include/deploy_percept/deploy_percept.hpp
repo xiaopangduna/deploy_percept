@@ -15,10 +15,11 @@
 
 // 包含引擎模块
 #include "engine/EngineFactory.hpp"
-#include "engine/RknnEngine.hpp"
 #ifdef AWNN_FOUND
 #include "engine/AwnnEngine.hpp"
 #endif
+#include "engine/OutputAccess.hpp"
+#include "engine/RknnEngine.hpp"
 
 
 // 包含工具模块

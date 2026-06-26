@@ -1,5 +1,7 @@
 #include "bench_output.hpp"
 
+#include "deploy_percept/engine/OutputAccess.hpp"
+
 #include <chrono>
 #include <cstdio>
 #include <vector>
@@ -12,31 +14,8 @@ namespace
 {
 
 using deploy_percept::engine::AwnnEngine;
+using deploy_percept::engine::OutputAccess;
 using deploy_percept::engine::OutputFetch;
-
-void release_mapped_outputs_if_needed(AwnnEngine &engine)
-{
-    if (engine.getParams().output_fetch == OutputFetch::Mapped)
-    {
-        engine.release_outputs();
-    }
-}
-
-std::vector<float *> collect_output_ptrs(AwnnEngine &engine)
-{
-    float **raw = engine.output_buffers_float();
-    std::vector<float *> outputs;
-    if (raw == nullptr)
-    {
-        return outputs;
-    }
-    outputs.reserve(engine.output_count());
-    for (std::uint32_t i = 0; i < engine.output_count(); ++i)
-    {
-        outputs.push_back(raw[i]);
-    }
-    return outputs;
-}
 
 const char *output_fetch_label(const AwnnEngine &engine)
 {
@@ -74,16 +53,13 @@ BenchStats bench_output_path(
         }
 
         const auto post_t0 = std::chrono::steady_clock::now();
-        const std::vector<float *> outputs = collect_output_ptrs(engine);
-        if (outputs.empty() || !processor.run(outputs, model_h, model_w))
+        OutputAccess out(engine);
+        if (out.empty() || !processor.run(out.views(), model_h, model_w))
         {
             std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
-            release_mapped_outputs_if_needed(engine);
             return stats;
         }
         const auto post_t1 = std::chrono::steady_clock::now();
-
-        release_mapped_outputs_if_needed(engine);
 
         if (i >= warmup)
         {

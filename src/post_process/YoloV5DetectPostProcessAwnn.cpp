@@ -187,7 +187,7 @@ namespace deploy_percept
         }
 
         bool YoloV5DetectPostProcessAwnn::run(
-            const std::vector<float *> &inputs,
+            const std::vector<TensorView> &inputs,
             int model_in_h,
             int model_in_w)
         {
@@ -199,6 +199,25 @@ namespace deploy_percept
                 return false;
             }
 
+            const float *head_ptrs[3]{};
+            for (std::size_t i = 0; i < inputs.size(); ++i)
+            {
+                const TensorView &view = inputs[i];
+                if (view.data == nullptr)
+                {
+                    result_.success = false;
+                    result_.message = "Input tensor " + std::to_string(i) + " has null data";
+                    return false;
+                }
+                if (view.dtype != TensorDtype::FP32)
+                {
+                    result_.success = false;
+                    result_.message = "Input tensor " + std::to_string(i) + " is not FP32";
+                    return false;
+                }
+                head_ptrs[i] = static_cast<const float *>(view.data);
+            }
+
             resetResult();
 
             std::vector<float> filterBoxes;
@@ -206,7 +225,7 @@ namespace deploy_percept
             std::vector<int> classId;
 
             const int validCount0 = decodeDetectionHeadFp32(
-                inputs[0],
+                head_ptrs[0],
                 8,
                 params_.anchor_stride8,
                 model_in_h,
@@ -217,7 +236,7 @@ namespace deploy_percept
                 params_.conf_threshold);
 
             const int validCount1 = decodeDetectionHeadFp32(
-                inputs[1],
+                head_ptrs[1],
                 16,
                 params_.anchor_stride16,
                 model_in_h,
@@ -228,7 +247,7 @@ namespace deploy_percept
                 params_.conf_threshold);
 
             const int validCount2 = decodeDetectionHeadFp32(
-                inputs[2],
+                head_ptrs[2],
                 32,
                 params_.anchor_stride32,
                 model_in_h,

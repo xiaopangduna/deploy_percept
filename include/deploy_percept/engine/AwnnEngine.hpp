@@ -3,6 +3,7 @@
 #ifdef AWNN_FOUND
 
 #include "deploy_percept/engine/BaseEngine.hpp"
+#include "deploy_percept/post_process/types.hpp"
 
 #include <cstdint>
 #include <mutex>
@@ -25,7 +26,7 @@ namespace deploy_percept
         enum class OutputFetch
         {
             HostCopy, ///< 非零拷贝：memcpy 到 engine 内 host 缓冲（默认，对齐 ai-sdk）
-            Mapped,   ///< 零拷贝：map VIP 输出，post 后须 release_outputs()
+            Mapped,   ///< 零拷贝：map VIP 输出，post 后须 release_output_views()
         };
 
         /** 当前 output_buffers*() 指向的存储方式（最近一次 run 成功后） */
@@ -54,13 +55,13 @@ namespace deploy_percept
 
             /**
              * 推理：输入 copy 到 VIP；输出策略由 Params::output_fetch 决定。
-             * HostCopy：output_buffers*() 指向 engine host 缓冲，有效至下次 run。
-             * Mapped：borrowed 映射指针，post 后须 release_outputs()。
+             * HostCopy：借出 views 指向 engine host 缓冲，有效至下次 run。
+             * Mapped：借出 mapped VIP 指针，须 release_output_views() 或 OutputAccess 析构。
              */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
-            /** 仅 OutputFetch::Mapped 时有实际操作（unmap） */
-            void release_outputs();
+            /** 归还 borrow_output_views() 借出的视图；Mapped 时 unmap，HostCopy 时 no-op */
+            void release_output_views() override;
             bool outputs_ready() const { return outputs_ready_; }
             OutputStorage output_storage() const { return output_storage_; }
             const RunTiming &last_run_timing() const { return last_run_timing_; }
@@ -111,6 +112,9 @@ namespace deploy_percept
             float **output_buffers_float();
             float output_scale(std::uint32_t index) const { return output_scales_.at(index); }
             int32_t output_zero_point(std::uint32_t index) const { return output_zps_.at(index); }
+
+            /** run 成功后借出输出 TensorView；有效至 release_output_views() 或下次 run() */
+            std::vector<post_process::TensorView> borrow_output_views() const override;
 
         private:
             void acquireRuntime();

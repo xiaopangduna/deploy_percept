@@ -2,12 +2,27 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cstddef>
 #include <vector>
 
 namespace deploy_percept
 {
     namespace post_process
     {
+
+        /** 非 owning 内存视图：统一 Mapped / HostCopy 等路径下的可读缓冲 */
+        enum class TensorDtype : std::uint8_t
+        {
+            FP32,
+            INT8,
+        };
+
+        struct TensorView
+        {
+            const void *data{nullptr};
+            std::size_t byte_size{0};
+            TensorDtype dtype{TensorDtype::FP32};
+        };
 
         struct BoxRect
         {

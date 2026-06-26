@@ -34,6 +34,10 @@ namespace deploy_percept
             const Result &getResult() const { return result_; }
 
             bool run(rknn_input inputs[], rknn_output outputs[]);
+
+            std::vector<post_process::TensorView> borrow_output_views() const override;
+            void release_output_views() override;
+
             rknn_context ctx_;
             rknn_input_output_num model_io_num_;
             std::vector<rknn_tensor_attr> model_input_attrs_;
