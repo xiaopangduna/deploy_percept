@@ -4,8 +4,9 @@
 #include <cstdio>
 #include <vector>
 
-namespace yolov5_detect_awnn_bench
-{
+namespace percept {
+namespace bench {
+namespace awnn {
 
 namespace
 {
@@ -37,79 +38,12 @@ std::vector<float *> collect_output_ptrs(AwnnEngine &engine)
     return outputs;
 }
 
-int run_post_and_count(
-    AwnnEngine &engine,
-    deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    int model_h,
-    int model_w)
-{
-    const std::vector<float *> outputs = collect_output_ptrs(engine);
-    if (outputs.empty())
-    {
-        return -1;
-    }
-    if (!processor.run(outputs, model_h, model_w))
-    {
-        return -1;
-    }
-    return processor.getResult().group.count;
-}
-
 const char *output_fetch_label(const AwnnEngine &engine)
 {
     return engine.getParams().output_fetch == OutputFetch::Mapped ? "Mapped" : "HostCopy";
 }
 
 } // namespace
-
-bool verify_output_paths_match(
-    AwnnEngine &mapped_engine,
-    AwnnEngine &host_copy_engine,
-    deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    const std::vector<std::uint8_t> &input_nchw,
-    int model_h,
-    int model_w)
-{
-    const std::size_t input_size = input_nchw.size();
-
-    if (!mapped_engine.run(input_nchw.data(), input_size))
-    {
-        std::fprintf(stderr, "verify: Mapped engine run() failed\n");
-        return false;
-    }
-    const int mapped_count = run_post_and_count(mapped_engine, processor, model_h, model_w);
-    release_mapped_outputs_if_needed(mapped_engine);
-    if (mapped_count < 0)
-    {
-        std::fprintf(stderr, "verify: post after Mapped run() failed\n");
-        return false;
-    }
-
-    if (!host_copy_engine.run(input_nchw.data(), input_size))
-    {
-        std::fprintf(stderr, "verify: HostCopy engine run() failed\n");
-        return false;
-    }
-    const int copy_count = run_post_and_count(host_copy_engine, processor, model_h, model_w);
-    if (copy_count < 0)
-    {
-        std::fprintf(stderr, "verify: post after HostCopy run() failed\n");
-        return false;
-    }
-
-    if (mapped_count != copy_count)
-    {
-        std::fprintf(
-            stderr,
-            "verify: detection count mismatch Mapped=%d HostCopy=%d\n",
-            mapped_count,
-            copy_count);
-        return false;
-    }
-
-    std::printf("verify: Mapped and HostCopy both detect %d objects\n", mapped_count);
-    return true;
-}
 
 BenchStats bench_output_path(
     AwnnEngine &engine,
@@ -206,4 +140,6 @@ void print_bench_compare(
     }
 }
 
-} // namespace yolov5_detect_awnn_bench
+} // namespace awnn
+} // namespace bench
+} // namespace percept

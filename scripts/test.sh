@@ -8,11 +8,14 @@ PRESET="x86_64-debug"
 INSTALL_DIR=""
 BOARD=""
 
+PERCEPT_TESTS_REL="share/percept/tests"
+
 PERCEPT_INSTALL_TESTS=(
     smoke_tests
     test_YoloV5DetectPostProcess
     test_YoloV5SegPostProcess
     test_YoloV8SegPostProcess
+    test_yolov5_detect_awnn
 )
 
 show_help() {
@@ -31,7 +34,7 @@ show_help() {
     echo ""
     echo "选项:"
     echo "  --preset <name>            CMake preset（默认: x86_64-debug，用于 ctest）"
-    echo "  --install-dir <path>       对 install prefix 跑 bin/ 内测试"
+    echo "  --install-dir <path>       对 install prefix 跑 share/percept/tests/ 内测试"
     echo "  --board <user@host:path>   SSH 到开发板跑 install tree 测试"
     echo "  --help                     显示帮助"
     echo ""
@@ -45,28 +48,37 @@ show_help() {
 
 run_install_tree_tests() {
     local install_dir="$1"
-    if [[ ! -d "${install_dir}/bin" ]]; then
-        echo "错误: 无效的 install 目录（缺少 bin/）: ${install_dir}" >&2
+    if [[ ! -d "${install_dir}/share/percept" ]]; then
+        echo "错误: 无效的 install 目录（缺少 share/percept/）: ${install_dir}" >&2
         exit 1
     fi
     install_dir="$(cd "${install_dir}" && pwd)"
 
+    local tests_dir="${install_dir}/${PERCEPT_TESTS_REL}"
+    if [[ ! -d "${tests_dir}" ]]; then
+        echo "错误: 未找到测试目录: ${tests_dir}" >&2
+        echo "提示: 构建时需 ENABLE_TESTS=ON 且 INSTALL_TESTS=ON，并执行 cmake --install" >&2
+        exit 1
+    fi
+
     export PERCEPT_ROOT="${install_dir}/share/percept"
     export PERCEPT_OUTPUT_DIR="${install_dir}/var/percept/output"
+    export LD_LIBRARY_PATH="${install_dir}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
     mkdir -p "${PERCEPT_OUTPUT_DIR}"
 
     echo "=== install tree tests ==="
-    echo "prefix: ${install_dir}"
+    echo "prefix:    ${install_dir}"
+    echo "tests dir: ${tests_dir}"
 
     local fail=0
     local t
     for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
-        if [[ ! -x "${install_dir}/bin/${t}" ]]; then
+        if [[ ! -x "${tests_dir}/${t}" ]]; then
             echo "skip (not installed): ${t}"
             continue
         fi
         echo "=== ${t} ==="
-        "${install_dir}/bin/${t}" || fail=1
+        "${tests_dir}/${t}" || fail=1
     done
     return "${fail}"
 }
@@ -87,21 +99,30 @@ run_install_tree_tests_remote() {
         exit 1
     }
 
+    local tests_dir="${remote_dir}/${PERCEPT_TESTS_REL}"
+
     echo "=== install tree tests (remote) ==="
-    echo "host:   ${ssh_host}"
-    echo "prefix: ${remote_dir}"
+    echo "host:      ${ssh_host}"
+    echo "prefix:    ${remote_dir}"
+    echo "tests dir: ${tests_dir}"
 
     local tests_shell=""
     local t
     for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
-        tests_shell+="if [[ -x \"${remote_dir}/bin/${t}\" ]]; then echo '=== ${t} ==='; \"${remote_dir}/bin/${t}\" || FAIL=1; else echo 'skip (not installed): ${t}'; fi;"
+        tests_shell+="if [[ -x \"${tests_dir}/${t}\" ]]; then echo '=== ${t} ==='; \"${tests_dir}/${t}\" || FAIL=1; else echo 'skip (not installed): ${t}'; fi;"
     done
 
     ssh "${ssh_host}" "set -euo pipefail
 FAIL=0
 export PERCEPT_ROOT=\"${remote_dir}/share/percept\"
 export PERCEPT_OUTPUT_DIR=\"${remote_dir}/var/percept/output\"
+export LD_LIBRARY_PATH=\"${remote_dir}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}\"
 mkdir -p \"\${PERCEPT_OUTPUT_DIR}\"
+if [[ ! -d \"${tests_dir}\" ]]; then
+  echo \"错误: 未找到测试目录: ${tests_dir}\" >&2
+  echo \"提示: INSTALL_TESTS=ON 且已 cmake --install\" >&2
+  exit 1
+fi
 ${tests_shell}
 exit \${FAIL}"
 }

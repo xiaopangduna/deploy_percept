@@ -10,7 +10,16 @@ namespace test {
 
 namespace {
 
-fs::path prefix_from_executable()
+fs::path root_from_env()
+{
+    if (const char *env = std::getenv("PERCEPT_ROOT"))
+    {
+        return env;
+    }
+    return {};
+}
+
+fs::path install_prefix_from_executable()
 {
     char buf[4096];
     const ssize_t len = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
@@ -19,16 +28,25 @@ fs::path prefix_from_executable()
         return {};
     }
     buf[len] = '\0';
-    // <prefix>/bin/<exe> -> <prefix>
-    return fs::path(buf).parent_path().parent_path();
-}
 
-fs::path root_from_env()
-{
-    if (const char *env = std::getenv("PERCEPT_ROOT"))
+    const fs::path exe_dir = fs::path(buf).parent_path();
+
+    // <prefix>/share/percept/tests/<exe>
+    if (exe_dir.filename() == "tests")
     {
-        return env;
+        const fs::path percept_dir = exe_dir.parent_path();
+        if (percept_dir.filename() == "percept")
+        {
+            return percept_dir.parent_path().parent_path();
+        }
     }
+
+    // <prefix>/bin/<exe>（兼容旧 layout）
+    if (exe_dir.filename() == "bin")
+    {
+        return exe_dir.parent_path();
+    }
+
     return {};
 }
 
@@ -44,7 +62,7 @@ fs::path resolve_root()
 #ifdef PERCEPT_ROOT
     return PERCEPT_ROOT;
 #else
-    const fs::path prefix = prefix_from_executable();
+    const fs::path prefix = install_prefix_from_executable();
     if (!prefix.empty())
     {
         return prefix / "share" / "percept";
@@ -68,7 +86,7 @@ fs::path output_dir()
 #ifdef PERCEPT_ROOT
     return fs::path(PERCEPT_ROOT) / "tmp";
 #else
-    const fs::path prefix = prefix_from_executable();
+    const fs::path prefix = install_prefix_from_executable();
     if (!prefix.empty())
     {
         return prefix / "var" / "percept" / "output";

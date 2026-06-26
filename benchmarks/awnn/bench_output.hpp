@@ -6,8 +6,9 @@
 #include "deploy_percept/engine/AwnnEngine.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
-namespace yolov5_detect_awnn_bench
-{
+namespace percept {
+namespace bench {
+namespace awnn {
 
 struct BenchStats
 {
@@ -33,13 +34,6 @@ void print_bench_compare(
     int warmup,
     int loops);
 
-/** Mapped vs HostCopy 两实例检测数量是否一致 */
-bool verify_output_paths_match(
-    deploy_percept::engine::AwnnEngine &mapped_engine,
-    deploy_percept::engine::AwnnEngine &host_copy_engine,
-    deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    const std::vector<std::uint8_t> &input_nchw,
-    int model_h,
-    int model_w);
-
-} // namespace yolov5_detect_awnn_bench
+} // namespace awnn
+} // namespace bench
+} // namespace percept

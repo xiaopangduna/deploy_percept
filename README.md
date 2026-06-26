@@ -148,25 +148,30 @@ bash scripts/test.sh --board orangepi@192.168.0.103:~/deploy_percept
 
 **PC 依赖**：`ssh` 客户端，能登录板子（密码或 SSH 密钥）。
 
-**板子依赖**：完整 install 目录（`bin/`、`share/percept/apps/`），以及系统基础库（`libc`、`libstdc++`）。无需安装 CMake 或拷贝源码树。
+**板子依赖**：完整 install 目录（`bin/`、`share/percept/apps/`、`share/percept/tests/`），以及系统基础库（`libc`、`libstdc++`）。无需安装 CMake 或拷贝源码树。
 
 路径可使用 `~/deploy_percept` 或绝对路径 `/home/orangepi/deploy_percept`。
 
-**预期结果**（4 项测试均 `[  PASSED  ]`）：
+**预期结果**（已安装项均 `[  PASSED  ]`；未安装或平台不适用则 skip）：
 
-- `smoke_tests`
-- `test_YoloV5DetectPostProcess`
-- `test_YoloV5SegPostProcess`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
-- `test_YoloV8SegPostProcess`
+- `share/percept/tests/smoke_tests`
+- `share/percept/tests/test_YoloV5DetectPostProcess`
+- `share/percept/tests/test_YoloV5SegPostProcess`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
+- `share/percept/tests/test_YoloV8SegPostProcess`
+- `share/percept/tests/test_yolov5_detect_awnn`（仅 AWNN/aarch64 install 包）
+
+构建 install 包时需 `ENABLE_TESTS=ON`（默认）且 `INSTALL_TESTS=ON`（默认）。量产包可 `-DINSTALL_TESTS=OFF`，仅保留 `bin/` demo。
 
 ### install 目录结构
 
 ```
 install/<platform>/
-├── bin/                         # 测试可执行文件
-├── lib/libdeploy_percept.a      # 静态库
+├── bin/                         # demo 可执行文件（如 yolov5_detect_awnn）
+├── lib/                         # libdeploy_percept.a、VIPLite 等
 ├── include/deploy_percept/      # 头文件
-├── share/percept/apps/          # 示例/测试数据（唯一来源：源码 apps/）
+├── share/percept/
+│   ├── apps/                    # 示例/测试 fixture 数据
+│   └── tests/                   # 测试可执行文件（INSTALL_TESTS=ON）
 └── var/percept/output/          # 测试输出（运行时自动创建）
 ```
 

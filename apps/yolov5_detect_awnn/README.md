@@ -12,14 +12,16 @@
 ## 构建与安装
 
 ```bash
-cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release -DBUILD_AWNN_APPS=ON
-cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release --target yolov5_detect_awnn
+cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  -DBUILD_AWNN_APPS=ON -DENABLE_BENCHMARKS=ON
+cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --target yolov5_detect_awnn bench_yolov5_detect_awnn_mapped_vs_hostcopy
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
 ## 运行
 
-**install 树（板端）：**
+**install 树（板端）— demo：**
 
 ```bash
 cd ~/deploy_percept
@@ -45,6 +47,18 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 诊断日志（stderr）会逐步打印 `AwnnEngine: vip_create_network ok` 等；请记下**最后一条**再反馈。
 
 默认输出：`share/percept/apps/yolov5_detect_awnn/yolov5_detect_awnn_out.jpg`
+
+**性能 benchmark（Mapped vs HostCopy 耗时，install → `share/percept/benchmarks/`）：**
+
+```bash
+./share/percept/benchmarks/bench_yolov5_detect_awnn_mapped_vs_hostcopy          # 默认 loops=50
+./share/percept/benchmarks/bench_yolov5_detect_awnn_mapped_vs_hostcopy 100      # 指定 loops
+
+# 或 PC 远程：
+bash scripts/bench.sh --board orangepi@<ip>:~/deploy_percept -- 50
+```
+
+正确性回归见 `share/percept/tests/test_yolov5_detect_awnn`（integration test）。
 
 ## 模型 I/O
 

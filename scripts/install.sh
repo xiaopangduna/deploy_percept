@@ -27,6 +27,7 @@ show_help() {
     echo "相关脚本:"
     echo "  bash scripts/build.sh   编译"
     echo "  bash scripts/test.sh    测试（build tree / install tree / 开发板）"
+    echo "  bash scripts/bench.sh   性能 benchmark（需 ENABLE_BENCHMARKS=ON）"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -57,11 +58,24 @@ echo "build dir: ${BUILD_DIR}"
 cmake --install "${BUILD_DIR}"
 
 INSTALL_DIR="$(grep -E '^CMAKE_INSTALL_PREFIX:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+INSTALL_TESTS_FLAG="$(grep -E '^INSTALL_TESTS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
 echo ""
 echo "安装完成: ${INSTALL_DIR}"
-echo "  bin/    可执行文件"
-echo "  lib/    libdeploy_percept.a"
+echo "  bin/                      demo 可执行文件"
+echo "  lib/                      库（libdeploy_percept.a、VIPLite 等）"
 echo "  include/deploy_percept/"
-echo "  share/percept/apps/  示例与测试数据"
+echo "  share/percept/apps/       示例与测试 fixture 数据"
+if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
+    echo "  share/percept/tests/      测试可执行文件"
+else
+    echo "  (INSTALL_TESTS=OFF，未安装 share/percept/tests/)"
+fi
+if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
+    echo "  share/percept/benchmarks/ benchmark 可执行文件"
+else
+    echo "  (INSTALL_BENCHMARKS=OFF 或 ENABLE_BENCHMARKS=OFF，未安装 benchmarks/)"
+fi
 echo ""
 echo "验证 install 包: bash scripts/test.sh --install-dir ${INSTALL_DIR}"
+echo "运行 benchmark:  bash scripts/bench.sh --install-dir ${INSTALL_DIR} -- 50"

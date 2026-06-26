@@ -19,8 +19,8 @@ if(spdlog_FOUND)
     target_link_libraries(smoke_tests PRIVATE spdlog::spdlog)
 endif()
 
-install(TARGETS smoke_tests RUNTIME DESTINATION bin)
-
 add_test(NAME smoke_tests COMMAND smoke_tests)
 set_tests_properties(smoke_tests PROPERTIES
     LABELS "smoke")
+
+percept_install_test(smoke_tests)
