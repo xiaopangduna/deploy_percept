@@ -14,6 +14,7 @@ option(BUILD_AWNN_APPS "Build Allwinner AWNN demo applications (requires VIPLite
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
 # 工具链/平台变量见各 toolchain 文件；此处仅打印 project() 之后的工程配置
 message(STATUS "==============================================================================")
 message(STATUS "项目配置:")
@@ -59,10 +60,11 @@ target_link_libraries(deploy_percept PUBLIC
     ZLIB::ZLIB
 )
 
-# 设置库的包含目录
+# 设置库的包含目录（OpenCV：public 头文件依赖 opencv2/*，需向消费者传播）
 target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    $<BUILD_INTERFACE:${OpenCV_INCLUDE_DIRS}>
 )
 
 # Sigmastar MI SDK（armv7l SSC375 平台后端，条件链接）

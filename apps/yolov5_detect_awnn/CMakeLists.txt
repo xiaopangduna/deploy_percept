@@ -7,12 +7,7 @@ add_executable(yolov5_detect_awnn main.cpp)
 target_link_libraries(yolov5_detect_awnn PRIVATE
     deploy_percept
     AWNN::VIPLite
-    pthread
-    ${OpenCV_LIBS})
-
-if(OpenCV_INCLUDE_DIRS)
-    target_include_directories(yolov5_detect_awnn PRIVATE ${OpenCV_INCLUDE_DIRS})
-endif()
+    pthread)
 
 install(TARGETS yolov5_detect_awnn RUNTIME DESTINATION bin)
 

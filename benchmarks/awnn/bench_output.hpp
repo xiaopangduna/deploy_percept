@@ -12,10 +12,9 @@ namespace awnn {
 
 struct BenchStats
 {
-    double npu_ms_avg{0};
-    double output_fetch_ms_avg{0};
-    double post_ms_avg{0};
-    double output_plus_post_ms_avg{0};
+    double run_ms_avg{0};       ///< engine.run()：输入 copy + 推理 + 输出取数
+    double post_ms_avg{0};      ///< OutputAccess + 后处理
+    double pipeline_ms_avg{0};  ///< run + post
 };
 
 /** engine 的 Params::output_fetch 决定取数路径 */

@@ -15,26 +15,11 @@ namespace deploy_percept
     namespace engine
     {
 
-        /** 最近一次 run 的分段耗时（毫秒） */
-        struct RunTiming
-        {
-            double npu_ms{0};           ///< vip_run_network
-            double output_fetch_ms{0};  ///< Mapped：invalidate+map；HostCopy：map+memcpy+unmap
-        };
-
         /** 构造时指定输出取数策略（整个 engine 实例固定） */
         enum class OutputFetch
         {
             HostCopy, ///< 非零拷贝：memcpy 到 engine 内 host 缓冲（默认，对齐 ai-sdk）
             Mapped,   ///< 零拷贝：map VIP 输出，post 后须 release_output_views()
-        };
-
-        /** 当前 output_buffers*() 指向的存储方式（最近一次 run 成功后） */
-        enum class OutputStorage
-        {
-            None,
-            Mapped,
-            HostCopy,
         };
 
         /** VIPLite 推理引擎：暴露 raw 输出（INT8/UINT8 或 FP32） */
@@ -62,27 +47,8 @@ namespace deploy_percept
 
             /** 归还 borrow_output_views() 借出的视图；Mapped 时 unmap，HostCopy 时 no-op */
             void release_output_views() override;
-            bool outputs_ready() const { return outputs_ready_; }
-            OutputStorage output_storage() const { return output_storage_; }
-            const RunTiming &last_run_timing() const { return last_run_timing_; }
 
-            std::uint32_t input_count() const
-            {
-                return static_cast<std::uint32_t>(input_byte_sizes_.size());
-            }
-            std::uint32_t input_buffer_byte_size(std::uint32_t index = 0) const
-            {
-                return input_byte_sizes_.at(index);
-            }
             /** 输入 spatial/channel 尺寸（自模型 query，兼容 NCHW / NHWC layout 报告） */
-            std::uint32_t input_num_dims(std::uint32_t index = 0) const
-            {
-                return static_cast<std::uint32_t>(input_attrs_.at(index).dims.size());
-            }
-            std::uint32_t input_dim(std::uint32_t dim_index, std::uint32_t index = 0) const
-            {
-                return input_attrs_.at(index).dims.at(dim_index);
-            }
             std::uint32_t input_channels(std::uint32_t index = 0) const
             {
                 return input_attrs_.at(index).channels;
@@ -99,24 +65,31 @@ namespace deploy_percept
             {
                 return output_byte_sizes_.at(index);
             }
-            bool outputs_are_int8() const { return outputs_are_int8_; }
-            bool outputs_are_fp32() const { return outputs_are_fp32_; }
-
             std::uint32_t output_count() const
             {
                 return static_cast<std::uint32_t>(output_buffers_vip_.size());
             }
-            float *output_float(std::uint32_t index);
-            int8_t *output_int8(std::uint32_t index);
-            int8_t **output_buffers();
-            float **output_buffers_float();
-            float output_scale(std::uint32_t index) const { return output_scales_.at(index); }
-            int32_t output_zero_point(std::uint32_t index) const { return output_zps_.at(index); }
 
             /** run 成功后借出输出 TensorView；有效至 release_output_views() 或下次 run() */
             std::vector<post_process::TensorView> borrow_output_views() const override;
 
         private:
+            /** 最近一次 run 成功后输出视图的存储方式（内部状态） */
+            enum class OutputStorage
+            {
+                None,
+                Mapped,
+                HostCopy,
+            };
+
+            /** 模型全部输出的统一 dtype（prepareIo 时确定） */
+            enum class OutputDtype : std::uint8_t
+            {
+                None,
+                Int8,
+                Fp32,
+            };
+
             void acquireRuntime();
             void releaseRuntime();
 
@@ -129,6 +102,7 @@ namespace deploy_percept
             bool fetch_outputs_mapped();
             bool fetch_outputs_copy();
             void release_outputs_unlocked();
+            static OutputDtype dtypeFromFormat(int format);
 
             struct InputAttr
             {
@@ -149,20 +123,14 @@ namespace deploy_percept
             std::vector<InputAttr> input_attrs_;
             std::vector<void *> output_buffers_vip_;
             std::vector<std::uint32_t> output_byte_sizes_;
-            std::vector<int> output_formats_;
 
             std::vector<std::vector<uint8_t>> output_raw_storage_;
             std::vector<bool> output_mapped_;
-            std::vector<int8_t *> output_ptrs_;
-            std::vector<float *> output_float_ptrs_;
-            std::vector<float> output_scales_;
-            std::vector<int32_t> output_zps_;
-            bool outputs_are_int8_{false};
-            bool outputs_are_fp32_{false};
+            std::vector<void *> output_data_;
+            OutputDtype output_dtype_{OutputDtype::None};
 
             bool outputs_ready_{false};
             OutputStorage output_storage_{OutputStorage::None};
-            RunTiming last_run_timing_{};
 
             static int runtime_ref_count_;
             bool runtime_acquired_{false};

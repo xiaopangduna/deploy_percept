@@ -8,7 +8,6 @@ extern "C" {
 
 #include <cstdio>
 #include <cstring>
-#include <chrono>
 
 namespace deploy_percept
 {
@@ -87,11 +86,6 @@ namespace deploy_percept
                 }
 
                 return true;
-            }
-
-            bool isInt8Format(int format)
-            {
-                return format == VIP_BUFFER_FORMAT_INT8 || format == VIP_BUFFER_FORMAT_UINT8;
             }
 
             bool isTypicalChannelCount(vip_uint32_t c)
@@ -188,6 +182,19 @@ namespace deploy_percept
             }
 
         } // namespace
+
+        AwnnEngine::OutputDtype AwnnEngine::dtypeFromFormat(int format)
+        {
+            if (format == VIP_BUFFER_FORMAT_INT8 || format == VIP_BUFFER_FORMAT_UINT8)
+            {
+                return OutputDtype::Int8;
+            }
+            if (format == VIP_BUFFER_FORMAT_FP32)
+            {
+                return OutputDtype::Fp32;
+            }
+            return OutputDtype::None;
+        }
 
         int AwnnEngine::runtime_ref_count_ = 0;
 
@@ -298,8 +305,7 @@ namespace deploy_percept
 
             output_raw_storage_.resize(output_buffers_vip_.size());
             output_mapped_.assign(output_buffers_vip_.size(), false);
-            output_ptrs_.resize(output_buffers_vip_.size(), nullptr);
-            output_float_ptrs_.resize(output_buffers_vip_.size(), nullptr);
+            output_data_.assign(output_buffers_vip_.size(), nullptr);
             return true;
         }
 
@@ -323,11 +329,7 @@ namespace deploy_percept
             input_attrs_.clear();
             output_buffers_vip_.clear();
             output_byte_sizes_.clear();
-            output_formats_.clear();
-            output_scales_.clear();
-            output_zps_.clear();
-            outputs_are_int8_ = true;
-            outputs_are_fp32_ = true;
+            output_dtype_ = OutputDtype::None;
 
             for (vip_uint32_t i = 0; i < input_count; ++i)
             {
@@ -385,24 +387,31 @@ namespace deploy_percept
                     return false;
                 }
                 io.byte_size = vip_get_buffer_size(buffer);
-                if (isInt8Format(io.create_param.data_format))
+
+                const OutputDtype this_dtype = dtypeFromFormat(io.create_param.data_format);
+                if (this_dtype == OutputDtype::None)
                 {
-                    outputs_are_fp32_ = false;
+                    std::fprintf(
+                        stderr,
+                        "AwnnEngine: unsupported output format %d at index %u\n",
+                        io.create_param.data_format,
+                        i);
+                    vip_destroy_buffer(buffer);
+                    return false;
                 }
-                else if (io.create_param.data_format == VIP_BUFFER_FORMAT_FP32)
+                if (i == 0)
                 {
-                    outputs_are_int8_ = false;
+                    output_dtype_ = this_dtype;
                 }
-                else
+                else if (output_dtype_ != this_dtype)
                 {
-                    outputs_are_int8_ = false;
-                    outputs_are_fp32_ = false;
+                    std::fprintf(stderr, "AwnnEngine: mixed output dtypes not supported\n");
+                    vip_destroy_buffer(buffer);
+                    return false;
                 }
+
                 output_buffers_vip_.push_back(buffer);
                 output_byte_sizes_.push_back(io.byte_size);
-                output_formats_.push_back(static_cast<int>(io.create_param.data_format));
-                output_scales_.push_back(io.scale);
-                output_zps_.push_back(io.zero_point);
             }
 
             return true;
@@ -448,18 +457,12 @@ namespace deploy_percept
             input_attrs_.clear();
             output_buffers_vip_.clear();
             output_byte_sizes_.clear();
-            output_formats_.clear();
             output_raw_storage_.clear();
             output_mapped_.clear();
-            output_ptrs_.clear();
-            output_float_ptrs_.clear();
-            output_scales_.clear();
-            output_zps_.clear();
-            outputs_are_int8_ = false;
-            outputs_are_fp32_ = false;
+            output_data_.clear();
+            output_dtype_ = OutputDtype::None;
             outputs_ready_ = false;
             output_storage_ = OutputStorage::None;
-            last_run_timing_ = {};
             valid_ = false;
 
             releaseRuntime();
@@ -497,17 +500,14 @@ namespace deploy_percept
             }
 
             auto network = static_cast<vip_network>(network_);
-            const auto t0 = std::chrono::steady_clock::now();
             if (vip_run_network(network) != VIP_SUCCESS)
             {
                 std::fprintf(stderr, "AwnnEngine: vip_run_network failed\n");
                 return false;
             }
-            const auto t1 = std::chrono::steady_clock::now();
 
             const bool fetched =
                 copy_outputs_to_host ? fetch_outputs_copy() : fetch_outputs_mapped();
-            const auto t2 = std::chrono::steady_clock::now();
             if (!fetched)
             {
                 release_outputs_unlocked();
@@ -516,10 +516,6 @@ namespace deploy_percept
 
             output_storage_ = copy_outputs_to_host ? OutputStorage::HostCopy : OutputStorage::Mapped;
             outputs_ready_ = true;
-            last_run_timing_.npu_ms =
-                std::chrono::duration<double, std::milli>(t1 - t0).count();
-            last_run_timing_.output_fetch_ms =
-                std::chrono::duration<double, std::milli>(t2 - t1).count();
             return true;
         }
 
@@ -532,13 +528,9 @@ namespace deploy_percept
                     vip_unmap_buffer(static_cast<vip_buffer>(output_buffers_vip_[i]));
                     output_mapped_[i] = false;
                 }
-                if (i < output_ptrs_.size())
+                if (i < output_data_.size())
                 {
-                    output_ptrs_[i] = nullptr;
-                }
-                if (i < output_float_ptrs_.size())
-                {
-                    output_float_ptrs_[i] = nullptr;
+                    output_data_[i] = nullptr;
                 }
             }
 
@@ -564,8 +556,7 @@ namespace deploy_percept
                     return false;
                 }
 
-                output_ptrs_[i] = reinterpret_cast<int8_t *>(out_data);
-                output_float_ptrs_[i] = reinterpret_cast<float *>(out_data);
+                output_data_[i] = out_data;
                 output_mapped_[i] = true;
             }
 
@@ -591,8 +582,7 @@ namespace deploy_percept
                 auto &raw = output_raw_storage_[i];
                 raw.resize(output_byte_sizes_[i]);
                 std::memcpy(raw.data(), out_data, output_byte_sizes_[i]);
-                output_ptrs_[i] = reinterpret_cast<int8_t *>(raw.data());
-                output_float_ptrs_[i] = reinterpret_cast<float *>(raw.data());
+                output_data_[i] = raw.data();
                 output_mapped_[i] = false;
                 vip_unmap_buffer(buffer);
             }
@@ -633,42 +623,6 @@ namespace deploy_percept
             return true;
         }
 
-        int8_t **AwnnEngine::output_buffers()
-        {
-            if (!valid_ || !outputs_ready_ || !outputs_are_int8_ || output_ptrs_.empty())
-            {
-                return nullptr;
-            }
-            return output_ptrs_.data();
-        }
-
-        float **AwnnEngine::output_buffers_float()
-        {
-            if (!valid_ || !outputs_ready_ || !outputs_are_fp32_ || output_float_ptrs_.empty())
-            {
-                return nullptr;
-            }
-            return output_float_ptrs_.data();
-        }
-
-        float *AwnnEngine::output_float(std::uint32_t index)
-        {
-            if (!valid_ || !outputs_ready_ || !outputs_are_fp32_ || index >= output_float_ptrs_.size())
-            {
-                return nullptr;
-            }
-            return output_float_ptrs_[index];
-        }
-
-        int8_t *AwnnEngine::output_int8(std::uint32_t index)
-        {
-            if (!valid_ || !outputs_ready_ || !outputs_are_int8_ || index >= output_ptrs_.size())
-            {
-                return nullptr;
-            }
-            return output_ptrs_[index];
-        }
-
         std::vector<post_process::TensorView> AwnnEngine::borrow_output_views() const
         {
             std::vector<post_process::TensorView> views;
@@ -684,20 +638,20 @@ namespace deploy_percept
             {
                 post_process::TensorView view{};
                 view.byte_size = output_buffer_byte_size(i);
+                view.data =
+                    (i < output_data_.size()) ? output_data_[i] : nullptr;
 
-                if (outputs_are_fp32_ && i < output_float_ptrs_.size())
+                switch (output_dtype_)
                 {
+                case OutputDtype::Fp32:
                     view.dtype = post_process::TensorDtype::FP32;
-                    view.data = output_float_ptrs_[i];
-                }
-                else if (outputs_are_int8_ && i < output_ptrs_.size())
-                {
+                    break;
+                case OutputDtype::Int8:
                     view.dtype = post_process::TensorDtype::INT8;
-                    view.data = output_ptrs_[i];
-                }
-                else
-                {
+                    break;
+                default:
                     view.data = nullptr;
+                    break;
                 }
 
                 views.push_back(view);

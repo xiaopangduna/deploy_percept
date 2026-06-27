@@ -36,12 +36,12 @@ BenchStats bench_output_path(
     BenchStats stats{};
     const std::size_t input_size = input_nchw.size();
     const int total = warmup + loops;
-    double npu_sum = 0;
-    double output_sum = 0;
+    double run_sum = 0;
     double post_sum = 0;
 
     for (int i = 0; i < total; ++i)
     {
+        const auto run_t0 = std::chrono::steady_clock::now();
         if (!engine.run(input_nchw.data(), input_size))
         {
             std::fprintf(
@@ -51,6 +51,7 @@ BenchStats bench_output_path(
                 i);
             return stats;
         }
+        const auto run_t1 = std::chrono::steady_clock::now();
 
         const auto post_t0 = std::chrono::steady_clock::now();
         OutputAccess out(engine);
@@ -63,9 +64,7 @@ BenchStats bench_output_path(
 
         if (i >= warmup)
         {
-            const deploy_percept::engine::RunTiming &timing = engine.last_run_timing();
-            npu_sum += timing.npu_ms;
-            output_sum += timing.output_fetch_ms;
+            run_sum += std::chrono::duration<double, std::milli>(run_t1 - run_t0).count();
             post_sum += std::chrono::duration<double, std::milli>(post_t1 - post_t0).count();
         }
     }
@@ -75,10 +74,9 @@ BenchStats bench_output_path(
         return stats;
     }
 
-    stats.npu_ms_avg = npu_sum / loops;
-    stats.output_fetch_ms_avg = output_sum / loops;
+    stats.run_ms_avg = run_sum / loops;
     stats.post_ms_avg = post_sum / loops;
-    stats.output_plus_post_ms_avg = stats.output_fetch_ms_avg + stats.post_ms_avg;
+    stats.pipeline_ms_avg = stats.run_ms_avg + stats.post_ms_avg;
     return stats;
 }
 
@@ -93,24 +91,23 @@ void print_bench_compare(
 
     auto print_row = [](const char *label, const BenchStats &s) {
         std::printf(
-            "%-10s  npu=%6.2f ms  output_fetch=%6.2f ms  post=%6.2f ms  output+post=%6.2f ms\n",
+            "%-10s  run=%6.2f ms  post=%6.2f ms  pipeline=%6.2f ms\n",
             label,
-            s.npu_ms_avg,
-            s.output_fetch_ms_avg,
+            s.run_ms_avg,
             s.post_ms_avg,
-            s.output_plus_post_ms_avg);
+            s.pipeline_ms_avg);
     };
 
     print_row("Mapped", mapped);
     print_row("HostCopy", host_copy);
 
-    if (host_copy.output_plus_post_ms_avg > 0)
+    if (host_copy.pipeline_ms_avg > 0)
     {
         const double delta =
-            (mapped.output_plus_post_ms_avg - host_copy.output_plus_post_ms_avg) /
-            host_copy.output_plus_post_ms_avg * 100.0;
+            (mapped.pipeline_ms_avg - host_copy.pipeline_ms_avg) /
+            host_copy.pipeline_ms_avg * 100.0;
         std::printf(
-            "\noutput+post: Mapped vs HostCopy %+.1f%% (%s faster)\n",
+            "\npipeline: Mapped vs HostCopy %+.1f%% (%s faster)\n",
             delta,
             delta <= 0 ? "Mapped" : "HostCopy");
     }

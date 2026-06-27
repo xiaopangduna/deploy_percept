@@ -26,7 +26,8 @@
                 "ms-vscode.cmake-tools",
                 "ms-vscode.cpptools",
                 "ms-python.python",
-                "SimpleToolsDev.opencv-image"
+                "SimpleToolsDev.opencv-image",
+                "anysphere.cpptools"
             ]
         }
     }
