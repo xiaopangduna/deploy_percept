@@ -16,7 +16,8 @@
         }
     },
     "mounts": [
-        "source=/opt/toolchains,target=/opt/toolchains,type=bind"
+        "source=/opt/toolchains,target=/opt/toolchains,type=bind",
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
     ],
     "runArgs": [
         "--env=DISPLAY=${env:DISPLAY}",
