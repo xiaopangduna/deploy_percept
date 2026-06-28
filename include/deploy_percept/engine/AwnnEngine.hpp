@@ -41,7 +41,7 @@ namespace deploy_percept
             /**
              * 模型 IO 静态元信息（prepareIo 时从 VIP 解码）。
              * 初始化成功后只读；各 vector 按下标对应第 i 路 input/output。
-             * 输入 shape 假定 4D NCHW [N,C,H,W]。
+             * 输入 C/H/W 在 prepareIo 时从 VIP sizes + byte_size 解析（逻辑 NCHW）。
              */
             struct Info
             {

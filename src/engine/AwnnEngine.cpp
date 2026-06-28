@@ -6,6 +6,7 @@ extern "C" {
 #include "vip_lite.h"
 }
 
+#include <cstdio>
 #include <cstring>
 #include <optional>
 
@@ -65,21 +66,96 @@ namespace deploy_percept
                 return true;
             }
 
-            bool inputShapeNchw(
+            bool isTypicalChannelCount(vip_uint32_t c)
+            {
+                return c == 1 || c == 3 || c == 4;
+            }
+
+            /** 从 VIPLite sizes 解析 C/H/W，兼容 NCHW / NHWC 等，并用 byte_size 校验 */
+            bool parseInputImageDims(
                 vip_uint32_t num_dims,
                 const vip_uint32_t *sizes,
+                vip_uint32_t byte_size,
                 std::uint32_t &channels,
                 std::uint32_t &height,
                 std::uint32_t &width)
             {
-                if (num_dims != 4)
+                struct Candidate
+                {
+                    vip_uint32_t c;
+                    vip_uint32_t h;
+                    vip_uint32_t w;
+                };
+
+                Candidate candidates[4]{};
+                std::size_t candidate_count = 0;
+
+                if (num_dims == 4)
+                {
+                    candidates[0] = {sizes[1], sizes[2], sizes[3]}; // NCHW
+                    candidates[1] = {sizes[3], sizes[1], sizes[2]}; // NHWC
+                    candidates[2] = {sizes[2], sizes[0], sizes[1]}; // HWC + padding
+                    candidates[3] = {sizes[0], sizes[1], sizes[2]}; // CHW + padding
+                    candidate_count = 4;
+                }
+                else if (num_dims == 3)
+                {
+                    candidates[0] = {sizes[0], sizes[1], sizes[2]}; // CHW
+                    candidates[1] = {sizes[2], sizes[0], sizes[1]}; // HWC
+                    candidate_count = 2;
+                }
+                else
                 {
                     return false;
                 }
-                channels = sizes[1];
-                height = sizes[2];
-                width = sizes[3];
-                return channels > 0 && height > 0 && width > 0;
+
+                const Candidate *best = nullptr;
+                const Candidate *fallback = nullptr;
+
+                for (std::size_t i = 0; i < candidate_count; ++i)
+                {
+                    const Candidate &cand = candidates[i];
+                    if (cand.c == 0 || cand.h == 0 || cand.w == 0)
+                    {
+                        continue;
+                    }
+                    const std::uint64_t product =
+                        static_cast<std::uint64_t>(cand.c) * cand.h * cand.w;
+                    if (product != byte_size)
+                    {
+                        continue;
+                    }
+                    if (isTypicalChannelCount(cand.c))
+                    {
+                        best = &cand;
+                        break;
+                    }
+                    if (fallback == nullptr)
+                    {
+                        fallback = &cand;
+                    }
+                }
+
+                const Candidate *picked = best != nullptr ? best : fallback;
+                if (picked == nullptr)
+                {
+                    std::fprintf(
+                        stderr,
+                        "AwnnEngine: cannot parse input shape (num_dims=%u byte_size=%u",
+                        num_dims,
+                        byte_size);
+                    for (vip_uint32_t d = 0; d < num_dims; ++d)
+                    {
+                        std::fprintf(stderr, " sizes[%u]=%u", d, sizes[d]);
+                    }
+                    std::fprintf(stderr, ")\n");
+                    return false;
+                }
+
+                channels = picked->c;
+                height = picked->h;
+                width = picked->w;
+                return true;
             }
 
             std::optional<post_process::TensorDtype> dtypeFromFormat(int format)
@@ -197,10 +273,13 @@ namespace deploy_percept
                     return false;
                 }
 
+                const std::uint32_t byte_size = vip_get_buffer_size(buffer);
+
                 std::uint32_t channels = 0;
                 std::uint32_t height = 0;
                 std::uint32_t width = 0;
-                if (!inputShapeNchw(param.num_of_dims, param.sizes, channels, height, width))
+                if (!parseInputImageDims(
+                        param.num_of_dims, param.sizes, byte_size, channels, height, width))
                 {
                     vip_destroy_buffer(buffer);
                     return false;
@@ -217,7 +296,7 @@ namespace deploy_percept
                 info_.input_channels.push_back(channels);
                 info_.input_heights.push_back(height);
                 info_.input_widths.push_back(width);
-                info_.input_byte_sizes.push_back(vip_get_buffer_size(buffer));
+                info_.input_byte_sizes.push_back(byte_size);
                 info_.input_dtypes.push_back(*dtype);
             }
 
