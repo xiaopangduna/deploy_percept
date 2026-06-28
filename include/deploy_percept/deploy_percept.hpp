@@ -17,8 +17,9 @@
 #include "engine/EngineFactory.hpp"
 #ifdef AWNN_FOUND
 #include "engine/AwnnEngine.hpp"
+#include "engine/VipLiteRuntime.hpp"
+#include "engine/AwnnResultGuard.hpp"
 #endif
-#include "engine/OutputAccess.hpp"
 #include "engine/RknnEngine.hpp"
 
 

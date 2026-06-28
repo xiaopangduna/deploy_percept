@@ -39,7 +39,6 @@ set(SOURCES_FILE
     src/utils/npy.cpp
     src/utils/io.cpp
     src/engine/BaseEngine.cpp
-    src/engine/OutputAccess.cpp
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
@@ -79,6 +78,7 @@ endif()
 if(AWNN_FOUND)
     target_sources(deploy_percept PRIVATE
         src/engine/AwnnEngine.cpp
+        src/engine/VipLiteRuntime.cpp
     )
     target_link_libraries(deploy_percept PUBLIC AWNN::VIPLite pthread)
     target_compile_definitions(deploy_percept PUBLIC AWNN_FOUND=1)

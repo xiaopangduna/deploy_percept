@@ -42,10 +42,10 @@ namespace deploy_percept
             std::vector<float> &filterBoxes,
             std::vector<float> &objProbs,
             std::vector<int> &classId,
-            int validCount,
-            int model_in_h,
-            int model_in_w)
+            int validCount)
         {
+            const int model_in_h = params_.model_in_h;
+            const int model_in_w = params_.model_in_w;
             if (validCount <= 0)
             {
                 result_.message = "No objects detected";
@@ -111,13 +111,13 @@ namespace deploy_percept
             const float *feat,
             int stride,
             const std::vector<int> &anchors,
-            int model_in_h,
-            int model_in_w,
             std::vector<float> &boxes,
             std::vector<float> &objProbs,
             std::vector<int> &classId,
             float threshold)
         {
+            const int model_in_h = params_.model_in_h;
+            const int model_in_w = params_.model_in_w;
             const int anchor_num = 3;
             const int feat_w = model_in_w / stride;
             const int feat_h = model_in_h / stride;
@@ -186,11 +186,15 @@ namespace deploy_percept
             return validCount;
         }
 
-        bool YoloV5DetectPostProcessAwnn::run(
-            const std::vector<TensorView> &inputs,
-            int model_in_h,
-            int model_in_w)
+        bool YoloV5DetectPostProcessAwnn::run(const std::vector<TensorView> &inputs)
         {
+            if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
+            {
+                result_.success = false;
+                result_.message = "Invalid Params: model_in_h and model_in_w must be positive";
+                return false;
+            }
+
             if (inputs.size() != 3)
             {
                 result_.success = false;
@@ -228,8 +232,6 @@ namespace deploy_percept
                 head_ptrs[0],
                 8,
                 params_.anchor_stride8,
-                model_in_h,
-                model_in_w,
                 filterBoxes,
                 objProbs,
                 classId,
@@ -239,8 +241,6 @@ namespace deploy_percept
                 head_ptrs[1],
                 16,
                 params_.anchor_stride16,
-                model_in_h,
-                model_in_w,
                 filterBoxes,
                 objProbs,
                 classId,
@@ -250,15 +250,13 @@ namespace deploy_percept
                 head_ptrs[2],
                 32,
                 params_.anchor_stride32,
-                model_in_h,
-                model_in_w,
                 filterBoxes,
                 objProbs,
                 classId,
                 params_.conf_threshold);
 
             const int validCount = validCount0 + validCount1 + validCount2;
-            return finalizeDetections(filterBoxes, objProbs, classId, validCount, model_in_h, model_in_w);
+            return finalizeDetections(filterBoxes, objProbs, classId, validCount);
         }
 
     } // namespace post_process

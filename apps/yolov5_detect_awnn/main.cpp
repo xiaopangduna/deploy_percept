@@ -16,14 +16,15 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/engine/OutputAccess.hpp"
+#include "deploy_percept/engine/VipLiteRuntime.hpp"
+#include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::OutputAccess;
-using deploy_percept::engine::OutputFetch;
+using deploy_percept::engine::AwnnResultGuard;
+using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 
 namespace
@@ -63,9 +64,10 @@ bool prepare_input_nchw(
     cv::Mat &model_input,
     std::vector<std::uint8_t> &input_nchw)
 {
-    const int model_w = static_cast<int>(engine.input_width());
-    const int model_h = static_cast<int>(engine.input_height());
-    const int model_c = static_cast<int>(engine.input_channels());
+    const auto &model_info = engine.getInfo();
+    const int model_c = static_cast<int>(model_info.input_channels.at(0));
+    const int model_h = static_cast<int>(model_info.input_heights.at(0));
+    const int model_w = static_cast<int>(model_info.input_widths.at(0));
 
     cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
     if (orig.empty())
@@ -103,22 +105,29 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    AwnnEngine::Params engine_params;
+    VipLiteRuntime runtime;
+    if (!runtime.ok())
+    {
+        std::fprintf(
+            stderr,
+            "VipLiteRuntime init failed (set LD_LIBRARY_PATH to VIPLite lib dir)\n");
+        return 1;
+    }
+
+    AwnnEngine::Param engine_params;
     engine_params.model_path = model_path;
-    engine_params.output_fetch = OutputFetch::HostCopy;
 
     AwnnEngine engine(engine_params);
     if (!engine.is_valid())
     {
-        std::fprintf(
-            stderr,
-            "AwnnEngine init failed (set LD_LIBRARY_PATH to VIPLite lib dir)\n");
+        std::fprintf(stderr, "AwnnEngine init failed\n");
         return 1;
     }
 
-    const int model_w = static_cast<int>(engine.input_width());
-    const int model_h = static_cast<int>(engine.input_height());
-    const int model_c = static_cast<int>(engine.input_channels());
+    const auto &model_info = engine.getInfo();
+    const int model_c = static_cast<int>(model_info.input_channels.at(0));
+    const int model_h = static_cast<int>(model_info.input_heights.at(0));
+    const int model_w = static_cast<int>(model_info.input_widths.at(0));
     std::printf("  model input: %dx%dx%d (C×H×W)\n", model_c, model_h, model_w);
 
     cv::Mat model_input;
@@ -134,15 +143,19 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    OutputAccess out(engine);
-    if (out.empty())
+    AwnnResultGuard engine_result_guard(engine);
+    if (engine_result_guard.empty())
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
     }
 
-    YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
-    if (!processor.run(out.views(), model_h, model_w))
+    YoloV5DetectPostProcessAwnn::Params post_params;
+    post_params.model_in_h = static_cast<int>(model_info.input_heights.at(0));
+    post_params.model_in_w = static_cast<int>(model_info.input_widths.at(0));
+
+    YoloV5DetectPostProcessAwnn processor(post_params);
+    if (!processor.run(engine_result_guard.views()))
     {
         std::fprintf(stderr, "post process failed: %s\n", processor.getResult().message.c_str());
         return 1;

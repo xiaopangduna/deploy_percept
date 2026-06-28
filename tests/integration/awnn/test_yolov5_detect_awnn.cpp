@@ -9,7 +9,8 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/engine/OutputAccess.hpp"
+#include "deploy_percept/engine/VipLiteRuntime.hpp"
+#include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/post_process/types.hpp"
 #include "tests/test_common/paths.hpp"
@@ -19,8 +20,8 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::OutputAccess;
-using deploy_percept::engine::OutputFetch;
+using deploy_percept::engine::AwnnResultGuard;
+using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::DetectionObject;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 using percept::test::app_data;
@@ -65,9 +66,10 @@ bool prepare_input_nchw(
     const std::string &input_path,
     std::vector<std::uint8_t> &input_nchw)
 {
-    const int model_w = static_cast<int>(engine.input_width());
-    const int model_h = static_cast<int>(engine.input_height());
-    const int model_c = static_cast<int>(engine.input_channels());
+    const auto &model_info = engine.getInfo();
+    const int model_c = static_cast<int>(model_info.input_channels.at(0));
+    const int model_h = static_cast<int>(model_info.input_heights.at(0));
+    const int model_w = static_cast<int>(model_info.input_widths.at(0));
 
     cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
     if (orig.empty())
@@ -123,14 +125,19 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
     const fs::path input_path = app_data("yolov5_detect_awnn/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
-    AwnnEngine::Params engine_params;
+    VipLiteRuntime runtime;
+    if (!runtime.ok())
+    {
+        GTEST_SKIP() << "VipLiteRuntime init failed (need AWNN NPU + LD_LIBRARY_PATH)";
+    }
+
+    AwnnEngine::Param engine_params;
     engine_params.model_path = model_path.string();
-    engine_params.output_fetch = OutputFetch::HostCopy;
 
     AwnnEngine engine(engine_params);
     if (!engine.is_valid())
     {
-        GTEST_SKIP() << "AwnnEngine init failed (need AWNN NPU + LD_LIBRARY_PATH)";
+        GTEST_SKIP() << "AwnnEngine init failed";
     }
 
     std::vector<std::uint8_t> input_nchw;
@@ -139,14 +146,15 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
 
     ASSERT_TRUE(engine.run(input_nchw.data(), input_nchw.size()));
 
-    const int model_h = static_cast<int>(engine.input_height());
-    const int model_w = static_cast<int>(engine.input_width());
+    AwnnResultGuard engine_result_guard(engine);
+    ASSERT_FALSE(engine_result_guard.empty());
 
-    OutputAccess out(engine);
-    ASSERT_FALSE(out.empty());
+    YoloV5DetectPostProcessAwnn::Params post_params;
+    post_params.model_in_h = static_cast<int>(engine.getInfo().input_heights.at(0));
+    post_params.model_in_w = static_cast<int>(engine.getInfo().input_widths.at(0));
 
-    YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
-    ASSERT_TRUE(processor.run(out.views(), model_h, model_w)) << processor.getResult().message;
+    YoloV5DetectPostProcessAwnn processor(post_params);
+    ASSERT_TRUE(processor.run(engine_result_guard.views())) << processor.getResult().message;
 
     expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detection_objects);
 }

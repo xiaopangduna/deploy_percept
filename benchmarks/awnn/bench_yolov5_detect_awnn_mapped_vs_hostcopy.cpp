@@ -1,5 +1,5 @@
 /**
- * AWNN YOLOv5 检测：Mapped（设备映射）vs HostCopy（拷回 host）输出路径性能对比
+ * AWNN YOLOv5 检测：Mapped（直接读 map）vs HostCopy（post 前 memcpy）性能对比
  *
  * 用法:
  *   bench_yolov5_detect_awnn_mapped_vs_hostcopy [loops] [model.nb] [input.jpg]
@@ -16,12 +16,13 @@
 
 #include "bench_output.hpp"
 #include "deploy_percept/engine/AwnnEngine.hpp"
+#include "deploy_percept/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::OutputFetch;
+using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 using percept::bench::awnn::bench_output_path;
 using percept::bench::awnn::print_bench_compare;
@@ -122,9 +123,10 @@ bool prepare_input_nchw(
     const std::string &input_path,
     std::vector<std::uint8_t> &input_nchw)
 {
-    const int model_w = static_cast<int>(engine.input_width());
-    const int model_h = static_cast<int>(engine.input_height());
-    const int model_c = static_cast<int>(engine.input_channels());
+    const auto &model_info = engine.getInfo();
+    const int model_c = static_cast<int>(model_info.input_channels.at(0));
+    const int model_h = static_cast<int>(model_info.input_heights.at(0));
+    const int model_w = static_cast<int>(model_info.input_widths.at(0));
 
     cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
     if (orig.empty())
@@ -162,7 +164,7 @@ int main(int argc, char **argv)
     const std::string input_path = resolve_path(input_arg, base);
 
     std::printf("bench_yolov5_detect_awnn_mapped_vs_hostcopy\n");
-    std::printf("  compare: Mapped (device-mapped) vs HostCopy\n");
+    std::printf("  compare: Mapped vs HostCopy (copy in benchmark post phase)\n");
     std::printf("  model  : %s\n", model_path.c_str());
     std::printf("  input  : %s\n", input_path.c_str());
     std::printf("  warmup : %d  loops: %d\n", kWarmup, loops);
@@ -178,53 +180,53 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    AwnnEngine::Params host_copy_params;
-    host_copy_params.model_path = model_path;
-    host_copy_params.output_fetch = OutputFetch::HostCopy;
-
-    AwnnEngine host_copy_engine(host_copy_params);
-    if (!host_copy_engine.is_valid())
+    VipLiteRuntime runtime;
+    if (!runtime.ok())
     {
         std::fprintf(
             stderr,
-            "AwnnEngine (HostCopy) init failed (check LD_LIBRARY_PATH=$PWD/lib)\n");
+            "VipLiteRuntime init failed (check LD_LIBRARY_PATH=$PWD/lib)\n");
         return 1;
     }
 
-    AwnnEngine::Params mapped_params = host_copy_params;
-    mapped_params.output_fetch = OutputFetch::Mapped;
+    AwnnEngine::Param params;
+    params.model_path = model_path;
 
-    AwnnEngine mapped_engine(mapped_params);
-    if (!mapped_engine.is_valid())
+    AwnnEngine engine(params);
+    if (!engine.is_valid())
     {
-        std::fprintf(stderr, "AwnnEngine (Mapped) init failed\n");
+        std::fprintf(stderr, "AwnnEngine init failed\n");
         return 1;
     }
 
-    const int model_w = static_cast<int>(host_copy_engine.input_width());
-    const int model_h = static_cast<int>(host_copy_engine.input_height());
-    const int model_c = static_cast<int>(host_copy_engine.input_channels());
+    const auto &model_info = engine.getInfo();
+    const int model_c = static_cast<int>(model_info.input_channels.at(0));
+    const int model_h = static_cast<int>(model_info.input_heights.at(0));
+    const int model_w = static_cast<int>(model_info.input_widths.at(0));
     std::printf("  model input: %dx%dx%d (C×H×W)\n", model_c, model_h, model_w);
 
     std::vector<std::uint8_t> input_nchw;
-    if (!prepare_input_nchw(host_copy_engine, input_path, input_nchw))
+    if (!prepare_input_nchw(engine, input_path, input_nchw))
     {
         return 1;
     }
 
-    YoloV5DetectPostProcessAwnn processor(YoloV5DetectPostProcessAwnn::Params{});
+    YoloV5DetectPostProcessAwnn::Params post_params;
+    post_params.model_in_h = model_h;
+    post_params.model_in_w = model_w;
+    YoloV5DetectPostProcessAwnn processor(post_params);
 
     std::printf("\noutput bytes per head:");
-    for (std::uint32_t i = 0; i < host_copy_engine.output_count(); ++i)
+    for (std::size_t i = 0; i < engine.getInfo().output_byte_sizes.size(); ++i)
     {
-        std::printf(" [%u]=%u", i, host_copy_engine.output_buffer_byte_size(i));
+        std::printf(" [%zu]=%u", i, engine.getInfo().output_byte_sizes[i]);
     }
     std::printf("\n");
 
     const percept::bench::awnn::BenchStats mapped_stats =
-        bench_output_path(mapped_engine, processor, input_nchw, model_h, model_w, kWarmup, loops);
+        bench_output_path(engine, processor, input_nchw, kWarmup, loops, false);
     const percept::bench::awnn::BenchStats copy_stats =
-        bench_output_path(host_copy_engine, processor, input_nchw, model_h, model_w, kWarmup, loops);
+        bench_output_path(engine, processor, input_nchw, kWarmup, loops, true);
 
     print_bench_compare(mapped_stats, copy_stats, kWarmup, loops);
     return 0;

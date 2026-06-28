@@ -15,125 +15,90 @@ namespace deploy_percept
     namespace engine
     {
 
-        /** 构造时指定输出取数策略（整个 engine 实例固定） */
-        enum class OutputFetch
-        {
-            HostCopy, ///< 非零拷贝：memcpy 到 engine 内 host 缓冲（默认，对齐 ai-sdk）
-            Mapped,   ///< 零拷贝：map VIP 输出，post 后须 release_output_views()
-        };
-
-        /** VIPLite 推理引擎：暴露 raw 输出（INT8/UINT8 或 FP32） */
+        /**
+         * Allwinner VIPLite 推理引擎。
+         *
+         * 前置条件：进程内已成功 vip_init（通常由 app 层 VipLiteRuntime RAII 保证；
+         * VipLiteRuntime 须在 AwnnEngine 之前构造、之后析构）。
+         *
+         * 典型流程：
+         *   AwnnEngine engine(param);
+         *   engine.run(input, size);
+         *   post(engine.getResult().outputs, ...);
+         *   engine.releaseResult();   // 或 AwnnResultGuard RAII
+         *
+         * getResult().outputs 为 mapped 内存的非 owning 视图，有效至 releaseResult() 或下次 run()。
+         */
         class AwnnEngine : public BaseEngine
         {
         public:
-            struct Params
+            /** 构造参数 */
+            struct Param
             {
                 std::string model_path;
-                OutputFetch output_fetch{OutputFetch::HostCopy};
             };
-
-            explicit AwnnEngine(const Params &params);
-            ~AwnnEngine();
-
-            const Params &getParams() const { return params_; }
-            bool is_valid() const { return valid_; }
 
             /**
-             * 推理：输入 copy 到 VIP；输出策略由 Params::output_fetch 决定。
-             * HostCopy：借出 views 指向 engine host 缓冲，有效至下次 run。
-             * Mapped：借出 mapped VIP 指针，须 release_output_views() 或 OutputAccess 析构。
+             * 模型 IO 静态元信息（prepareIo 时从 VIP 解码）。
+             * 初始化成功后只读；各 vector 按下标对应第 i 路 input/output。
+             * 输入 shape 假定 4D NCHW [N,C,H,W]。
              */
+            struct Info
+            {
+                std::vector<std::uint32_t> input_channels;
+                std::vector<std::uint32_t> input_heights;
+                std::vector<std::uint32_t> input_widths;
+                std::vector<std::uint32_t> input_byte_sizes;
+                std::vector<post_process::TensorDtype> input_dtypes;
+
+                std::vector<std::uint32_t> output_byte_sizes;
+                std::vector<post_process::TensorDtype> output_dtypes;
+            };
+
+            /** 最近一次 run 的 raw 输出；outputs 指向 VIP mapped 内存，不拥有数据 */
+            struct Result
+            {
+                bool ready{false};
+                std::vector<post_process::TensorView> outputs;
+            };
+
+            explicit AwnnEngine(const Param &param);
+            ~AwnnEngine();
+
+            const Param &getParam() const { return param_; }
+            const Info &getInfo() const { return info_; }
+            const Result &getResult() const { return result_; }
+
+            /** 构造是否成功（模型加载、IO 准备、vip_prepare_network） */
+            bool is_valid() const { return valid_; }
+
+            /** 拷贝输入 → 推理 → map 输出并填充 getResult() */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
-            /** 归还 borrow_output_views() 借出的视图；Mapped 时 unmap，HostCopy 时 no-op */
-            void release_output_views() override;
-
-            /** 输入 spatial/channel 尺寸（自模型 query，兼容 NCHW / NHWC layout 报告） */
-            std::uint32_t input_channels(std::uint32_t index = 0) const
-            {
-                return input_attrs_.at(index).channels;
-            }
-            std::uint32_t input_height(std::uint32_t index = 0) const
-            {
-                return input_attrs_.at(index).height;
-            }
-            std::uint32_t input_width(std::uint32_t index = 0) const
-            {
-                return input_attrs_.at(index).width;
-            }
-            std::uint32_t output_buffer_byte_size(std::uint32_t index) const
-            {
-                return output_byte_sizes_.at(index);
-            }
-            std::uint32_t output_count() const
-            {
-                return static_cast<std::uint32_t>(output_buffers_vip_.size());
-            }
-
-            /** run 成功后借出输出 TensorView；有效至 release_output_views() 或下次 run() */
-            std::vector<post_process::TensorView> borrow_output_views() const override;
+            /** unmap 输出并清空 getResult()；析构与下次 run() 前也会调用 */
+            void releaseResult();
 
         private:
-            /** 最近一次 run 成功后输出视图的存储方式（内部状态） */
-            enum class OutputStorage
-            {
-                None,
-                Mapped,
-                HostCopy,
-            };
-
-            /** 模型全部输出的统一 dtype（prepareIo 时确定） */
-            enum class OutputDtype : std::uint8_t
-            {
-                None,
-                Int8,
-                Fp32,
-            };
-
-            void acquireRuntime();
-            void releaseRuntime();
-
             bool createNetwork();
             bool prepareIo();
             void destroyNetwork();
 
-            bool run_impl(const void *input_buffer, std::size_t input_byte_size, bool copy_outputs_to_host);
             bool copyInput(const void *user_input, std::size_t input_byte_size);
-            bool fetch_outputs_mapped();
-            bool fetch_outputs_copy();
+            bool map_outputs();
             void release_outputs_unlocked();
-            static OutputDtype dtypeFromFormat(int format);
 
-            struct InputAttr
-            {
-                std::vector<std::uint32_t> dims;
-                std::uint32_t channels{0};
-                std::uint32_t height{0};
-                std::uint32_t width{0};
-            };
+            Param param_;
+            Info info_{};
+            Result result_{};
 
-            Params params_;
             bool valid_{false};
             bool network_prepared_{false};
             void *network_{nullptr};
             mutable std::mutex mutex_;
 
             std::vector<void *> input_buffers_;
-            std::vector<std::uint32_t> input_byte_sizes_;
-            std::vector<InputAttr> input_attrs_;
             std::vector<void *> output_buffers_vip_;
-            std::vector<std::uint32_t> output_byte_sizes_;
-
-            std::vector<std::vector<uint8_t>> output_raw_storage_;
-            std::vector<bool> output_mapped_;
             std::vector<void *> output_data_;
-            OutputDtype output_dtype_{OutputDtype::None};
-
-            bool outputs_ready_{false};
-            OutputStorage output_storage_{OutputStorage::None};
-
-            static int runtime_ref_count_;
-            bool runtime_acquired_{false};
         };
 
     } // namespace engine

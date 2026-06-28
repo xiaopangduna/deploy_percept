@@ -16,39 +16,26 @@ namespace deploy_percept
         class RknnEngine : public BaseEngine
         {
         public:
-            // 参数配置结构体
             struct Params
             {
                 std::string model_path;
             };
 
-            // 结果结构体
-            struct Result
-            {
-            };
-
-            // 使用参数结构体的构造函数
             explicit RknnEngine(const Params &params);
             ~RknnEngine();
             const Params &getParams() const { return params_; }
-            const Result &getResult() const { return result_; }
 
             bool run(rknn_input inputs[], rknn_output outputs[]);
-
-            std::vector<post_process::TensorView> borrow_output_views() const override;
-            void release_output_views() override;
 
             rknn_context ctx_;
             rknn_input_output_num model_io_num_;
             std::vector<rknn_tensor_attr> model_input_attrs_;
             std::vector<rknn_tensor_attr> model_output_attrs_;
 
-            // 添加dump_tensor_attr函数
             static void dump_tensor_attr(rknn_tensor_attr *attr);
 
         private:
             Params params_;
-            Result result_{};
 
             std::vector<unsigned char> model_binary_data_;
             size_t model_binary_size_;

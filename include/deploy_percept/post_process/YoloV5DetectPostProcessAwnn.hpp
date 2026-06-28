@@ -20,6 +20,10 @@ namespace deploy_percept
         public:
             struct Params
             {
+                /** 模型输入高宽（与 engine.getInfo() 一致，构造时指定） */
+                int model_in_h{0};
+                int model_in_w{0};
+
                 float conf_threshold = 0.25f;
                 float nms_threshold = 0.45f;
                 int obj_class_num = 80;
@@ -44,10 +48,7 @@ namespace deploy_percept
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }
 
-            bool run(
-                const std::vector<TensorView> &inputs,
-                int model_in_h,
-                int model_in_w);
+            bool run(const std::vector<TensorView> &inputs);
 
         private:
             void resetResult();
@@ -56,16 +57,12 @@ namespace deploy_percept
                 std::vector<float> &filterBoxes,
                 std::vector<float> &objProbs,
                 std::vector<int> &classId,
-                int validCount,
-                int model_in_h,
-                int model_in_w);
+                int validCount);
 
             int decodeDetectionHeadFp32(
                 const float *feat,
                 int stride,
                 const std::vector<int> &anchors,
-                int model_in_h,
-                int model_in_w,
                 std::vector<float> &boxes,
                 std::vector<float> &objProbs,
                 std::vector<int> &classId,

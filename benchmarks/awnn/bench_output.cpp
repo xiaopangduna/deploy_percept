@@ -1,9 +1,11 @@
 #include "bench_output.hpp"
 
-#include "deploy_percept/engine/OutputAccess.hpp"
+#include "deploy_percept/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/post_process/types.hpp"
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 namespace percept {
@@ -14,12 +16,38 @@ namespace
 {
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::OutputAccess;
-using deploy_percept::engine::OutputFetch;
+using deploy_percept::post_process::TensorView;
 
-const char *output_fetch_label(const AwnnEngine &engine)
+const char *bench_path_label(const bool host_copy_before_post)
 {
-    return engine.getParams().output_fetch == OutputFetch::Mapped ? "Mapped" : "HostCopy";
+    return host_copy_before_post ? "HostCopy" : "Mapped";
+}
+
+std::vector<TensorView> copy_views_to_host(const std::vector<TensorView> &mapped)
+{
+    static thread_local std::vector<std::vector<std::uint8_t>> host_storage;
+    host_storage.clear();
+    host_storage.resize(mapped.size());
+
+    std::vector<TensorView> host_views;
+    host_views.reserve(mapped.size());
+
+    for (std::size_t i = 0; i < mapped.size(); ++i)
+    {
+        const TensorView &view = mapped[i];
+        TensorView copy{};
+        copy.byte_size = view.byte_size;
+        copy.dtype = view.dtype;
+        if (view.data != nullptr && view.byte_size > 0)
+        {
+            host_storage[i].resize(view.byte_size);
+            std::memcpy(host_storage[i].data(), view.data, view.byte_size);
+            copy.data = host_storage[i].data();
+        }
+        host_views.push_back(copy);
+    }
+
+    return host_views;
 }
 
 } // namespace
@@ -28,10 +56,9 @@ BenchStats bench_output_path(
     AwnnEngine &engine,
     deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
     const std::vector<std::uint8_t> &input_nchw,
-    const int model_h,
-    const int model_w,
     const int warmup,
-    const int loops)
+    const int loops,
+    const bool host_copy_before_post)
 {
     BenchStats stats{};
     const std::size_t input_size = input_nchw.size();
@@ -47,18 +74,39 @@ BenchStats bench_output_path(
             std::fprintf(
                 stderr,
                 "bench: %s run() failed at iteration %d\n",
-                output_fetch_label(engine),
+                bench_path_label(host_copy_before_post),
                 i);
             return stats;
         }
         const auto run_t1 = std::chrono::steady_clock::now();
 
         const auto post_t0 = std::chrono::steady_clock::now();
-        OutputAccess out(engine);
-        if (out.empty() || !processor.run(out.views(), model_h, model_w))
+        if (host_copy_before_post)
         {
-            std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
-            return stats;
+            const std::vector<TensorView> &mapped = engine.getResult().outputs;
+            if (!engine.getResult().ready || mapped.empty())
+            {
+                std::fprintf(stderr, "bench: empty output at iteration %d\n", i);
+                engine.releaseResult();
+                return stats;
+            }
+
+            const std::vector<TensorView> host_views = copy_views_to_host(mapped);
+            engine.releaseResult();
+            if (!processor.run(host_views))
+            {
+                std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
+                return stats;
+            }
+        }
+        else
+        {
+            deploy_percept::engine::AwnnResultGuard engine_result_guard(engine);
+            if (engine_result_guard.empty() || !processor.run(engine_result_guard.views()))
+            {
+                std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
+                return stats;
+            }
         }
         const auto post_t1 = std::chrono::steady_clock::now();
 
@@ -87,7 +135,7 @@ void print_bench_compare(
     const int loops)
 {
     std::printf("\n=== AWNN output path benchmark (warmup=%d loops=%d) ===\n", warmup, loops);
-    std::printf("(preprocess excluded; input prepared once before bench)\n\n");
+    std::printf("(preprocess excluded; HostCopy = memcpy in post phase)\n\n");
 
     auto print_row = [](const char *label, const BenchStats &s) {
         std::printf(

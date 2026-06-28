@@ -241,7 +241,7 @@ configure_build_install() {
     mkdir -p "${build_dir}"
     cd "${build_dir}"
 
-    OPENCV_CACHE_DIR="../../opencv_${PLATFORM}_cache"
+    OPENCV_CACHE_DIR="../../opencv_cache"
     mkdir -p "${OPENCV_CACHE_DIR}"
 
     build_opencv_cmake_args

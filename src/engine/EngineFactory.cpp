@@ -4,7 +4,6 @@
 #include "deploy_percept/engine/AwnnEngine.hpp"
 #endif
 
-
 namespace deploy_percept
 {
     namespace engine
@@ -18,14 +17,17 @@ namespace deploy_percept
             case EngineType::RKNN:
                 return std::make_unique<RknnEngine>(RknnEngine::Params());
 #endif
-#ifdef AWNN_FOUND
-            case EngineType::AWNN:
-                return std::make_unique<AwnnEngine>(AwnnEngine::Params());
-#endif
             default:
                 return nullptr;
             }
         }
+
+#ifdef AWNN_FOUND
+        std::unique_ptr<AwnnEngine> EngineFactory::createAwnn(const AwnnEngine::Param &param)
+        {
+            return std::make_unique<AwnnEngine>(param);
+        }
+#endif
 
     } // namespace engine
 } // namespace deploy_percept
