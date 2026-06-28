@@ -1,8 +1,19 @@
 {
     "name": "ubuntu-22.04-allwinner",
+    "remoteUser": "vscode",
+    "updateRemoteUserUID": true,
     "build": {
         "dockerfile": "Dockerfile",
         "context": "../.."
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": false,
+            "username": "vscode",
+            "userUid": "automatic",
+            "userGid": "automatic",
+            "upgradePackages": false
+        }
     },
     "mounts": [
         "source=/opt/toolchains,target=/opt/toolchains,type=bind"

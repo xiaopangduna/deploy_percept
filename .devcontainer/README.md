@@ -20,13 +20,20 @@
 
 1. 命令面板：`Dev Containers: Open Container Configuration File`
 2. 选择 `.devcontainer/ubuntu-22.04-allwinner/devcontainer.json`
-3. **Reopen in Container** / 重建容器
+3. **Rebuild and Reopen in Container**（修改 devcontainer 配置后必须 Rebuild）
 
 ## ubuntu-22.04-allwinner
 
 - 基础镜像：Ubuntu 22.04（orangepi-build 官方推荐宿主机版本）
+- 运行用户：`vscode`（非 root；`updateRemoteUserUID` 与 WSL 宿主机 UID 对齐，避免 bind mount 出现 `nobody` 权限问题）
 - 挂载：`tmp/toolchains` → 容器内 `/opt/toolchains`
 - 预期工具链：`gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`（A733 内核 / 应用交叉编译）
+
+### Git 工作流
+
+- **WSL 里 pull/push/commit**：推荐；无需在容器内挂载 SSH，沿用 WSL 的 `~/.ssh` 或 HTTPS 凭据即可。
+- **容器里 pull/push/commit（SSH 远程）**：需在 `devcontainer.json` 额外挂载宿主机 `~/.ssh`，或配置 SSH agent 转发。
+- **容器里 pull/push/commit（HTTPS）**：无需挂载 SSH，使用 credential helper / PAT 即可。
 
 工具链准备示例：
 
