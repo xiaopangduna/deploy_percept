@@ -36,12 +36,16 @@ namespace deploy_percept
             struct Param
             {
                 std::string model_path;
+                /** 逻辑 NCHW，须满足 input_channels×input_height×input_width == VIP buffer 字节数 */
+                std::uint32_t input_channels{0};
+                std::uint32_t input_height{0};
+                std::uint32_t input_width{0};
             };
 
             /**
              * 模型 IO 静态元信息（prepareIo 时从 VIP 解码）。
              * 初始化成功后只读；各 vector 按下标对应第 i 路 input/output。
-             * 输入 C/H/W 在 prepareIo 时从 VIP sizes + byte_size 解析（逻辑 NCHW）。
+             * 输入 C/H/W 来自 Param（init 时与 VIP byte_size 校验）。
              */
             struct Info
             {

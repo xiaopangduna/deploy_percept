@@ -133,6 +133,9 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
 
     AwnnEngine::Param engine_params;
     engine_params.model_path = model_path.string();
+    engine_params.input_channels = 3;
+    engine_params.input_height = 640;
+    engine_params.input_width = 640;
 
     AwnnEngine engine(engine_params);
     if (!engine.is_valid())

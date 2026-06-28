@@ -191,6 +191,9 @@ int main(int argc, char **argv)
 
     AwnnEngine::Param params;
     params.model_path = model_path;
+    params.input_channels = 3;
+    params.input_height = 640;
+    params.input_width = 640;
 
     AwnnEngine engine(params);
     if (!engine.is_valid())

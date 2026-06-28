@@ -66,22 +66,14 @@ namespace deploy_percept
                 return true;
             }
 
-            bool isTypicalChannelCount(vip_uint32_t c)
-            {
-                return c == 1 || c == 3 || c == 4;
-            }
-
-            /** 从 VIPLite sizes 解析 C/H/W，兼容 NCHW / NHWC 等，并用 byte_size 校验 */
-            bool parseInputImageDims(
+            void logPossibleInputShapes(
                 vip_uint32_t num_dims,
                 const vip_uint32_t *sizes,
-                vip_uint32_t byte_size,
-                std::uint32_t &channels,
-                std::uint32_t &height,
-                std::uint32_t &width)
+                vip_uint32_t byte_size)
             {
                 struct Candidate
                 {
+                    const char *label;
                     vip_uint32_t c;
                     vip_uint32_t h;
                     vip_uint32_t w;
@@ -92,25 +84,26 @@ namespace deploy_percept
 
                 if (num_dims == 4)
                 {
-                    candidates[0] = {sizes[1], sizes[2], sizes[3]}; // NCHW
-                    candidates[1] = {sizes[3], sizes[1], sizes[2]}; // NHWC
-                    candidates[2] = {sizes[2], sizes[0], sizes[1]}; // HWC + padding
-                    candidates[3] = {sizes[0], sizes[1], sizes[2]}; // CHW + padding
+                    candidates[0] = {"NCHW", sizes[1], sizes[2], sizes[3]};
+                    candidates[1] = {"NHWC", sizes[3], sizes[1], sizes[2]};
+                    candidates[2] = {"HWC+pad", sizes[2], sizes[0], sizes[1]};
+                    candidates[3] = {"CHW+pad", sizes[0], sizes[1], sizes[2]};
                     candidate_count = 4;
                 }
                 else if (num_dims == 3)
                 {
-                    candidates[0] = {sizes[0], sizes[1], sizes[2]}; // CHW
-                    candidates[1] = {sizes[2], sizes[0], sizes[1]}; // HWC
+                    candidates[0] = {"CHW", sizes[0], sizes[1], sizes[2]};
+                    candidates[1] = {"HWC", sizes[2], sizes[0], sizes[1]};
                     candidate_count = 2;
                 }
-                else
-                {
-                    return false;
-                }
 
-                const Candidate *best = nullptr;
-                const Candidate *fallback = nullptr;
+                std::fprintf(stderr, "AwnnEngine: VIP raw sizes=[");
+                for (vip_uint32_t d = 0; d < num_dims; ++d)
+                {
+                    std::fprintf(stderr, "%s%u", d > 0 ? "," : "", sizes[d]);
+                }
+                std::fprintf(stderr, "], byte_size=%u\n", byte_size);
+                std::fprintf(stderr, "AwnnEngine: possible Param (input_channels, input_height, input_width):\n");
 
                 for (std::size_t i = 0; i < candidate_count; ++i)
                 {
@@ -121,40 +114,50 @@ namespace deploy_percept
                     }
                     const std::uint64_t product =
                         static_cast<std::uint64_t>(cand.c) * cand.h * cand.w;
-                    if (product != byte_size)
-                    {
-                        continue;
-                    }
-                    if (isTypicalChannelCount(cand.c))
-                    {
-                        best = &cand;
-                        break;
-                    }
-                    if (fallback == nullptr)
-                    {
-                        fallback = &cand;
-                    }
+                    std::fprintf(
+                        stderr,
+                        "  %ux%ux%u  (%s)%s\n",
+                        cand.c,
+                        cand.h,
+                        cand.w,
+                        cand.label,
+                        product == byte_size ? "  <-- matches buffer" : "");
                 }
+            }
 
-                const Candidate *picked = best != nullptr ? best : fallback;
-                if (picked == nullptr)
+            bool applyParamInputShape(
+                const AwnnEngine::Param &param,
+                vip_uint32_t byte_size,
+                std::uint32_t &channels,
+                std::uint32_t &height,
+                std::uint32_t &width)
+            {
+                if (param.input_channels == 0 || param.input_height == 0 || param.input_width == 0)
                 {
                     std::fprintf(
                         stderr,
-                        "AwnnEngine: cannot parse input shape (num_dims=%u byte_size=%u",
-                        num_dims,
-                        byte_size);
-                    for (vip_uint32_t d = 0; d < num_dims; ++d)
-                    {
-                        std::fprintf(stderr, " sizes[%u]=%u", d, sizes[d]);
-                    }
-                    std::fprintf(stderr, ")\n");
+                        "AwnnEngine: Param input_channels/height/width must be non-zero\n");
                     return false;
                 }
 
-                channels = picked->c;
-                height = picked->h;
-                width = picked->w;
+                const std::uint64_t product = static_cast<std::uint64_t>(param.input_channels) *
+                                              param.input_height * param.input_width;
+                if (product != byte_size)
+                {
+                    std::fprintf(
+                        stderr,
+                        "AwnnEngine: Param %ux%ux%u (%llu bytes) != buffer %u bytes\n",
+                        param.input_channels,
+                        param.input_height,
+                        param.input_width,
+                        static_cast<unsigned long long>(product),
+                        byte_size);
+                    return false;
+                }
+
+                channels = param.input_channels;
+                height = param.input_height;
+                width = param.input_width;
                 return true;
             }
 
@@ -275,11 +278,12 @@ namespace deploy_percept
 
                 const std::uint32_t byte_size = vip_get_buffer_size(buffer);
 
+                logPossibleInputShapes(param.num_of_dims, param.sizes, byte_size);
+
                 std::uint32_t channels = 0;
                 std::uint32_t height = 0;
                 std::uint32_t width = 0;
-                if (!parseInputImageDims(
-                        param.num_of_dims, param.sizes, byte_size, channels, height, width))
+                if (!applyParamInputShape(param_, byte_size, channels, height, width))
                 {
                     vip_destroy_buffer(buffer);
                     return false;
