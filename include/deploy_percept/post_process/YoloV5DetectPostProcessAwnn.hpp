@@ -20,7 +20,7 @@ namespace deploy_percept
         public:
             struct Params
             {
-                /** 模型输入高宽（与 engine.getInfo() 一致，构造时指定） */
+                /** 模型输入高宽（来自 engine.getInfo().input_sizes[0]，VIP 顺序 [W,H,C,N]） */
                 int model_in_h{0};
                 int model_in_w{0};
 

@@ -6,7 +6,7 @@ extern "C" {
 #include "vip_lite.h"
 }
 
-#include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <optional>
 
@@ -18,11 +18,25 @@ namespace deploy_percept
         namespace
         {
 
-            bool queryCreateParam(
+            std::optional<post_process::TensorDtype> dtypeFromFormat(int format)
+            {
+                if (format == VIP_BUFFER_FORMAT_INT8 || format == VIP_BUFFER_FORMAT_UINT8)
+                {
+                    return post_process::TensorDtype::INT8;
+                }
+                if (format == VIP_BUFFER_FORMAT_FP32)
+                {
+                    return post_process::TensorDtype::FP32;
+                }
+                return std::nullopt;
+            }
+
+            bool queryBufferMeta(
                 vip_network network,
                 vip_uint32_t index,
                 bool is_output,
-                vip_buffer_create_params_t &param)
+                vip_buffer_create_params_t &param,
+                std::string &name)
             {
                 std::memset(&param, 0, sizeof(param));
                 param.memory_type = VIP_BUFFER_MEMORY_TYPE_DEFAULT;
@@ -63,115 +77,95 @@ namespace deploy_percept
                         &param.quant_data.affine.zeroPoint);
                 }
 
+                vip_char_t name_buf[64] = {};
+                if (query(network, index, VIP_BUFFER_PROP_NAME, name_buf) != VIP_SUCCESS)
+                {
+                    return false;
+                }
+                name = name_buf;
                 return true;
             }
 
-            void logPossibleInputShapes(
-                vip_uint32_t num_dims,
-                const vip_uint32_t *sizes,
-                vip_uint32_t byte_size)
+            void appendBufferInfo(
+                AwnnEngine::Info &info,
+                bool is_output,
+                const vip_buffer_create_params_t &param,
+                std::uint32_t byte_size,
+                const std::string &name,
+                post_process::TensorDtype dtype)
             {
-                struct Candidate
-                {
-                    const char *label;
-                    vip_uint32_t c;
-                    vip_uint32_t h;
-                    vip_uint32_t w;
-                };
+                std::array<std::uint32_t, 6> sizes{};
+                std::copy_n(param.sizes, sizes.size(), sizes.begin());
 
-                Candidate candidates[4]{};
-                std::size_t candidate_count = 0;
-
-                if (num_dims == 4)
+                if (is_output)
                 {
-                    candidates[0] = {"NCHW", sizes[1], sizes[2], sizes[3]};
-                    candidates[1] = {"NHWC", sizes[3], sizes[1], sizes[2]};
-                    candidates[2] = {"HWC+pad", sizes[2], sizes[0], sizes[1]};
-                    candidates[3] = {"CHW+pad", sizes[0], sizes[1], sizes[2]};
-                    candidate_count = 4;
+                    info.output_num_dims.push_back(param.num_of_dims);
+                    info.output_sizes.push_back(sizes);
+                    info.output_dtypes.push_back(dtype);
+                    info.output_quant_formats.push_back(static_cast<std::uint32_t>(param.quant_format));
+                    info.output_fixed_point_pos.push_back(param.quant_data.dfp.fixed_point_pos);
+                    info.output_tf_scale.push_back(param.quant_data.affine.scale);
+                    info.output_tf_zero_point.push_back(
+                        static_cast<std::int32_t>(param.quant_data.affine.zeroPoint));
+                    info.output_byte_sizes.push_back(byte_size);
+                    info.output_names.push_back(name);
                 }
-                else if (num_dims == 3)
+                else
                 {
-                    candidates[0] = {"CHW", sizes[0], sizes[1], sizes[2]};
-                    candidates[1] = {"HWC", sizes[2], sizes[0], sizes[1]};
-                    candidate_count = 2;
+                    info.input_num_dims.push_back(param.num_of_dims);
+                    info.input_sizes.push_back(sizes);
+                    info.input_dtypes.push_back(dtype);
+                    info.input_quant_formats.push_back(static_cast<std::uint32_t>(param.quant_format));
+                    info.input_fixed_point_pos.push_back(param.quant_data.dfp.fixed_point_pos);
+                    info.input_tf_scale.push_back(param.quant_data.affine.scale);
+                    info.input_tf_zero_point.push_back(
+                        static_cast<std::int32_t>(param.quant_data.affine.zeroPoint));
+                    info.input_byte_sizes.push_back(byte_size);
+                    info.input_names.push_back(name);
+                }
+            }
+
+            bool prepareOneBuffer(
+                vip_network network,
+                vip_uint32_t index,
+                bool is_output,
+                AwnnEngine::Info &info,
+                std::vector<void *> &buffers)
+            {
+                vip_buffer_create_params_t param{};
+                std::string name;
+                if (!queryBufferMeta(network, index, is_output, param, name))
+                {
+                    return false;
                 }
 
-                std::fprintf(stderr, "AwnnEngine: VIP raw sizes=[");
-                for (vip_uint32_t d = 0; d < num_dims; ++d)
+                vip_buffer buffer = nullptr;
+                if (vip_create_buffer(&param, 0, &buffer) != VIP_SUCCESS || buffer == nullptr)
                 {
-                    std::fprintf(stderr, "%s%u", d > 0 ? "," : "", sizes[d]);
+                    return false;
                 }
-                std::fprintf(stderr, "], byte_size=%u\n", byte_size);
-                std::fprintf(stderr, "AwnnEngine: possible Param (input_channels, input_height, input_width):\n");
 
-                for (std::size_t i = 0; i < candidate_count; ++i)
+                const auto dtype = dtypeFromFormat(param.data_format);
+                if (!dtype.has_value())
                 {
-                    const Candidate &cand = candidates[i];
-                    if (cand.c == 0 || cand.h == 0 || cand.w == 0)
+                    vip_destroy_buffer(buffer);
+                    return false;
+                }
+
+                buffers.push_back(buffer);
+                appendBufferInfo(info, is_output, param, vip_get_buffer_size(buffer), name, *dtype);
+                return true;
+            }
+
+            void destroyVipBuffers(std::vector<void *> &buffers)
+            {
+                for (void *buf : buffers)
+                {
+                    if (buf != nullptr)
                     {
-                        continue;
+                        vip_destroy_buffer(static_cast<vip_buffer>(buf));
                     }
-                    const std::uint64_t product =
-                        static_cast<std::uint64_t>(cand.c) * cand.h * cand.w;
-                    std::fprintf(
-                        stderr,
-                        "  %ux%ux%u  (%s)%s\n",
-                        cand.c,
-                        cand.h,
-                        cand.w,
-                        cand.label,
-                        product == byte_size ? "  <-- matches buffer" : "");
                 }
-            }
-
-            bool applyParamInputShape(
-                const AwnnEngine::Param &param,
-                vip_uint32_t byte_size,
-                std::uint32_t &channels,
-                std::uint32_t &height,
-                std::uint32_t &width)
-            {
-                if (param.input_channels == 0 || param.input_height == 0 || param.input_width == 0)
-                {
-                    std::fprintf(
-                        stderr,
-                        "AwnnEngine: Param input_channels/height/width must be non-zero\n");
-                    return false;
-                }
-
-                const std::uint64_t product = static_cast<std::uint64_t>(param.input_channels) *
-                                              param.input_height * param.input_width;
-                if (product != byte_size)
-                {
-                    std::fprintf(
-                        stderr,
-                        "AwnnEngine: Param %ux%ux%u (%llu bytes) != buffer %u bytes\n",
-                        param.input_channels,
-                        param.input_height,
-                        param.input_width,
-                        static_cast<unsigned long long>(product),
-                        byte_size);
-                    return false;
-                }
-
-                channels = param.input_channels;
-                height = param.input_height;
-                width = param.input_width;
-                return true;
-            }
-
-            std::optional<post_process::TensorDtype> dtypeFromFormat(int format)
-            {
-                if (format == VIP_BUFFER_FORMAT_INT8 || format == VIP_BUFFER_FORMAT_UINT8)
-                {
-                    return post_process::TensorDtype::INT8;
-                }
-                if (format == VIP_BUFFER_FORMAT_FP32)
-                {
-                    return post_process::TensorDtype::FP32;
-                }
-                return std::nullopt;
             }
 
         } // namespace
@@ -254,80 +248,20 @@ namespace deploy_percept
             input_buffers_.clear();
             output_buffers_vip_.clear();
 
-            info_.input_channels.reserve(input_count);
-            info_.input_heights.reserve(input_count);
-            info_.input_widths.reserve(input_count);
-            info_.input_byte_sizes.reserve(input_count);
-            info_.input_dtypes.reserve(input_count);
-            info_.output_byte_sizes.reserve(output_count);
-            info_.output_dtypes.reserve(output_count);
-
             for (vip_uint32_t i = 0; i < input_count; ++i)
             {
-                vip_buffer_create_params_t param{};
-                if (!queryCreateParam(network, i, false, param))
+                if (!prepareOneBuffer(network, i, false, info_, input_buffers_))
                 {
                     return false;
                 }
-
-                vip_buffer buffer = nullptr;
-                if (vip_create_buffer(&param, 0, &buffer) != VIP_SUCCESS || buffer == nullptr)
-                {
-                    return false;
-                }
-
-                const std::uint32_t byte_size = vip_get_buffer_size(buffer);
-
-                logPossibleInputShapes(param.num_of_dims, param.sizes, byte_size);
-
-                std::uint32_t channels = 0;
-                std::uint32_t height = 0;
-                std::uint32_t width = 0;
-                if (!applyParamInputShape(param_, byte_size, channels, height, width))
-                {
-                    vip_destroy_buffer(buffer);
-                    return false;
-                }
-
-                const auto dtype = dtypeFromFormat(param.data_format);
-                if (!dtype.has_value())
-                {
-                    vip_destroy_buffer(buffer);
-                    return false;
-                }
-
-                input_buffers_.push_back(buffer);
-                info_.input_channels.push_back(channels);
-                info_.input_heights.push_back(height);
-                info_.input_widths.push_back(width);
-                info_.input_byte_sizes.push_back(byte_size);
-                info_.input_dtypes.push_back(*dtype);
             }
 
             for (vip_uint32_t i = 0; i < output_count; ++i)
             {
-                vip_buffer_create_params_t param{};
-                if (!queryCreateParam(network, i, true, param))
+                if (!prepareOneBuffer(network, i, true, info_, output_buffers_vip_))
                 {
                     return false;
                 }
-
-                vip_buffer buffer = nullptr;
-                if (vip_create_buffer(&param, 0, &buffer) != VIP_SUCCESS || buffer == nullptr)
-                {
-                    return false;
-                }
-
-                const auto dtype = dtypeFromFormat(param.data_format);
-                if (!dtype.has_value())
-                {
-                    vip_destroy_buffer(buffer);
-                    return false;
-                }
-
-                output_buffers_vip_.push_back(buffer);
-                info_.output_byte_sizes.push_back(vip_get_buffer_size(buffer));
-                info_.output_dtypes.push_back(*dtype);
             }
 
             return true;
@@ -349,20 +283,8 @@ namespace deploy_percept
                     network_prepared_ = false;
                 }
 
-                for (void *buf : input_buffers_)
-                {
-                    if (buf != nullptr)
-                    {
-                        vip_destroy_buffer(static_cast<vip_buffer>(buf));
-                    }
-                }
-                for (void *buf : output_buffers_vip_)
-                {
-                    if (buf != nullptr)
-                    {
-                        vip_destroy_buffer(static_cast<vip_buffer>(buf));
-                    }
-                }
+                destroyVipBuffers(input_buffers_);
+                destroyVipBuffers(output_buffers_vip_);
 
                 vip_destroy_network(network);
                 network_ = nullptr;

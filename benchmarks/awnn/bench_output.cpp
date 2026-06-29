@@ -55,32 +55,35 @@ std::vector<TensorView> copy_views_to_host(const std::vector<TensorView> &mapped
 BenchStats bench_output_path(
     AwnnEngine &engine,
     deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    const std::vector<std::uint8_t> &input_nchw,
+    const std::vector<std::uint8_t> &input_buffer,
     const int warmup,
     const int loops,
     const bool host_copy_before_post)
 {
     BenchStats stats{};
-    const std::size_t input_size = input_nchw.size();
+    const std::size_t input_size = input_buffer.size();
     const int total = warmup + loops;
-    double run_sum = 0;
+    double engine_run_sum = 0;
+    double copy_sum = 0;
     double post_sum = 0;
 
     for (int i = 0; i < total; ++i)
     {
-        const auto run_t0 = std::chrono::steady_clock::now();
-        if (!engine.run(input_nchw.data(), input_size))
+        const auto engine_run_t0 = std::chrono::steady_clock::now();
+        if (!engine.run(input_buffer.data(), input_size))
         {
             std::fprintf(
                 stderr,
-                "bench: %s run() failed at iteration %d\n",
+                "bench: %s engine.run() failed at iteration %d\n",
                 bench_path_label(host_copy_before_post),
                 i);
             return stats;
         }
-        const auto run_t1 = std::chrono::steady_clock::now();
+        const auto engine_run_t1 = std::chrono::steady_clock::now();
 
-        const auto post_t0 = std::chrono::steady_clock::now();
+        double copy_ms = 0;
+        double post_ms = 0;
+
         if (host_copy_before_post)
         {
             const std::vector<TensorView> &mapped = engine.getResult().outputs;
@@ -91,29 +94,41 @@ BenchStats bench_output_path(
                 return stats;
             }
 
+            const auto copy_t0 = std::chrono::steady_clock::now();
             const std::vector<TensorView> host_views = copy_views_to_host(mapped);
+            const auto copy_t1 = std::chrono::steady_clock::now();
+            copy_ms = std::chrono::duration<double, std::milli>(copy_t1 - copy_t0).count();
+
             engine.releaseResult();
+
+            const auto post_t0 = std::chrono::steady_clock::now();
             if (!processor.run(host_views))
             {
                 std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
                 return stats;
             }
+            const auto post_t1 = std::chrono::steady_clock::now();
+            post_ms = std::chrono::duration<double, std::milli>(post_t1 - post_t0).count();
         }
         else
         {
+            const auto post_t0 = std::chrono::steady_clock::now();
             deploy_percept::engine::AwnnResultGuard engine_result_guard(engine);
             if (engine_result_guard.empty() || !processor.run(engine_result_guard.views()))
             {
                 std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
                 return stats;
             }
+            const auto post_t1 = std::chrono::steady_clock::now();
+            post_ms = std::chrono::duration<double, std::milli>(post_t1 - post_t0).count();
         }
-        const auto post_t1 = std::chrono::steady_clock::now();
 
         if (i >= warmup)
         {
-            run_sum += std::chrono::duration<double, std::milli>(run_t1 - run_t0).count();
-            post_sum += std::chrono::duration<double, std::milli>(post_t1 - post_t0).count();
+            engine_run_sum +=
+                std::chrono::duration<double, std::milli>(engine_run_t1 - engine_run_t0).count();
+            copy_sum += copy_ms;
+            post_sum += post_ms;
         }
     }
 
@@ -122,9 +137,10 @@ BenchStats bench_output_path(
         return stats;
     }
 
-    stats.run_ms_avg = run_sum / loops;
+    stats.engine_run_ms_avg = engine_run_sum / loops;
+    stats.copy_ms_avg = copy_sum / loops;
     stats.post_ms_avg = post_sum / loops;
-    stats.pipeline_ms_avg = stats.run_ms_avg + stats.post_ms_avg;
+    stats.pipeline_ms_avg = stats.engine_run_ms_avg + stats.copy_ms_avg + stats.post_ms_avg;
     return stats;
 }
 
@@ -135,13 +151,14 @@ void print_bench_compare(
     const int loops)
 {
     std::printf("\n=== AWNN output path benchmark (warmup=%d loops=%d) ===\n", warmup, loops);
-    std::printf("(preprocess excluded; HostCopy = memcpy in post phase)\n\n");
+    std::printf("(preprocess excluded; copy = output memcpy to host only)\n\n");
 
     auto print_row = [](const char *label, const BenchStats &s) {
         std::printf(
-            "%-10s  run=%6.2f ms  post=%6.2f ms  pipeline=%6.2f ms\n",
+            "%-10s  engine_run=%6.2f ms  copy=%6.2f ms  post=%6.2f ms  pipeline=%6.2f ms\n",
             label,
-            s.run_ms_avg,
+            s.engine_run_ms_avg,
+            s.copy_ms_avg,
             s.post_ms_avg,
             s.pipeline_ms_avg);
     };

@@ -12,16 +12,17 @@ namespace awnn {
 
 struct BenchStats
 {
-    double run_ms_avg{0};       ///< engine.run()
-    double post_ms_avg{0};      ///< 后处理（含可选 host copy）
-    double pipeline_ms_avg{0};  ///< run + post
+    double engine_run_ms_avg{0}; ///< engine.run()
+    double copy_ms_avg{0};       ///< 输出 memcpy 到 host（仅 HostCopy 路径）
+    double post_ms_avg{0};       ///< processor.run()（不含 copy）
+    double pipeline_ms_avg{0};   ///< engine_run + copy + post
 };
 
 /** @p host_copy_before_post：true 时在 post 前将 mapped 输出 memcpy 到 host */
 BenchStats bench_output_path(
     deploy_percept::engine::AwnnEngine &engine,
     deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    const std::vector<std::uint8_t> &input_nchw,
+    const std::vector<std::uint8_t> &input_buffer,
     int warmup,
     int loops,
     bool host_copy_before_post);

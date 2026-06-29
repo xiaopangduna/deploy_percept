@@ -5,6 +5,7 @@
 #include "deploy_percept/engine/BaseEngine.hpp"
 #include "deploy_percept/post_process/types.hpp"
 
+#include <array>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -36,27 +37,33 @@ namespace deploy_percept
             struct Param
             {
                 std::string model_path;
-                /** 逻辑 NCHW，须满足 input_channels×input_height×input_width == VIP buffer 字节数 */
-                std::uint32_t input_channels{0};
-                std::uint32_t input_height{0};
-                std::uint32_t input_width{0};
             };
 
             /**
-             * 模型 IO 静态元信息（prepareIo 时从 VIP 解码）。
-             * 初始化成功后只读；各 vector 按下标对应第 i 路 input/output。
-             * 输入 C/H/W 来自 Param（init 时与 VIP byte_size 校验）。
+             * VIP IO 元信息：prepareIo 时由 vip_query_input/output 填充。
+             * 同侧各 vector 下标对齐；input_sizes/output_sizes 顺序为 VIP 规定的 [W,H,C,N]。
              */
             struct Info
             {
-                std::vector<std::uint32_t> input_channels;
-                std::vector<std::uint32_t> input_heights;
-                std::vector<std::uint32_t> input_widths;
-                std::vector<std::uint32_t> input_byte_sizes;
+                std::vector<std::uint32_t> input_num_dims;
+                std::vector<std::array<std::uint32_t, 6>> input_sizes;
                 std::vector<post_process::TensorDtype> input_dtypes;
+                std::vector<std::uint32_t> input_quant_formats;
+                std::vector<std::int32_t> input_fixed_point_pos;
+                std::vector<float> input_tf_scale;
+                std::vector<std::int32_t> input_tf_zero_point;
+                std::vector<std::uint32_t> input_byte_sizes;
+                std::vector<std::string> input_names;
 
-                std::vector<std::uint32_t> output_byte_sizes;
+                std::vector<std::uint32_t> output_num_dims;
+                std::vector<std::array<std::uint32_t, 6>> output_sizes;
                 std::vector<post_process::TensorDtype> output_dtypes;
+                std::vector<std::uint32_t> output_quant_formats;
+                std::vector<std::int32_t> output_fixed_point_pos;
+                std::vector<float> output_tf_scale;
+                std::vector<std::int32_t> output_tf_zero_point;
+                std::vector<std::uint32_t> output_byte_sizes;
+                std::vector<std::string> output_names;
             };
 
             /** 最近一次 run 的 raw 输出；outputs 指向 VIP mapped 内存，不拥有数据 */
