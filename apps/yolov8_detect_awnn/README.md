@@ -19,8 +19,8 @@ PC 训练/下载 (Ultralytics) → 导出 ONNX → onnxsim 固定尺寸 → onnx
 
 本 demo 的模型 I/O 约定：
 
-- **输入**：UINT8 RGB HWC 640×640（letterbox pad=114；转换时 `ADD_PREPROC_NODE=True`, `PREPROC_TYPE=IMAGE_RGB`）
-- **输出**：六路 **FP32**（stride 8/16/32 各 grid + score），后处理在 CPU 完成
+- **输入**：UINT8 RGB HWC 640×640（resize；转换时 `ADD_PREPROC_NODE=True`, `PREPROC_TYPE=IMAGE_RGB`）
+- **输出**：六路 **FP32**（stride 8/16/32 各 grid + score），后处理在 CPU 完成；检测框坐标在 **模型输入尺寸**（640×640）空间
 
 参考 `tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/yolov8/`：
 
@@ -74,5 +74,5 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ## 模型 I/O
 
-- 输入：UINT8 RGB HWC 640×640（letterbox）
-- 输出：6 路 FP32（stride 8/16/32 × grid/score），后处理用 `YoloV8DetectPostProcessAwnn`
+- 输入：UINT8 RGB HWC 640×640（resize）
+- 输出：6 路 FP32（stride 8/16/32 × grid/score），后处理用 `YoloV8DetectPostProcessAwnn`；框坐标为模型输入像素空间

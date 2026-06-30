@@ -21,13 +21,9 @@ namespace deploy_percept
         public:
             struct Params
             {
-                /** 模型输入高宽（VIP 顺序 [W,H,C,N]） */
+                /** 模型输入高宽（VIP 顺序 [W,H,C,N]）；检测框坐标落在此尺寸空间 */
                 int model_in_h{0};
                 int model_in_w{0};
-
-                /** 原图尺寸，用于 letterbox 坐标还原；为 0 时输出留在 letterbox 空间 */
-                int orig_img_h{0};
-                int orig_img_w{0};
 
                 float conf_threshold = 0.4f;
                 float nms_threshold = 0.45f;

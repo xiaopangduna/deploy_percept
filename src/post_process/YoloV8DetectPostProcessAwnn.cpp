@@ -252,27 +252,8 @@ namespace deploy_percept
                 }
             }
 
-            const int letterbox_cols = params_.model_in_w;
-            const int letterbox_rows = params_.model_in_h;
-            const int orig_w = params_.orig_img_w > 0 ? params_.orig_img_w : letterbox_cols;
-            const int orig_h = params_.orig_img_h > 0 ? params_.orig_img_h : letterbox_rows;
-
-            float scale_letterbox = 1.f;
-            if ((letterbox_rows * 1.f / orig_h) < (letterbox_cols * 1.f / orig_w))
-            {
-                scale_letterbox = letterbox_rows * 1.f / orig_h;
-            }
-            else
-            {
-                scale_letterbox = letterbox_cols * 1.f / orig_w;
-            }
-
-            const int resize_cols = static_cast<int>(std::round(scale_letterbox * orig_w));
-            const int resize_rows = static_cast<int>(std::round(scale_letterbox * orig_h));
-            const int hpad = letterbox_rows - resize_rows;
-            const int wpad = letterbox_cols - resize_cols;
-            const float ratio_x = static_cast<float>(orig_w) / resize_cols;
-            const float ratio_y = static_cast<float>(orig_h) / resize_rows;
+            const int model_w = params_.model_in_w;
+            const int model_h = params_.model_in_h;
 
             result_.group.count = 0;
             result_.group.detection_objects.clear();
@@ -291,20 +272,12 @@ namespace deploy_percept
                     continue;
                 }
 
-                if (params_.orig_img_w > 0 && params_.orig_img_h > 0)
-                {
-                    const float x0 = (obj.x - wpad / 2.f) * ratio_x;
-                    const float y0 = (obj.y - hpad / 2.f) * ratio_y;
-                    const float x1 = (obj.x + obj.w - wpad / 2.f) * ratio_x;
-                    const float y1 = (obj.y + obj.h - hpad / 2.f) * ratio_y;
-
-                    obj.x = std::max(0.f, std::min(x0, static_cast<float>(orig_w - 1)));
-                    obj.y = std::max(0.f, std::min(y0, static_cast<float>(orig_h - 1)));
-                    const float x1c = std::max(0.f, std::min(x1, static_cast<float>(orig_w - 1)));
-                    const float y1c = std::max(0.f, std::min(y1, static_cast<float>(orig_h - 1)));
-                    obj.w = x1c - obj.x;
-                    obj.h = y1c - obj.y;
-                }
+                obj.x = std::max(0.f, std::min(obj.x, static_cast<float>(model_w - 1)));
+                obj.y = std::max(0.f, std::min(obj.y, static_cast<float>(model_h - 1)));
+                const float x1 = std::max(0.f, std::min(obj.x + obj.w, static_cast<float>(model_w)));
+                const float y1 = std::max(0.f, std::min(obj.y + obj.h, static_cast<float>(model_h)));
+                obj.w = x1 - obj.x;
+                obj.h = y1 - obj.y;
 
                 if (obj.w <= 0.f || obj.h <= 0.f)
                 {

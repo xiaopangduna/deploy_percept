@@ -18,7 +18,6 @@
 #include "engine/EngineFactory.hpp"
 #ifdef AWNN_FOUND
 #include "engine/AwnnEngine.hpp"
-#include "engine/AwnnImageInput.hpp"
 #include "engine/VipLiteRuntime.hpp"
 #include "engine/AwnnResultGuard.hpp"
 #endif

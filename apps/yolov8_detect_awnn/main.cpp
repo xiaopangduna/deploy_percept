@@ -7,6 +7,7 @@
  * 默认：./yolov8.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
  */
 #include <cstdio>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -14,7 +15,6 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/engine/AwnnImageInput.hpp"
 #include "deploy_percept/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/YoloV8DetectPostProcessAwnn.hpp"
@@ -23,7 +23,6 @@ namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::AwnnResultGuard;
-using deploy_percept::engine::AwnnRgbInputShape;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 
@@ -34,6 +33,29 @@ constexpr const char *kDefaultModel = "yolov8.nb";
 constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov8_detect_awnn_out.jpg";
 
+bool prepare_model_input(
+    const std::string &input_path,
+    const int model_w,
+    const int model_h,
+    const std::size_t buffer_bytes,
+    cv::Mat &model_input,
+    std::vector<std::uint8_t> &input_buffer)
+{
+    cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
+    if (orig.empty())
+    {
+        std::fprintf(stderr, "failed to read input: %s\n", input_path.c_str());
+        return false;
+    }
+
+    cv::resize(orig, model_input, cv::Size(model_w, model_h));
+    input_buffer.assign(buffer_bytes, 0);
+
+    cv::Mat rgb_hwc(model_h, model_w, CV_8UC3, input_buffer.data());
+    cv::cvtColor(model_input, rgb_hwc, cv::COLOR_BGR2RGB);
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -41,11 +63,6 @@ int main(int argc, char **argv)
     const char *model_path = (argc > 1) ? argv[1] : kDefaultModel;
     const char *input_path = (argc > 2) ? argv[2] : kDefaultInput;
     const char *output_path = (argc > 3) ? argv[3] : kDefaultOutput;
-
-    std::printf("yolov8_detect_awnn\n");
-    std::printf("  model : %s\n", model_path);
-    std::printf("  input : %s\n", input_path);
-    std::printf("  output: %s\n", output_path);
 
     if (!fs::is_regular_file(model_path))
     {
@@ -77,16 +94,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const AwnnRgbInputShape input_shape = deploy_percept::engine::resolveRgbInputShape(engine.getInfo());
-    std::printf("  model input: W=%d H=%d C=%d bytes=%zu\n",
-        input_shape.width, input_shape.height, input_shape.channels, input_shape.buffer_bytes);
+    // yolov8.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
+    const auto &sizes = engine.getInfo().input_sizes.at(0);
+    const int model_h = static_cast<int>(sizes[1]);
+    const int model_w = static_cast<int>(sizes[2]);
+    const std::size_t buffer_bytes = engine.getInfo().input_byte_sizes.at(0);
 
-    cv::Mat orig_bgr;
+    cv::Mat model_input;
     std::vector<std::uint8_t> input_buffer;
-    if (!deploy_percept::engine::prepareLetterboxRgbInput(
-            input_path, input_shape, orig_bgr, input_buffer))
+    if (!prepare_model_input(input_path, model_w, model_h, buffer_bytes, model_input, input_buffer))
     {
-        std::fprintf(stderr, "failed to prepare input: %s\n", input_path);
         return 1;
     }
 
@@ -104,10 +121,8 @@ int main(int argc, char **argv)
     }
 
     YoloV8DetectPostProcessAwnn::Params post_params;
-    post_params.model_in_w = input_shape.width;
-    post_params.model_in_h = input_shape.height;
-    post_params.orig_img_w = orig_bgr.cols;
-    post_params.orig_img_h = orig_bgr.rows;
+    post_params.model_in_w = model_w;
+    post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
     if (!processor.run(engine_result_guard.views()))
@@ -116,7 +131,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    cv::Mat result_img = orig_bgr.clone();
+    cv::Mat result_img = model_input.clone();
     processor.drawDetectionResults(result_img, processor.getResult().group);
 
     std::error_code ec;

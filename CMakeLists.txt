@@ -80,7 +80,6 @@ if(AWNN_FOUND)
     target_sources(deploy_percept PRIVATE
         src/engine/AwnnEngine.cpp
         src/engine/VipLiteRuntime.cpp
-        src/engine/AwnnImageInput.cpp
     )
     target_link_libraries(deploy_percept PUBLIC AWNN::VIPLite pthread)
     target_compile_definitions(deploy_percept PUBLIC AWNN_FOUND=1)

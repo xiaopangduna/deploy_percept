@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <cstdio>
+#include <cstdint>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -9,7 +9,6 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/engine/AwnnImageInput.hpp"
 #include "deploy_percept/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/YoloV8DetectPostProcessAwnn.hpp"
@@ -21,9 +20,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::AwnnLetterboxMeta;
 using deploy_percept::engine::AwnnResultGuard;
-using deploy_percept::engine::AwnnRgbInputShape;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::DetectionObject;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
@@ -31,109 +28,56 @@ using percept::test::app_data;
 
 namespace {
 
-void print_vip_input_debug(const AwnnEngine &engine)
+constexpr int kBoxTolerancePx = 4;
+
+// A733 + yolov8.nb + dog.jpg 板端标定，resize 640×640，模型输入坐标空间
+const std::vector<DetectionObject> kExpectedDetections = {
+    MakeDetectResult(16, "class_16", 0.8922f, 110, 248, 258, 601),
+    MakeDetectResult(1, "class_1", 0.7918f, 100, 148, 474, 467),
+    MakeDetectResult(2, "class_2", 0.6005f, 387, 83, 578, 191),
+};
+
+bool prepare_model_input(
+    const std::string &input_path,
+    const int model_w,
+    const int model_h,
+    const std::size_t buffer_bytes,
+    std::vector<std::uint8_t> &input_buffer)
 {
-    const auto &info = engine.getInfo();
-    std::printf("[yolov8 debug] VIP inputs: count=%zu\n", info.input_sizes.size());
-    for (std::size_t i = 0; i < info.input_sizes.size(); ++i)
+    cv::Mat orig = cv::imread(input_path, cv::IMREAD_COLOR);
+    if (orig.empty())
     {
-        const auto &sz = info.input_sizes[i];
-        std::printf(
-            "  input[%zu]: ndim=%u sizes=[%u,%u,%u,%u] bytes=%u name=%s\n",
-            i,
-            info.input_num_dims[i],
-            sz[0],
-            sz[1],
-            sz[2],
-            sz[3],
-            info.input_byte_sizes[i],
-            info.input_names[i].c_str());
+        return false;
     }
+
+    cv::Mat resized;
+    cv::resize(orig, resized, cv::Size(model_w, model_h));
+    input_buffer.assign(buffer_bytes, 0);
+
+    cv::Mat rgb_hwc(model_h, model_w, CV_8UC3, input_buffer.data());
+    cv::cvtColor(resized, rgb_hwc, cv::COLOR_BGR2RGB);
+    return true;
 }
 
-void print_vip_output_debug(const AwnnEngine &engine)
+void expect_class_and_box_match(
+    const std::vector<DetectionObject> &expected,
+    const std::vector<DetectionObject> &actual)
 {
-    const auto &info = engine.getInfo();
-    std::printf("[yolov8 debug] VIP outputs: count=%zu\n", info.output_sizes.size());
-    for (std::size_t i = 0; i < info.output_sizes.size(); ++i)
+    ASSERT_EQ(expected.size(), actual.size());
+
+    for (std::size_t i = 0; i < expected.size(); ++i)
     {
-        const auto &sz = info.output_sizes[i];
-        const std::size_t elems = info.output_byte_sizes[i] / sizeof(float);
-        std::printf(
-            "  output[%zu]: ndim=%u sizes=[%u,%u,%u,%u] elems=%zu name=%s",
-            i,
-            info.output_num_dims[i],
-            sz[0],
-            sz[1],
-            sz[2],
-            sz[3],
-            elems,
-            info.output_names[i].c_str());
+        const auto &exp = expected[i];
+        const auto &act = actual[i];
 
-        static constexpr int kGridCh = 64;
-        static constexpr int kScoreCh = 80;
-        for (const int gs : {6400, 1600, 400})
-        {
-            if (gs > 0 && elems % static_cast<std::size_t>(gs) == 0)
-            {
-                const std::size_t ch = elems / static_cast<std::size_t>(gs);
-                const char *role = (ch == kGridCh) ? "grid" : (ch == kScoreCh) ? "score" : "?";
-                std::printf(" gs=%d ch=%zu(%s)", gs, ch, role);
-            }
-        }
-        std::printf("\n");
-    }
-}
+        SCOPED_TRACE("detection index " + std::to_string(i));
 
-void print_letterbox_debug(
-    const AwnnRgbInputShape &shape,
-    const cv::Mat &orig_bgr,
-    const AwnnLetterboxMeta &meta)
-{
-    std::printf(
-        "[yolov8 debug] orig=%dx%d model=%dx%d scale=%.4f resize=%dx%d pad=[t=%d,b=%d,l=%d,r=%d]\n",
-        orig_bgr.cols,
-        orig_bgr.rows,
-        shape.width,
-        shape.height,
-        meta.scale,
-        meta.resize_w,
-        meta.resize_h,
-        meta.pad_top,
-        meta.pad_bottom,
-        meta.pad_left,
-        meta.pad_right);
-}
+        EXPECT_EQ(exp.cls_id, act.cls_id);
 
-void print_detections_debug(const std::vector<DetectionObject> &dets)
-{
-    std::printf("[yolov8 debug] detections: count=%zu\n", dets.size());
-    const std::size_t show = std::min<std::size_t>(dets.size(), 10);
-    for (std::size_t i = 0; i < show; ++i)
-    {
-        const auto &d = dets[i];
-        std::printf(
-            "  [%zu] cls=%d prob=%.4f box=[%d,%d,%d,%d] (%dx%d)\n",
-            i,
-            d.cls_id,
-            d.prop,
-            d.box.left,
-            d.box.top,
-            d.box.right,
-            d.box.bottom,
-            d.box.right - d.box.left,
-            d.box.bottom - d.box.top);
-    }
-}
-
-void expect_at_least_one_detection(const std::vector<DetectionObject> &actual)
-{
-    ASSERT_GE(actual.size(), 1u) << "expected at least one detection on dog.jpg";
-    for (const auto &det : actual)
-    {
-        EXPECT_GE(det.prop, 0.25f);
-        EXPECT_LT(det.box.left, det.box.right);
-        EXPECT_LT(det.box.top, det.box.bottom);
+        EXPECT_LE(std::abs(exp.box.left - act.box.left), kBoxTolerancePx) << "box.left";
+        EXPECT_LE(std::abs(exp.box.top - act.box.top), kBoxTolerancePx) << "box.top";
+        EXPECT_LE(std::abs(exp.box.right - act.box.right), kBoxTolerancePx) << "box.right";
+        EXPECT_LE(std::abs(exp.box.bottom - act.box.bottom), kBoxTolerancePx) << "box.bottom";
     }
 }
 
@@ -141,8 +85,7 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 {
     if (!fs::is_regular_file(model_path))
     {
-        GTEST_SKIP() << "model not found: " << model_path
-                     << " (convert yolov8.nb per apps/yolov8_detect_awnn/README.md)";
+        GTEST_SKIP() << "model not found: " << model_path;
     }
     if (!fs::is_regular_file(input_path))
     {
@@ -152,7 +95,7 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 
 } // namespace
 
-TEST(YoloV8DetectAwnnIntegration, DogHasDetections)
+TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
 {
     const fs::path model_path = app_data("yolov8_detect_awnn/yolov8.nb");
     const fs::path input_path = app_data("yolov8_detect_awnn/dog.jpg");
@@ -173,45 +116,31 @@ TEST(YoloV8DetectAwnnIntegration, DogHasDetections)
         GTEST_SKIP() << "AwnnEngine init failed";
     }
 
-    print_vip_input_debug(engine);
+    // yolov8.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
+    const auto &sizes = engine.getInfo().input_sizes.at(0);
+    const int model_c = static_cast<int>(sizes[0]);
+    const int model_h = static_cast<int>(sizes[1]);
+    const int model_w = static_cast<int>(sizes[2]);
+    const std::size_t buffer_bytes = engine.getInfo().input_byte_sizes.at(0);
 
-    const AwnnRgbInputShape input_shape = deploy_percept::engine::resolveRgbInputShape(engine.getInfo());
-    std::printf(
-        "[yolov8 debug] resolved input shape: W=%d H=%d C=%d bytes=%zu (HWC interleaved)\n",
-        input_shape.width,
-        input_shape.height,
-        input_shape.channels,
-        input_shape.buffer_bytes);
-
-    cv::Mat orig_bgr;
-    AwnnLetterboxMeta letterbox_meta{};
     std::vector<std::uint8_t> input_buffer;
-    ASSERT_TRUE(deploy_percept::engine::prepareLetterboxRgbInput(
-        input_path.string(), input_shape, orig_bgr, input_buffer, &letterbox_meta))
+    ASSERT_TRUE(prepare_model_input(input_path.string(), model_w, model_h, buffer_bytes, input_buffer))
         << "failed to read input: " << input_path;
 
-    print_letterbox_debug(input_shape, orig_bgr, letterbox_meta);
-
-    ASSERT_EQ(input_buffer.size(), input_shape.buffer_bytes);
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
-
-    print_vip_output_debug(engine);
 
     AwnnResultGuard engine_result_guard(engine);
     ASSERT_FALSE(engine_result_guard.empty());
     ASSERT_EQ(engine_result_guard.views().size(), 6u);
 
     YoloV8DetectPostProcessAwnn::Params post_params;
-    post_params.model_in_w = input_shape.width;
-    post_params.model_in_h = input_shape.height;
-    post_params.orig_img_w = orig_bgr.cols;
-    post_params.orig_img_h = orig_bgr.rows;
+    post_params.model_in_w = model_w;
+    post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
     ASSERT_TRUE(processor.run(engine_result_guard.views())) << processor.getResult().message;
 
-    print_detections_debug(processor.getResult().group.detection_objects);
-    expect_at_least_one_detection(processor.getResult().group.detection_objects);
+    expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detection_objects);
 }
 
 int main(int argc, char **argv)
