@@ -3,8 +3,20 @@ if(NOT AWNN_FOUND)
     return()
 endif()
 
+set(PERCEPT_AWNN_BENCH_COMMON_SOURCES
+    bench_common.cpp
+    bench_pipeline.cpp
+    bench_report.cpp
+    bench_run.cpp)
+
 add_percept_awnn_benchmark(
-    NAME bench_yolov5_detect_awnn_mapped_vs_hostcopy
+    NAME bench_yolov5_full_pipeline
     SOURCES
-        bench_output.cpp
-        bench_yolov5_detect_awnn_mapped_vs_hostcopy.cpp)
+        ${PERCEPT_AWNN_BENCH_COMMON_SOURCES}
+        bench_yolov5_full_pipeline.cpp)
+
+add_percept_awnn_benchmark(
+    NAME bench_yolov5_preprocess
+    SOURCES
+        ${PERCEPT_AWNN_BENCH_COMMON_SOURCES}
+        bench_yolov5_preprocess.cpp)

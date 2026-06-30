@@ -1,4 +1,7 @@
-#include "bench_output.hpp"
+#include "bench_pipeline.hpp"
+
+#include "bench_common.hpp"
+#include "bench_report.hpp"
 
 #include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/types.hpp"
@@ -7,6 +10,8 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+
+#include <opencv2/core.hpp>
 
 namespace percept {
 namespace bench {
@@ -17,11 +22,6 @@ namespace
 
 using deploy_percept::engine::AwnnEngine;
 using deploy_percept::post_process::TensorView;
-
-const char *bench_path_label(const bool host_copy_before_post)
-{
-    return host_copy_before_post ? "HostCopy" : "Mapped";
-}
 
 std::vector<TensorView> copy_views_to_host(const std::vector<TensorView> &mapped)
 {
@@ -52,44 +52,99 @@ std::vector<TensorView> copy_views_to_host(const std::vector<TensorView> &mapped
 
 } // namespace
 
-BenchStats bench_output_path(
+BenchRowStats bench_one_row(
     AwnnEngine &engine,
     deploy_percept::post_process::YoloV5DetectPostProcessAwnn &processor,
-    const std::vector<std::uint8_t> &input_buffer,
+    const std::string &input_path,
+    const int model_w,
+    const int model_h,
+    const int model_c,
+    const BenchRowConfig &cfg,
     const int warmup,
-    const int loops,
-    const bool host_copy_before_post)
+    const int loops)
 {
-    BenchStats stats{};
-    const std::size_t input_size = input_buffer.size();
+    BenchRowStats stats{};
+    stats.cfg = cfg;
+
+    if (!validate_bench_row_config(cfg))
+    {
+        std::fprintf(stderr, "bench: invalid config for tag=%s\n", cfg.tag != nullptr ? cfg.tag : "?");
+        return stats;
+    }
+
+    const PreprocessMode preprocess_mode = parse_preprocess_mode(cfg.preprocess);
+    const bool copy_before_post = host_copy_before_post(cfg);
+
+    cv::Mat cached_bgr;
+    if (preprocess_mode == PreprocessMode::OpenCvMem)
+    {
+        cached_bgr = cv::imread(input_path, cv::IMREAD_COLOR);
+        if (cached_bgr.empty())
+        {
+            std::fprintf(stderr, "failed to read input for cached preprocess: %s\n", input_path.c_str());
+            return stats;
+        }
+    }
+
     const int total = warmup + loops;
-    double engine_run_sum = 0;
+    const std::size_t input_size =
+        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) *
+        static_cast<std::size_t>(model_c);
+
+    double pre_sum = 0;
+    double infer_sum = 0;
     double copy_sum = 0;
     double post_sum = 0;
 
+    std::vector<std::uint8_t> input_buffer;
+    input_buffer.reserve(input_size);
+
     for (int i = 0; i < total; ++i)
     {
-        const auto engine_run_t0 = std::chrono::steady_clock::now();
-        if (!engine.run(input_buffer.data(), input_size))
+        const auto pre_t0 = std::chrono::steady_clock::now();
+        if (!run_preprocess(
+                preprocess_mode,
+                input_path,
+                cached_bgr,
+                model_w,
+                model_h,
+                model_c,
+                input_buffer))
         {
             std::fprintf(
                 stderr,
-                "bench: %s engine.run() failed at iteration %d\n",
-                bench_path_label(host_copy_before_post),
+                "bench: preprocess failed for tag=%s at iteration %d\n",
+                cfg.tag,
                 i);
             return stats;
         }
-        const auto engine_run_t1 = std::chrono::steady_clock::now();
+        const auto pre_t1 = std::chrono::steady_clock::now();
+
+        const auto infer_t0 = std::chrono::steady_clock::now();
+        if (!engine.run(input_buffer.data(), input_buffer.size()))
+        {
+            std::fprintf(
+                stderr,
+                "bench: engine.run() failed for tag=%s at iteration %d\n",
+                cfg.tag,
+                i);
+            return stats;
+        }
+        const auto infer_t1 = std::chrono::steady_clock::now();
 
         double copy_ms = 0;
         double post_ms = 0;
 
-        if (host_copy_before_post)
+        if (copy_before_post)
         {
             const std::vector<TensorView> &mapped = engine.getResult().outputs;
             if (!engine.getResult().ready || mapped.empty())
             {
-                std::fprintf(stderr, "bench: empty output at iteration %d\n", i);
+                std::fprintf(
+                    stderr,
+                    "bench: empty output for tag=%s at iteration %d\n",
+                    cfg.tag,
+                    i);
                 engine.releaseResult();
                 return stats;
             }
@@ -104,7 +159,11 @@ BenchStats bench_output_path(
             const auto post_t0 = std::chrono::steady_clock::now();
             if (!processor.run(host_views))
             {
-                std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
+                std::fprintf(
+                    stderr,
+                    "bench: post failed for tag=%s at iteration %d\n",
+                    cfg.tag,
+                    i);
                 return stats;
             }
             const auto post_t1 = std::chrono::steady_clock::now();
@@ -116,7 +175,11 @@ BenchStats bench_output_path(
             deploy_percept::engine::AwnnResultGuard engine_result_guard(engine);
             if (engine_result_guard.empty() || !processor.run(engine_result_guard.views()))
             {
-                std::fprintf(stderr, "bench: post failed at iteration %d\n", i);
+                std::fprintf(
+                    stderr,
+                    "bench: post failed for tag=%s at iteration %d\n",
+                    cfg.tag,
+                    i);
                 return stats;
             }
             const auto post_t1 = std::chrono::steady_clock::now();
@@ -125,8 +188,8 @@ BenchStats bench_output_path(
 
         if (i >= warmup)
         {
-            engine_run_sum +=
-                std::chrono::duration<double, std::milli>(engine_run_t1 - engine_run_t0).count();
+            pre_sum += std::chrono::duration<double, std::milli>(pre_t1 - pre_t0).count();
+            infer_sum += std::chrono::duration<double, std::milli>(infer_t1 - infer_t0).count();
             copy_sum += copy_ms;
             post_sum += post_ms;
         }
@@ -137,45 +200,12 @@ BenchStats bench_output_path(
         return stats;
     }
 
-    stats.engine_run_ms_avg = engine_run_sum / loops;
-    stats.copy_ms_avg = copy_sum / loops;
-    stats.post_ms_avg = post_sum / loops;
-    stats.pipeline_ms_avg = stats.engine_run_ms_avg + stats.copy_ms_avg + stats.post_ms_avg;
+    stats.pre_ms = pre_sum / loops;
+    stats.infer_ms = infer_sum / loops;
+    stats.copy_ms = copy_sum / loops;
+    stats.post_ms = post_sum / loops;
+    stats.pipeline_ms = stats.pre_ms + stats.infer_ms + stats.copy_ms + stats.post_ms;
     return stats;
-}
-
-void print_bench_compare(
-    const BenchStats &mapped,
-    const BenchStats &host_copy,
-    const int warmup,
-    const int loops)
-{
-    std::printf("\n=== AWNN output path benchmark (warmup=%d loops=%d) ===\n", warmup, loops);
-    std::printf("(preprocess excluded; copy = output memcpy to host only)\n\n");
-
-    auto print_row = [](const char *label, const BenchStats &s) {
-        std::printf(
-            "%-10s  engine_run=%6.2f ms  copy=%6.2f ms  post=%6.2f ms  pipeline=%6.2f ms\n",
-            label,
-            s.engine_run_ms_avg,
-            s.copy_ms_avg,
-            s.post_ms_avg,
-            s.pipeline_ms_avg);
-    };
-
-    print_row("Mapped", mapped);
-    print_row("HostCopy", host_copy);
-
-    if (host_copy.pipeline_ms_avg > 0)
-    {
-        const double delta =
-            (mapped.pipeline_ms_avg - host_copy.pipeline_ms_avg) /
-            host_copy.pipeline_ms_avg * 100.0;
-        std::printf(
-            "\npipeline: Mapped vs HostCopy %+.1f%% (%s faster)\n",
-            delta,
-            delta <= 0 ? "Mapped" : "HostCopy");
-    }
 }
 
 } // namespace awnn

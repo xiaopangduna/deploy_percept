@@ -19,8 +19,8 @@ endfunction()
 #
 # 用法:
 #   add_percept_awnn_benchmark(
-#       NAME bench_yolov5_detect_awnn_mapped_vs_hostcopy
-#       SOURCES bench_output.cpp bench_yolov5_detect_awnn_mapped_vs_hostcopy.cpp
+#       NAME bench_yolov5_full_pipeline
+#       SOURCES bench_common.cpp bench_pipeline.cpp bench_report.cpp bench_run.cpp ...
 #   )
 
 function(add_percept_awnn_benchmark)

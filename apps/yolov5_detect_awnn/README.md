@@ -15,7 +15,7 @@
 cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   -DBUILD_AWNN_APPS=ON -DENABLE_BENCHMARKS=ON
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --target yolov5_detect_awnn bench_yolov5_detect_awnn_mapped_vs_hostcopy
+  --target yolov5_detect_awnn bench_yolov5_full_pipeline bench_yolov5_preprocess
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
@@ -48,11 +48,12 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 
 默认输出：`share/percept/apps/yolov5_detect_awnn/yolov5_detect_awnn_out.jpg`
 
-**性能 benchmark（Mapped vs HostCopy 耗时，install → `share/percept/benchmarks/`）：**
+**性能 benchmark（全流程，install → `share/percept/benchmarks/`）：**
 
 ```bash
-./share/percept/benchmarks/bench_yolov5_detect_awnn_mapped_vs_hostcopy          # 默认 loops=50
-./share/percept/benchmarks/bench_yolov5_detect_awnn_mapped_vs_hostcopy 100      # 指定 loops
+./share/percept/benchmarks/bench_yolov5_full_pipeline          # 输出路径对比
+./share/percept/benchmarks/bench_yolov5_preprocess             # 预处理对比
+./share/percept/benchmarks/bench_yolov5_full_pipeline 100      # 指定 loops
 
 # 或 PC 远程：
 bash scripts/bench.sh --board orangepi@<ip>:~/deploy_percept -- 50

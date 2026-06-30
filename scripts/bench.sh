@@ -12,7 +12,8 @@ LOOPS=""
 PERCEPT_BENCHMARKS_REL="share/percept/benchmarks"
 
 PERCEPT_INSTALL_BENCHMARKS=(
-    bench_yolov5_detect_awnn_mapped_vs_hostcopy
+    bench_yolov5_full_pipeline
+    bench_yolov5_preprocess
 )
 
 show_help() {
