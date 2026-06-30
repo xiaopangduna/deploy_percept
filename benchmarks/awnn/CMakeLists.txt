@@ -10,13 +10,7 @@ set(PERCEPT_AWNN_BENCH_COMMON_SOURCES
     bench_run.cpp)
 
 add_percept_awnn_benchmark(
-    NAME bench_yolov5_full_pipeline
+    NAME bench_yolov5_post_process
     SOURCES
         ${PERCEPT_AWNN_BENCH_COMMON_SOURCES}
-        bench_yolov5_full_pipeline.cpp)
-
-add_percept_awnn_benchmark(
-    NAME bench_yolov5_preprocess
-    SOURCES
-        ${PERCEPT_AWNN_BENCH_COMMON_SOURCES}
-        bench_yolov5_preprocess.cpp)
+        bench_yolov5_post_process.cpp)

@@ -1,8 +1,8 @@
 /**
- * YOLOv5 AWNN 全流程 benchmark：预处理对比（opencv_mem vs opencv_disk，输出固定 hostcopy）
+ * YOLOv5 AWNN 全流程 benchmark：后处理路径对比（opencv_mem + mapped vs hostcopy）
  *
  * 用法:
- *   bench_yolov5_preprocess [loops] [model.nb] [input.jpg]
+ *   bench_yolov5_post_process [loops] [model.nb] [input.jpg]
  */
 #include "bench_report.hpp"
 #include "bench_run.hpp"
@@ -23,18 +23,18 @@ namespace {
 
 const BenchRowConfig kRows[] = {
     {
-        "mem_hostcopy",
-        "baseline",
+        "out_mapped",
+        "copy_out+post",
         "opencv_mem",
         "NPU",
         "hostcopy",
-        "hostcopy",
-        "awnn_host",
+        "mapped",
+        "awnn_mapped",
     },
     {
-        "disk_hostcopy",
-        "preprocess",
-        "opencv_disk",
+        "out_hostcopy",
+        "copy_out+post",
+        "opencv_mem",
         "NPU",
         "hostcopy",
         "hostcopy",
@@ -52,8 +52,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("bench_yolov5_preprocess\n");
-    std::printf("  suite: preprocess (full pipeline, copy_out=hostcopy)\n");
+    std::printf("bench_yolov5_post_process\n");
+    std::printf("  suite: post_process (full pipeline, focus=copy_out+post)\n");
     std::printf("  model  : %s\n", ctx.model_path.c_str());
     std::printf("  input  : %s\n", ctx.input_path.c_str());
     std::printf("  warmup : %d  loops: %d\n", kDefaultWarmup, ctx.loops);
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         ctx.model_c);
 
     const BenchReport report = run_bench_suite(
-        "yolov5_detect_awnn full pipeline (preprocess)",
+        "yolov5_detect_awnn full pipeline (post_process)",
         ctx,
         std::vector<BenchRowConfig>(std::begin(kRows), std::end(kRows)));
 

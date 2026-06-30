@@ -15,7 +15,7 @@
 cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   -DBUILD_AWNN_APPS=ON -DENABLE_BENCHMARKS=ON
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --target yolov5_detect_awnn bench_yolov5_full_pipeline bench_yolov5_preprocess
+  --target yolov5_detect_awnn bench_yolov5_post_process
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
@@ -48,15 +48,17 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 
 默认输出：`share/percept/apps/yolov5_detect_awnn/yolov5_detect_awnn_out.jpg`
 
-**性能 benchmark（全流程，install → `share/percept/benchmarks/`）：**
+**性能 benchmark（install 后，与测试同一脚本）：**
 
 ```bash
-./share/percept/benchmarks/bench_yolov5_full_pipeline          # 输出路径对比
-./share/percept/benchmarks/bench_yolov5_preprocess             # 预处理对比
-./share/percept/benchmarks/bench_yolov5_full_pipeline 100      # 指定 loops
+# 板端：先跑正确性测试，再加 --bench 跑性能
+bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
+bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept --bench 50
 
-# 或 PC 远程：
-bash scripts/bench.sh --board orangepi@<ip>:~/deploy_percept -- 50
+# 或 install prefix 本地直接跑 benchmark
+export PERCEPT_ROOT=$PWD/share/percept
+export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
+./share/percept/benchmarks/bench_yolov5_post_process 50
 ```
 
 正确性回归见 `share/percept/tests/test_yolov5_detect_awnn`（integration test）。

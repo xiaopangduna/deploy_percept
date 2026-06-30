@@ -27,7 +27,6 @@ show_help() {
     echo "相关脚本:"
     echo "  bash scripts/build.sh   编译"
     echo "  bash scripts/test.sh    测试（build tree / install tree / 开发板）"
-    echo "  bash scripts/bench.sh   性能 benchmark（需 ENABLE_BENCHMARKS=ON）"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -78,4 +77,6 @@ else
 fi
 echo ""
 echo "验证 install 包: bash scripts/test.sh --install-dir ${INSTALL_DIR}"
-echo "运行 benchmark:  bash scripts/bench.sh --install-dir ${INSTALL_DIR} -- 50"
+if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
+    echo "含性能测试:      bash scripts/test.sh --install-dir ${INSTALL_DIR} --bench 50"
+fi
