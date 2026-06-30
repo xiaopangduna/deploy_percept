@@ -35,3 +35,8 @@ install(FILES
     apps/yolov5_detect_awnn/dog.jpg
     apps/yolov5_detect_awnn/yolov5.nb
     DESTINATION share/percept/apps/yolov5_detect_awnn)
+
+install(FILES
+    apps/yolov8_detect_awnn/dog.jpg
+    apps/yolov8_detect_awnn/yolov8.nb
+    DESTINATION share/percept/apps/yolov8_detect_awnn)

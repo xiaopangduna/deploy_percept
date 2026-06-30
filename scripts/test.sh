@@ -19,6 +19,7 @@ PERCEPT_INSTALL_TESTS=(
     test_YoloV5SegPostProcess
     test_YoloV8SegPostProcess
     test_yolov5_detect_awnn
+    test_yolov8_detect_awnn
 )
 
 PERCEPT_INSTALL_BENCHMARKS=(

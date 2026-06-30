@@ -10,6 +10,7 @@
 #include "post_process/PostProcessFactory.hpp"
 #include "post_process/YoloV5DetectPostProcess.hpp"
 #include "post_process/YoloV5DetectPostProcessAwnn.hpp"
+#include "post_process/YoloV8DetectPostProcessAwnn.hpp"
 #include "post_process/YoloV8PosePostProcess.hpp"
 #include "post_process/types.hpp"
 
@@ -17,6 +18,7 @@
 #include "engine/EngineFactory.hpp"
 #ifdef AWNN_FOUND
 #include "engine/AwnnEngine.hpp"
+#include "engine/AwnnImageInput.hpp"
 #include "engine/VipLiteRuntime.hpp"
 #include "engine/AwnnResultGuard.hpp"
 #endif
