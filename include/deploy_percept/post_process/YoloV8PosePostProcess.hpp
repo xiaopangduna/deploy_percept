@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <vector>
-#include <opencv2/opencv.hpp>
 
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/types.hpp"
@@ -47,8 +46,6 @@ public:
              std::vector<float> &output_scales,
              std::vector<int32_t> &output_zps,
              const std::vector<int32_t> &output_types);
-
-    void drawPoseResults(cv::Mat &image, const PoseResultGroup &results) const;
 
 private:
     Params params_;

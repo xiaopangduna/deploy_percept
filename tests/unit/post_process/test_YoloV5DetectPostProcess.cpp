@@ -7,6 +7,7 @@
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
 #include "deploy_percept/types.hpp"
 #include "deploy_percept/utils/npy.hpp"
+#include "deploy_percept/utils/vis_draw.hpp"
 #include "utils/environment.hpp"
 #include "tests/test_common/utils.hpp"
 #include "tests/test_common/paths.hpp"
@@ -74,7 +75,7 @@ TEST_F(YoloV5DetectPostProcessTest, run)
 
     EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, detection_result.detection_objects));
 
-    processor->drawDetectionResults(img, detection_result);
+    deploy_percept::utils::drawDetectionResults(img, detection_result);
 
     cv::imwrite(path_save_img_with_detect_result.c_str(), img);
 }

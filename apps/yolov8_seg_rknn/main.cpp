@@ -23,6 +23,7 @@
 #include "deploy_percept/engine/RknnEngine.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
+#include "deploy_percept/utils/vis_draw.hpp"
 
 using namespace deploy_percept::utils;
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
@@ -160,7 +161,7 @@ int main()
     auto seg_results = seg_processor.getResult().group;
 
     cv::Mat result_img = orig_img.clone();
-    seg_processor.drawDetectionResults(result_img, seg_results);
+    deploy_percept::utils::drawDetectionResults(result_img, seg_results);
 
     cv::imwrite(path_save_output_img, result_img);
     printf("Save computed detect result to %s\n", path_save_output_img.c_str());

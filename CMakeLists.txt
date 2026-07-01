@@ -36,7 +36,7 @@ set(SOURCES_FILE
     src/utils/logger_factory.cpp
     src/utils/npy.cpp
     src/utils/io.cpp
-    src/image/types.cpp
+    src/utils/vis_draw.cpp
     src/engine/BaseEngine.cpp
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp

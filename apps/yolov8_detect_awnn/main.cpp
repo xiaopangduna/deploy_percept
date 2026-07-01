@@ -18,6 +18,7 @@
 #include "deploy_percept/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/post_process/YoloV8DetectPostProcessAwnn.hpp"
+#include "deploy_percept/utils/vis_draw.hpp"
 
 namespace fs = std::filesystem;
 
@@ -25,6 +26,7 @@ using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
+using deploy_percept::utils::drawDetectionResults;
 
 namespace
 {
@@ -132,7 +134,7 @@ int main(int argc, char **argv)
     }
 
     cv::Mat result_img = model_input.clone();
-    processor.drawDetectionResults(result_img, processor.getResult().group);
+    drawDetectionResults(result_img, processor.getResult().group);
 
     std::error_code ec;
     fs::create_directories(fs::path(output_path).parent_path(), ec);

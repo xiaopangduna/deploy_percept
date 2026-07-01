@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
 
 namespace percept {
 namespace bench {

@@ -28,3 +28,4 @@
 
 // 包含工具模块
 #include "utils/logger_factory.hpp"
+#include "utils/vis_draw.hpp"

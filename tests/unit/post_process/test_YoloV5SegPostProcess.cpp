@@ -9,6 +9,7 @@
 #include "deploy_percept/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
+#include "deploy_percept/utils/vis_draw.hpp"
 #include "tests/test_common/utils.hpp"
 #include "tests/test_common/paths.hpp"
 
@@ -99,7 +100,7 @@ TEST_F(YoloV5SegPostProcessTest, run)
 
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
 
-    processor->drawDetectionResults(img, result);
+    deploy_percept::utils::drawDetectionResults(img, result);
     cv::imwrite(path_save_img_with_detect_result, img);
 }
 

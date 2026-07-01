@@ -4,7 +4,6 @@
 #include "deploy_percept/types.hpp"
 #include <vector>
 #include <string>
-#include <opencv2/opencv.hpp>
 
 namespace deploy_percept {
 namespace post_process {
@@ -164,8 +163,6 @@ public:
         int ori_height,
         int crop_x = 0,
         int crop_y = 0);
-
-    void drawDetectionResults(cv::Mat &image, const ResultGroup &results) const; // 绘制检测结果
 };
 
 } // namespace post_process

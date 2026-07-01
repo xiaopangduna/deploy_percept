@@ -14,6 +14,7 @@
 #include "deploy_percept/engine/RknnEngine.hpp"
 #include "deploy_percept/post_process/YoloV8PosePostProcess.hpp"
 #include "deploy_percept/types.hpp"
+#include "deploy_percept/utils/vis_draw.hpp"
 
 using namespace deploy_percept::post_process;
 
@@ -129,7 +130,7 @@ int main()
     }
 
     cv::Mat result_img = orig_img.clone();
-    pose_processor.drawPoseResults(result_img, pose_results);
+    deploy_percept::utils::drawPoseResults(result_img, pose_results);
 
     std::filesystem::create_directories(std::filesystem::path(path_save_output_img).parent_path());
     cv::imwrite(path_save_output_img, result_img);
