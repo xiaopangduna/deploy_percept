@@ -3,7 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 
 /**
  * @brief 比较两个分割掩码向量是否相等

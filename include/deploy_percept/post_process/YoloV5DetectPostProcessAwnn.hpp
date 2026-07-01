@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 
 namespace deploy_percept
 {

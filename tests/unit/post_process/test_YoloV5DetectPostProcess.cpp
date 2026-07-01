@@ -5,7 +5,7 @@
 #include "cnpy.h"
 
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "utils/environment.hpp"
 #include "tests/test_common/utils.hpp"

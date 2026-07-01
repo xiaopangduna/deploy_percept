@@ -4,7 +4,7 @@
 #include "bench_report.hpp"
 
 #include "deploy_percept/engine/AwnnResultGuard.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 
 #include <chrono>
 #include <cstdio>

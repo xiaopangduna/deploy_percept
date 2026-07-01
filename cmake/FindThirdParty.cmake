@@ -12,13 +12,20 @@ message(STATUS "================================================================
 message(STATUS "第三方库配置信息:")
 message(STATUS "  - THIRD_PARTY_PLATFORM_DIR: ${THIRD_PARTY_PLATFORM_DIR}")
 
-if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
-    include(FindSigmastar)
-endif()
+# 平台专属 NPU 运行时（一平台最多一个；未 include 则该平台无对应引擎）
+# TODO: Sigmastar SSC375
+# if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
+#     include(FindSigmastar)
+# endif()
 
 if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_orange_pi_4_pro_a733")
     include(FindAwnn)
 endif()
+
+# TODO: RKNN（瑞芯微）
+# if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_rk3588")
+#     include(FindRknn)
+# endif()
 
 include(FindSpdlogCustom)
 include(FindYamlCppCustom)
@@ -29,7 +36,6 @@ include(FindOpenCVCustom)
 # include(FindZlibCustom)
 include(FindCnpyCustom)
 
-# include(FindRknn)
 # include(FindRgaCustom)
 
 # include(FindNlohmannJson)

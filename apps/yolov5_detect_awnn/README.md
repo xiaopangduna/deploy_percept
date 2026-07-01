@@ -95,7 +95,7 @@ cp yolov5s-sim_uint8.nb /path/to/install/share/percept/apps/yolov5_detect_awnn/y
 
 ```bash
 cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  -DBUILD_AWNN_APPS=ON -DENABLE_BENCHMARKS=ON
+  -DENABLE_BENCHMARKS=ON
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --target yolov5_detect_awnn bench_yolov5_post_process
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release

@@ -1,5 +1,5 @@
 #include "deploy_percept/post_process/YoloV5DetectPostProcess.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 #include <vector>
 #include <algorithm>
 #include <set>

@@ -13,7 +13,7 @@
 
 #include "deploy_percept/engine/RknnEngine.hpp"
 #include "deploy_percept/post_process/YoloV8PosePostProcess.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 
 using namespace deploy_percept::post_process;
 

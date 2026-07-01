@@ -15,9 +15,7 @@
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
         "ENABLE_BENCHMARKS": "OFF",
-        "INSTALL_BENCHMARKS": "ON",
-        "BUILD_RKNN_APPS": "OFF",
-        "BUILD_AWNN_APPS": "OFF"
+        "INSTALL_BENCHMARKS": "ON"
       }
     },
     {
@@ -33,9 +31,7 @@
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
         "ENABLE_BENCHMARKS": "OFF",
-        "INSTALL_BENCHMARKS": "ON",
-        "BUILD_RKNN_APPS": "OFF",
-        "BUILD_AWNN_APPS": "OFF"
+        "INSTALL_BENCHMARKS": "ON"
       },
       "environment": {
         "PATH": "/opt/toolchains/arm-sigmastar-linux-uclibcgnueabihf-9.1.0/bin:$penv{PATH}"
@@ -54,9 +50,7 @@
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
         "ENABLE_BENCHMARKS": "ON",
-        "INSTALL_BENCHMARKS": "ON",
-        "BUILD_RKNN_APPS": "OFF",
-        "BUILD_AWNN_APPS": "ON"
+        "INSTALL_BENCHMARKS": "ON"
       },
       "environment": {
         "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"

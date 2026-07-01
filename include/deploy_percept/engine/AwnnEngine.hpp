@@ -3,7 +3,7 @@
 #ifdef AWNN_FOUND
 
 #include "deploy_percept/engine/BaseEngine.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 
 #include <array>
 #include <cstdint>

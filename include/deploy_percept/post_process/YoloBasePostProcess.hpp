@@ -1,7 +1,7 @@
 #pragma once
 
 #include "deploy_percept/post_process/BasePostProcess.hpp"
-#include "deploy_percept/post_process/types.hpp"
+#include "deploy_percept/types.hpp"
 #include <vector>
 #include <string>
 #include <opencv2/opencv.hpp>

@@ -7,8 +7,6 @@ option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 option(INSTALL_TESTS "Install test executables to share/percept/tests (requires ENABLE_TESTS)" ON)
 option(ENABLE_BENCHMARKS "Build performance benchmarks" OFF)
 option(INSTALL_BENCHMARKS "Install benchmarks to share/percept/benchmarks (requires ENABLE_BENCHMARKS)" ON)
-option(BUILD_RKNN_APPS "Build RKNN demo applications (requires RKNN runtime)" OFF)
-option(BUILD_AWNN_APPS "Build Allwinner AWNN demo applications (requires VIPLite runtime)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -38,12 +36,11 @@ set(SOURCES_FILE
     src/utils/logger_factory.cpp
     src/utils/npy.cpp
     src/utils/io.cpp
+    src/image/types.cpp
     src/engine/BaseEngine.cpp
     src/pre_process/image_pre_process.cpp
     src/post_process/YoloBasePostProcess.cpp
     src/post_process/YoloV5DetectPostProcess.cpp
-    src/post_process/YoloV5DetectPostProcessAwnn.cpp
-    src/post_process/YoloV8DetectPostProcessAwnn.cpp
     src/post_process/YoloV5SegPostProcess.cpp
     src/post_process/YoloV8PosePostProcess.cpp
     src/post_process/YoloV8SegPostProcess.cpp
@@ -67,19 +64,31 @@ target_include_directories(deploy_percept PUBLIC
     $<BUILD_INTERFACE:${OpenCV_INCLUDE_DIRS}>
 )
 
-# Sigmastar MI SDK（armv7l SSC375 平台后端，条件链接）
-if(SIGMASTAR_FOUND)
-    target_sources(deploy_percept PRIVATE
-        src/engine/SigmastarIpuEngine.cpp
-    )
-    target_link_libraries(deploy_percept PUBLIC sigmastar::mi)
-    target_compile_definitions(deploy_percept PUBLIC SIGMASTAR_FOUND=1)
-endif()
+# 平台 NPU 引擎：由 FindThirdParty 按 platform tag 探测，*_FOUND 即编入核心库
+# TODO: Sigmastar SSC375
+# if(SIGMASTAR_FOUND)
+#     target_sources(deploy_percept PRIVATE
+#         src/engine/SigmastarIpuEngine.cpp
+#     )
+#     target_link_libraries(deploy_percept PUBLIC sigmastar::mi)
+#     target_compile_definitions(deploy_percept PUBLIC SIGMASTAR_FOUND=1)
+# endif()
+
+# TODO: RKNN（瑞芯微）
+# if(RKNN_FOUND)
+#     target_sources(deploy_percept PRIVATE
+#         src/engine/RknnEngine.cpp
+#     )
+#     target_link_libraries(deploy_percept PUBLIC RKNN::runtime)
+#     target_compile_definitions(deploy_percept PUBLIC RKNN_FOUND=1)
+# endif()
 
 if(AWNN_FOUND)
     target_sources(deploy_percept PRIVATE
         src/engine/AwnnEngine.cpp
         src/engine/VipLiteRuntime.cpp
+        src/post_process/YoloV5DetectPostProcessAwnn.cpp
+        src/post_process/YoloV8DetectPostProcessAwnn.cpp
     )
     target_link_libraries(deploy_percept PUBLIC AWNN::VIPLite pthread)
     target_compile_definitions(deploy_percept PUBLIC AWNN_FOUND=1)

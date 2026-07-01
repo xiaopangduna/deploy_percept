@@ -6,13 +6,15 @@
 // 包含预处理模块
 #include "pre_process/image_pre_process.hpp"
 
+// 公共类型（tensor / 检测 / 图像）
+#include "types.hpp"
+
 // 包含后处理模块
 #include "post_process/PostProcessFactory.hpp"
 #include "post_process/YoloV5DetectPostProcess.hpp"
 #include "post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "post_process/YoloV8DetectPostProcessAwnn.hpp"
 #include "post_process/YoloV8PosePostProcess.hpp"
-#include "post_process/types.hpp"
 
 // 包含引擎模块
 #include "engine/EngineFactory.hpp"
