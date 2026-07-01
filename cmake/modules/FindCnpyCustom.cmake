@@ -1,20 +1,22 @@
-# FindCnpyCustom.cmake - 自定义 Cnpy 库查找模块
+# FindCnpyCustom.cmake - 自定义 Cnpy 库查找模块（非致命）
+
+set(CNPY_FOUND FALSE)
 
 set(CNPY_PATH "${THIRD_PARTY_PLATFORM_DIR}/cnpy")
 set(CNPY_INCLUDE_DIR "${CNPY_PATH}/include")
 set(CNPY_LIBRARY "${CNPY_PATH}/lib/libcnpy.a")
 
 if(NOT EXISTS "${CNPY_LIBRARY}" OR NOT EXISTS "${CNPY_INCLUDE_DIR}/cnpy.h")
-    message(FATAL_ERROR
-        "cnpy not found in ${CNPY_PATH}\n"
-        "Build with:\n"
-        "  bash scripts/third_party_builder.sh ${THIRD_PARTY_PLATFORM_TAG} --libs cnpy")
+    message(STATUS "cnpy not found in ${CNPY_PATH}")
+    message(STATUS "  build: bash scripts/third_party_builder.sh ${THIRD_PARTY_PLATFORM_TAG} --libs cnpy")
+    return()
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/FindZlibCustom.cmake")
 
-if(NOT TARGET ZLIB::ZLIB)
-    message(FATAL_ERROR "ZLIB::ZLIB target missing after FindZlibCustom.cmake")
+if(NOT ZLIB_FOUND OR NOT TARGET ZLIB::ZLIB)
+    message(STATUS "cnpy skipped: ZLIB not available")
+    return()
 endif()
 
 if(NOT TARGET cnpy::cnpy)

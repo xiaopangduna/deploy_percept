@@ -49,14 +49,29 @@ deploy_percept/
 └── third_party/                   # 第三方依赖（可能在.gitignore中）
 ```
 
+## 模块划分
+
+| 模块 | CMake target | 头文件入口 | 说明 |
+|------|--------------|------------|------|
+| **core** | `deploy_percept_core` | `deploy_percept.hpp` + `engine/`、`post_process/`、`types.hpp` | 推理与后处理，无 OpenCV |
+| **utils** | `deploy_percept_utils` | `deploy_percept_utils.hpp` + `utils/`、`pre_process/` | cnpy + OpenCV + spdlog 齐备才编译；RGA 源仍按平台可选 |
+| **app** | — | 按需细 include 或两个 umbrella | 通常链 `core` + `utils` |
+| **tests** | 分层门禁见下 | — | unit/integration 依赖 `deploy_percept_utils` |
+
+测试分层（`ENABLE_TESTS=ON` 时在 `tests/CMakeLists.txt` 按层 gate，依赖不齐则 WARNING 跳过整层）：
+
+| 层级 | 编译条件 | 内容 |
+|------|----------|------|
+| smoke | `GTest` | 标准库 / 可选 spdlog 链路 |
+| unit | `GTest` + `deploy_percept_utils` | post_process 单测 |
+| integration | `GTest` + `AWNN` + `deploy_percept_utils` | AWNN 流水线集成测 |
+
+头文件**物理目录统一**在 `include/deploy_percept/`。需要推理链 `deploy_percept_core`；需要 vis/pre/io 等再链 `deploy_percept_utils`（demo / 单测通常两者都链）。
+
 ## 依赖项
 
-- **RKNN Toolkit**：瑞芯微神经网络推理工具包
-- **OpenCV**：计算机视觉库
+- **OpenCV / spdlog / cnpy**：齐备后编译 `deploy_percept_utils`（core 不依赖 OpenCV）
 - **CMake**：构建系统
-- **spdlog**：日志库
-- **yaml-cpp**：YAML解析库
-- **cnpy**：NumPy数组读写库
 
 ## 编译与测试
 
@@ -85,7 +100,7 @@ deploy_percept/
 bash scripts/third_party_builder.sh x86_64 --libs all
 
 # Orange Pi A733 交叉编译
-bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,gtest,opencv,spdlog,yaml-cpp
+bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,gtest,opencv,spdlog
 ```
 
 ### 宿主机开发（x86_64）

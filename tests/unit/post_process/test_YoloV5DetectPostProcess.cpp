@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <opencv2/imgcodecs.hpp>
 #include <vector>
 #include <filesystem>
 

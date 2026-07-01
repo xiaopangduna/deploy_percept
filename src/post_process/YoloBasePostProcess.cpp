@@ -1,14 +1,69 @@
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/types.hpp"
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <set>
 #include <vector>
-#include <cmath>
-#include <malloc.h>
-#include <opencv2/opencv.hpp>
 
 namespace deploy_percept {
 namespace post_process {
+
+namespace
+{
+
+void resizeGray8Linear(
+    const uint8_t *src,
+    int src_w,
+    int src_h,
+    uint8_t *dst,
+    int dst_w,
+    int dst_h)
+{
+    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0)
+    {
+        return;
+    }
+
+    if (src_w == dst_w && src_h == dst_h)
+    {
+        std::memcpy(dst, src, static_cast<std::size_t>(src_w) * static_cast<std::size_t>(src_h));
+        return;
+    }
+
+    const float x_ratio = static_cast<float>(src_w) / static_cast<float>(dst_w);
+    const float y_ratio = static_cast<float>(src_h) / static_cast<float>(dst_h);
+
+    for (int y = 0; y < dst_h; ++y)
+    {
+        const float sy = (static_cast<float>(y) + 0.5f) * y_ratio - 0.5f;
+        int y0 = static_cast<int>(std::floor(sy));
+        int y1 = y0 + 1;
+        const float wy = sy - static_cast<float>(y0);
+        y0 = std::max(0, std::min(y0, src_h - 1));
+        y1 = std::max(0, std::min(y1, src_h - 1));
+
+        for (int x = 0; x < dst_w; ++x)
+        {
+            const float sx = (static_cast<float>(x) + 0.5f) * x_ratio - 0.5f;
+            int x0 = static_cast<int>(std::floor(sx));
+            int x1 = x0 + 1;
+            const float wx = sx - static_cast<float>(x0);
+            x0 = std::max(0, std::min(x0, src_w - 1));
+            x1 = std::max(0, std::min(x1, src_w - 1));
+
+            const float v00 = static_cast<float>(src[y0 * src_w + x0]);
+            const float v01 = static_cast<float>(src[y0 * src_w + x1]);
+            const float v10 = static_cast<float>(src[y1 * src_w + x0]);
+            const float v11 = static_cast<float>(src[y1 * src_w + x1]);
+            const float v0 = v00 + (v01 - v00) * wx;
+            const float v1 = v10 + (v11 - v10) * wx;
+            dst[y * dst_w + x] = static_cast<uint8_t>(std::lround(v0 + (v1 - v0) * wy));
+        }
+    }
+}
+
+} // namespace
 
 YoloBasePostProcess::YoloBasePostProcess() {
     // 无状态构造函数，不需要任何初始化
@@ -135,10 +190,9 @@ void YoloBasePostProcess::resizeSegMasks(uint8_t *input_image, int input_width, 
 {
     for (int b = 0; b < boxes_num; b++)
     {
-        cv::Mat src_image(input_height, input_width, CV_8U, &input_image[b * input_width * input_height]);
-        cv::Mat dst_image;
-        cv::resize(src_image, dst_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
-        memcpy(&output_image[b * target_width * target_height], dst_image.data, target_width * target_height * sizeof(uint8_t));
+        const uint8_t *src = &input_image[b * input_width * input_height];
+        uint8_t *dst = &output_image[b * target_width * target_height];
+        resizeGray8Linear(src, input_width, input_height, dst, target_width, target_height);
     }
 }
 

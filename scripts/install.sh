@@ -62,7 +62,7 @@ INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCac
 echo ""
 echo "安装完成: ${INSTALL_DIR}"
 echo "  bin/                      demo 可执行文件"
-echo "  lib/                      库（libdeploy_percept.a、VIPLite 等）"
+echo "  lib/                      库（libdeploy_percept_core.a、libdeploy_percept_utils.a、VIPLite 等）"
 echo "  include/deploy_percept/"
 echo "  share/percept/apps/       示例与测试 fixture 数据"
 if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then

@@ -3,19 +3,19 @@
 #
 # 交叉编译下不用 find_library/find_path，避免 FIND_ROOT_PATH_MODE 导致查找失败
 
+set(ZLIB_FOUND FALSE)
+
 set(ZLIB_ROOT "${THIRD_PARTY_PLATFORM_DIR}/zlib")
 get_filename_component(ZLIB_ROOT "${ZLIB_ROOT}" ABSOLUTE)
 set(ZLIB_INCLUDE_DIR "${ZLIB_ROOT}/include")
 set(ZLIB_LIBRARY "${ZLIB_ROOT}/lib/libz.a")
 
 if(NOT EXISTS "${ZLIB_LIBRARY}" OR NOT EXISTS "${ZLIB_INCLUDE_DIR}/zlib.h")
-    message(FATAL_ERROR
-        "zlib not found in ${ZLIB_ROOT}\n"
-        "Build with:\n"
-        "  bash scripts/third_party_builder.sh ${THIRD_PARTY_PLATFORM_TAG} --libs cnpy")
+    message(STATUS "zlib not found in ${ZLIB_ROOT}")
+    return()
 endif()
 
-set(ZlibCustom_FOUND TRUE)
+set(ZLIB_FOUND TRUE)
 
 message(STATUS "==============================================================================")
 message(STATUS "ZLIB found successfully")

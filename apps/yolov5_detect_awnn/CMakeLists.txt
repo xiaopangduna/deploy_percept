@@ -5,9 +5,8 @@ project(yolov5_detect_awnn LANGUAGES CXX)
 add_executable(yolov5_detect_awnn main.cpp)
 
 target_link_libraries(yolov5_detect_awnn PRIVATE
-    deploy_percept
-    AWNN::VIPLite
-    pthread)
+    deploy_percept_core
+    deploy_percept_utils)
 
 install(TARGETS yolov5_detect_awnn RUNTIME DESTINATION bin)
 

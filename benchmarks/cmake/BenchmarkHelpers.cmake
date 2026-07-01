@@ -34,6 +34,12 @@ function(add_percept_awnn_benchmark)
     if(NOT AWNN_FOUND)
         message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): AWNN not found")
     endif()
+    if(NOT TARGET deploy_percept_utils)
+        message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): deploy_percept_utils not built")
+    endif()
+    if(NOT TARGET deploy_percept_utils)
+        message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): deploy_percept_utils not built")
+    endif()
 
     add_executable(${PARSED_NAME} ${PARSED_SOURCES})
 
@@ -42,7 +48,8 @@ function(add_percept_awnn_benchmark)
         ${CMAKE_SOURCE_DIR})
 
     target_link_libraries(${PARSED_NAME} PRIVATE
-        deploy_percept
+        deploy_percept_core
+        deploy_percept_utils
         AWNN::VIPLite
         pthread
         ${OpenCV_LIBS})

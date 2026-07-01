@@ -9,9 +9,11 @@
 #     add_subdirectory(yolov8_pose_rknn)
 # endif()
 
-if(AWNN_FOUND)
+if(AWNN_FOUND AND TARGET deploy_percept_utils)
     add_subdirectory(yolov5_detect_awnn)
     add_subdirectory(yolov8_detect_awnn)
+elseif(AWNN_FOUND)
+    message(WARNING "apps: AWNN 已找到但 deploy_percept_utils 未编译，跳过 AWNN 示例")
 else()
     message(STATUS "apps: AWNN 未找到，跳过 AWNN 示例（检查 third_party/.../awnn/viplite-tina）")
 endif()

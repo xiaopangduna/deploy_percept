@@ -3,7 +3,6 @@
 #include <vector>
 #include <cstring>
 #include <string>
-#include <opencv2/opencv.hpp>
 #include "deploy_percept/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/types.hpp"
 

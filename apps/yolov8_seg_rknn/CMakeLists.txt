@@ -4,7 +4,7 @@ project(yolov8_seg_rknn)
 
 add_executable(yolov8_seg_rknn main.cpp)
 
-target_link_libraries(yolov8_seg_rknn PRIVATE deploy_percept)
+target_link_libraries(yolov8_seg_rknn PRIVATE deploy_percept_core deploy_percept_utils)
 
 # 安装可执行文件
 install(TARGETS yolov8_seg_rknn

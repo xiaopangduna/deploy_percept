@@ -1,45 +1,12 @@
 include(GNUInstallDirs)
 
-install(TARGETS deploy_percept
+install(TARGETS deploy_percept_core
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+if(TARGET deploy_percept_utils)
+    install(TARGETS deploy_percept_utils
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 install(DIRECTORY include/deploy_percept
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-# apps/ 数据文件（源码唯一来源；示例与测试共用）
-# TODO: RKNN 示例数据（启用 RKNN 平台后取消注释）
-# install(FILES
-#     apps/yolov5_detect_rknn/bus.jpg
-#     apps/yolov5_detect_rknn/coco_80_labels_list.txt
-#     apps/yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz
-#     DESTINATION share/percept/apps/yolov5_detect_rknn)
-#
-# install(FILES
-#     apps/yolov5_seg_rknn/bus.jpg
-#     apps/yolov5_seg_rknn/coco_80_labels_list.txt
-#     apps/yolov5_seg_rknn/yolov5_seg_result_model_outputs.npz
-#     apps/yolov5_seg_rknn/yolov5_seg_result_mask.bin
-#     DESTINATION share/percept/apps/yolov5_seg_rknn)
-#
-# install(FILES
-#     apps/yolov8_seg_rknn/bus.jpg
-#     apps/yolov8_seg_rknn/coco_80_labels_list.txt
-#     apps/yolov8_seg_rknn/yolov8_seg_result_model_outputs.npz
-#     apps/yolov8_seg_rknn/yolov8_seg_result_mask.bin
-#     DESTINATION share/percept/apps/yolov8_seg_rknn)
-#
-# install(FILES
-#     apps/yolov8_pose_rknn/bus.jpg
-#     DESTINATION share/percept/apps/yolov8_pose_rknn)
-
-if(AWNN_FOUND)
-    install(FILES
-        apps/yolov5_detect_awnn/dog.jpg
-        apps/yolov5_detect_awnn/yolov5.nb
-        DESTINATION share/percept/apps/yolov5_detect_awnn)
-
-    install(FILES
-        apps/yolov8_detect_awnn/dog.jpg
-        apps/yolov8_detect_awnn/yolov8.nb
-        DESTINATION share/percept/apps/yolov8_detect_awnn)
-endif()

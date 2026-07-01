@@ -25,21 +25,53 @@ endif()
 # TODO: RKNN（瑞芯微）
 # if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_rk3588")
 #     include(FindRknn)
+#     include(FindRgaCustom)
 # endif()
 
+# 与平台无关：cnpy / OpenCV / spdlog 统一 Find（非致命）
+include(FindCnpyCustom)
+set(SPDLOG_FIND_REQUIRED OFF)
 include(FindSpdlogCustom)
-include(FindYamlCppCustom)
-
 include(FindOpenCVCustom)
 
-# # 导入自定义的查找模块
-# include(FindZlibCustom)
-include(FindCnpyCustom)
+set(PERCEPT_UTILS_READY FALSE)
+if(CNPY_FOUND AND OpenCV_FOUND AND spdlog_FOUND)
+    set(PERCEPT_UTILS_READY TRUE)
+endif()
+message(STATUS "PERCEPT_UTILS_READY: ${PERCEPT_UTILS_READY}"
+    " (cnpy=${CNPY_FOUND} opencv=${OpenCV_FOUND} spdlog=${spdlog_FOUND})")
 
-# include(FindRgaCustom)
+# 测试分层门禁（GTest 仅 ENABLE_TESTS 时 Find）
+set(PERCEPT_SMOKE_TESTS_READY FALSE)
+set(PERCEPT_UNIT_TESTS_READY FALSE)
+set(PERCEPT_INTEGRATION_TESTS_READY FALSE)
 
-# include(FindNlohmannJson)
+if(ENABLE_TESTS)
+    include(FindGTestCustom)
 
-include(FindGTestCustom)
+    if(GTest_FOUND)
+        set(PERCEPT_SMOKE_TESTS_READY TRUE)
+    endif()
+
+    if(GTest_FOUND AND PERCEPT_UTILS_READY)
+        set(PERCEPT_UNIT_TESTS_READY TRUE)
+    endif()
+
+    if(GTest_FOUND AND AWNN_FOUND AND PERCEPT_UTILS_READY)
+        set(PERCEPT_INTEGRATION_TESTS_READY TRUE)
+    endif()
+
+    message(STATUS "tests readiness:"
+        " smoke=${PERCEPT_SMOKE_TESTS_READY}"
+        " unit=${PERCEPT_UNIT_TESTS_READY}"
+        " integration=${PERCEPT_INTEGRATION_TESTS_READY}")
+endif()
+
+set(PERCEPT_BENCHMARKS_READY FALSE)
+if(AWNN_FOUND AND PERCEPT_UTILS_READY)
+    set(PERCEPT_BENCHMARKS_READY TRUE)
+endif()
+
+# TODO: yaml-cpp（RKNN app 启用后再 include(FindYamlCppCustom)）
 
 message(STATUS "已完成第三方库配置")

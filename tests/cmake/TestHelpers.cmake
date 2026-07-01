@@ -22,7 +22,7 @@ endfunction()
 #       NAME test_foo
 #       TIER unit                    # smoke | unit | integration
 #       SOURCES path/to/test.cpp
-#       LINK_LIBS deploy_percept     # 可选
+#       LINK_LIBS deploy_percept_core deploy_percept_utils  # 可选
 #       USE_CUSTOM_MAIN              # 可选，源文件自带 main 时设置
 #   )
 
@@ -72,7 +72,7 @@ endfunction()
 #   add_percept_awnn_integration_test(
 #       NAME test_yolov5_detect_awnn
 #       SOURCES pipeline.cpp test_yolov5_detect_awnn.cpp
-#       LINK_LIBS deploy_percept
+#       LINK_LIBS deploy_percept_core deploy_percept_utils
 #       USE_CUSTOM_MAIN
 #   )
 
