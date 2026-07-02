@@ -1,4 +1,4 @@
-if(NOT PERCEPT_UTILS_READY)
+if(NOT CNPY_FOUND OR NOT OpenCV_FOUND OR NOT spdlog_FOUND)
     message(WARNING
         "deploy_percept_utils skipped: need cnpy + OpenCV + spdlog"
         " (cnpy=${CNPY_FOUND} opencv=${OpenCV_FOUND} spdlog=${spdlog_FOUND})")

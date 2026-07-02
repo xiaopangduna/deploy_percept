@@ -1,8 +1,3 @@
-if(NOT AWNN_FOUND)
-    message(STATUS "benchmarks/awnn: AWNN 未找到，跳过 AWNN benchmark")
-    return()
-endif()
-
 set(PERCEPT_AWNN_BENCH_COMMON_SOURCES
     bench_common.cpp
     bench_pipeline.cpp

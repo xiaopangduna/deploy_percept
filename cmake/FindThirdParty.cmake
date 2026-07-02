@@ -1,6 +1,7 @@
-# FindThirdParty.cmake - 第三方库查找入口
+# FindThirdParty.cmake - 第三方库查找入口（仅负责 Find，不做编译门禁）
 #
 # THIRD_PARTY_* 路径由各 toolchain 设置，此处不重复推导。
+# 编译门禁由根 CMakeLists.txt 与各子目录 CMakeLists.txt 直接用 option + *_FOUND 判断。
 
 if(NOT DEFINED THIRD_PARTY_PLATFORM_DIR)
     message(FATAL_ERROR
@@ -28,50 +29,13 @@ endif()
 #     include(FindRgaCustom)
 # endif()
 
-# 与平台无关：cnpy / OpenCV / spdlog 统一 Find（非致命）
+# 与平台无关：cnpy / OpenCV / spdlog / GTest / RGA 统一 Find（非致命）
 include(FindCnpyCustom)
 set(SPDLOG_FIND_REQUIRED OFF)
 include(FindSpdlogCustom)
 include(FindOpenCVCustom)
 include(FindRgaCustom)
-
-set(PERCEPT_UTILS_READY FALSE)
-if(CNPY_FOUND AND OpenCV_FOUND AND spdlog_FOUND)
-    set(PERCEPT_UTILS_READY TRUE)
-endif()
-message(STATUS "PERCEPT_UTILS_READY: ${PERCEPT_UTILS_READY}"
-    " (cnpy=${CNPY_FOUND} opencv=${OpenCV_FOUND} spdlog=${spdlog_FOUND})")
-
-# 测试分层门禁（GTest 仅 ENABLE_TESTS 时 Find）
-set(PERCEPT_SMOKE_TESTS_READY FALSE)
-set(PERCEPT_UNIT_TESTS_READY FALSE)
-set(PERCEPT_INTEGRATION_TESTS_READY FALSE)
-
-if(ENABLE_TESTS)
-    include(FindGTestCustom)
-
-    if(GTest_FOUND)
-        set(PERCEPT_SMOKE_TESTS_READY TRUE)
-    endif()
-
-    if(GTest_FOUND AND PERCEPT_UTILS_READY)
-        set(PERCEPT_UNIT_TESTS_READY TRUE)
-    endif()
-
-    if(GTest_FOUND AND AWNN_FOUND AND PERCEPT_UTILS_READY)
-        set(PERCEPT_INTEGRATION_TESTS_READY TRUE)
-    endif()
-
-    message(STATUS "tests readiness:"
-        " smoke=${PERCEPT_SMOKE_TESTS_READY}"
-        " unit=${PERCEPT_UNIT_TESTS_READY}"
-        " integration=${PERCEPT_INTEGRATION_TESTS_READY}")
-endif()
-
-set(PERCEPT_BENCHMARKS_READY FALSE)
-if(AWNN_FOUND AND PERCEPT_UTILS_READY)
-    set(PERCEPT_BENCHMARKS_READY TRUE)
-endif()
+include(FindGTestCustom)
 
 # TODO: yaml-cpp（RKNN app 启用后再 include(FindYamlCppCustom)）
 

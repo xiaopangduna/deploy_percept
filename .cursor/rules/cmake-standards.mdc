@@ -17,8 +17,9 @@ alwaysApply: false
 ## 正确做法
 
 1. 在 `cmake/modules/FindXxxCustom.cmake`（或 `FindXxx.cmake`）实现查找，提供 `Xxx_FOUND` 与 `Xxx::Target`
-2. 在 `FindThirdParty.cmake` 中按平台/tag 或 readiness 层级 `include(FindXxx...)`
-3. 业务侧只用 `if(Xxx_FOUND)` + `target_link_libraries(... Xxx::Target)`，或依赖 `PERCEPT_*_READY` 门禁
+2. 在 `FindThirdParty.cmake` 中按平台/tag `include(FindXxx...)`
+3. 根 CMakeLists.txt 与各子目录直接用 `if(option AND Xxx_FOUND ...)` 控制是否编译，不引入中间 readiness 变量
+4. 业务侧 `target_link_libraries(... Xxx::Target)` 链接已找到的第三方库
 
 
-Find 模块未找到库时：`message(STATUS ...)` + `return()`，非致命；由 `FindThirdParty.cmake` 汇总 `PERCEPT_UTILS_READY` 等 readiness 变量。
+Find 模块未找到库时：`message(STATUS ...)` + `return()`，非致命。
