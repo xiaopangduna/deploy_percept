@@ -66,13 +66,33 @@ fs::path percept_root()
     return {};
 }
 
-fs::path app_resource(const char *relative)
+fs::path app_resource(const char *app_name, const char *relative)
 {
     if (const fs::path root = percept_root(); !root.empty())
     {
-        return root / "apps" / "yolov5_detect_awnn" / relative;
+        return root / "apps" / app_name / relative;
     }
-    return fs::path("apps/yolov5_detect_awnn") / relative;
+    return fs::path("apps") / app_name / relative;
+}
+
+void parse_model_input_dims(
+    const std::array<std::uint32_t, 6> &sizes,
+    const ModelInputLayout layout,
+    int &model_w,
+    int &model_h,
+    int &model_c)
+{
+    if (layout == ModelInputLayout::YoloV8)
+    {
+        model_c = static_cast<int>(sizes[0]);
+        model_h = static_cast<int>(sizes[1]);
+        model_w = static_cast<int>(sizes[2]);
+        return;
+    }
+
+    model_w = static_cast<int>(sizes[0]);
+    model_h = static_cast<int>(sizes[1]);
+    model_c = static_cast<int>(sizes[2]);
 }
 
 std::string resolve_path(const char *path, const fs::path &base)
@@ -111,8 +131,23 @@ std::vector<std::uint8_t> pack_rgb_for_vip_input(
     return buffer;
 }
 
+std::vector<std::uint8_t> pack_rgb_hwc_for_vip_input(
+    const cv::Mat &bgr,
+    const int width,
+    const int height)
+{
+    cv::Mat rgb;
+    cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+
+    std::vector<std::uint8_t> buffer(static_cast<std::size_t>(width * height * 3));
+    cv::Mat rgb_hwc(height, width, CV_8UC3, buffer.data());
+    rgb.copyTo(rgb_hwc);
+    return buffer;
+}
+
 bool run_preprocess(
     const PreprocessMode mode,
+    const InputPackLayout pack_layout,
     const std::string &input_path,
     const cv::Mat &cached_bgr,
     const int model_w,
@@ -142,7 +177,14 @@ bool run_preprocess(
 
     cv::Mat resized;
     cv::resize(source, resized, cv::Size(model_w, model_h));
-    input_buffer = pack_rgb_for_vip_input(resized, model_w, model_h, model_c);
+    if (pack_layout == InputPackLayout::Hwc)
+    {
+        input_buffer = pack_rgb_hwc_for_vip_input(resized, model_w, model_h);
+    }
+    else
+    {
+        input_buffer = pack_rgb_for_vip_input(resized, model_w, model_h, model_c);
+    }
     return true;
 }
 

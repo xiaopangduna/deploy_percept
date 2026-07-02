@@ -31,7 +31,6 @@ endif()
 
 # 与平台无关：cnpy / OpenCV / spdlog / GTest / RGA 统一 Find（非致命）
 include(FindCnpyCustom)
-set(SPDLOG_FIND_REQUIRED OFF)
 include(FindSpdlogCustom)
 include(FindOpenCVCustom)
 include(FindRgaCustom)

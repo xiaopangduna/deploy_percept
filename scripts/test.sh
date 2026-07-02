@@ -24,6 +24,7 @@ PERCEPT_INSTALL_TESTS=(
 
 PERCEPT_INSTALL_BENCHMARKS=(
     bench_yolov5_post_process
+    bench_yolov8_post_process
 )
 
 show_help() {

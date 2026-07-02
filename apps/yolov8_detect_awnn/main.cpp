@@ -5,6 +5,7 @@
  *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg]
  *
  * 默认：./yolov8.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
+ * 性能对比见 benchmarks/awnn/bench_yolov8_post_process
  */
 #include <cstdio>
 #include <cstdint>
