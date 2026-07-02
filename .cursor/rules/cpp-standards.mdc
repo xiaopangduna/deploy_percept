@@ -1,0 +1,17 @@
+---
+description: 通用 C++ 编码规范（当前仅命名约定）
+globs: "**/*.{cpp,h,hpp,cc,cxx}"
+alwaysApply: false
+---
+
+# C++ Conventions
+
+## Naming
+
+- 类型（class、struct、enum、using、typedef）：PascalCase，如 `ImageBuffer`、`TensorView`
+- 函数与局部/全局变量：snake_case，如 `load_model`、`batch_size`
+- 类成员变量：snake_case + 尾下划线，如 `model_path_`、`is_ready_`
+- 枚举值（enum class 成员）：PascalCase，如 `Status::Ok`、`Color::Red`
+- 编译期常量：k 前缀 + PascalCase，如 `kMaxBatchSize`、`kDefaultTimeout`
+- 宏：全大写 + 下划线，如 `DISALLOW_COPY`、`MAX_BUFFER_SIZE`
+- 源文件与头文件：snake_case，如 `image_processor.cpp`、`tensor_view.hpp`

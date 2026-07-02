@@ -3,8 +3,8 @@
 #include "bench_common.hpp"
 #include "bench_report.hpp"
 
-#include "deploy_percept/engine/AwnnResultGuard.hpp"
-#include "deploy_percept/types.hpp"
+#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/common/types.hpp"
 
 #include <chrono>
 #include <cstdio>

@@ -1,5 +1,8 @@
 include(GNUInstallDirs)
 
+install(TARGETS deploy_percept_common
+    EXPORT deploy_perceptTargets)
+
 install(TARGETS deploy_percept_core
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

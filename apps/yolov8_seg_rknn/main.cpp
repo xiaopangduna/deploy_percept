@@ -18,9 +18,9 @@
 
 #include "cnpy.h"
 
-#include "deploy_percept/post_process/YoloV8SegPostProcess.hpp"
-#include "deploy_percept/types.hpp"
-#include "deploy_percept/engine/RknnEngine.hpp"
+#include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
+#include "deploy_percept/common/types.hpp"
+#include "deploy_percept/core/engine/RknnEngine.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"

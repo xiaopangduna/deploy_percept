@@ -1,6 +1,6 @@
 #pragma once
 
-#include "deploy_percept/types.hpp"
+#include "deploy_percept/common/types.hpp"
 
 #include <opencv2/core/mat.hpp>
 

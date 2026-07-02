@@ -3,9 +3,9 @@
 #include "bench_common.hpp"
 #include "bench_pipeline.hpp"
 
-#include "deploy_percept/engine/AwnnEngine.hpp"
-#include "deploy_percept/engine/VipLiteRuntime.hpp"
-#include "deploy_percept/post_process/YoloV5DetectPostProcessAwnn.hpp"
+#include "deploy_percept/core/engine/AwnnEngine.hpp"
+#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
+#include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 
 #include <cstdlib>
 #include <cstdio>

@@ -33,6 +33,7 @@ include(FindCnpyCustom)
 set(SPDLOG_FIND_REQUIRED OFF)
 include(FindSpdlogCustom)
 include(FindOpenCVCustom)
+include(FindRgaCustom)
 
 set(PERCEPT_UTILS_READY FALSE)
 if(CNPY_FOUND AND OpenCV_FOUND AND spdlog_FOUND)

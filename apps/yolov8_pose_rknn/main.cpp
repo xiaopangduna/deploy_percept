@@ -11,9 +11,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 
-#include "deploy_percept/engine/RknnEngine.hpp"
-#include "deploy_percept/post_process/YoloV8PosePostProcess.hpp"
-#include "deploy_percept/types.hpp"
+#include "deploy_percept/core/engine/RknnEngine.hpp"
+#include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
+#include "deploy_percept/common/types.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
 
 using namespace deploy_percept::post_process;

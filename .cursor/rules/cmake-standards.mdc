@@ -1,0 +1,24 @@
+---
+description: 通用 cmake 规范
+globs: "**/CMakeLists.txt,**/*.cmake"
+alwaysApply: false
+---
+
+# CMake：第三方库查找
+
+**唯一入口：`cmake/FindThirdParty.cmake`。** 根 `CMakeLists.txt` 只 `include(FindThirdParty)` 一次；其余 CMake 文件不得再查找第三方库。
+
+## 禁止
+
+- 在 `CMakeLists.txt`、tests、benchmarks 中 `find_package(...)` 或 `include(Find*.cmake)`
+- 在业务 CMake 中写 `third_party/` 路径、裸 `.so`/`.a` 路径
+- 新增 Find 模块却不挂到 `FindThirdParty.cmake`
+
+## 正确做法
+
+1. 在 `cmake/modules/FindXxxCustom.cmake`（或 `FindXxx.cmake`）实现查找，提供 `Xxx_FOUND` 与 `Xxx::Target`
+2. 在 `FindThirdParty.cmake` 中按平台/tag 或 readiness 层级 `include(FindXxx...)`
+3. 业务侧只用 `if(Xxx_FOUND)` + `target_link_libraries(... Xxx::Target)`，或依赖 `PERCEPT_*_READY` 门禁
+
+
+Find 模块未找到库时：`message(STATUS ...)` + `return()`，非致命；由 `FindThirdParty.cmake` 汇总 `PERCEPT_UTILS_READY` 等 readiness 变量。
