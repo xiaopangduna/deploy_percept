@@ -20,11 +20,13 @@ PERCEPT_INSTALL_TESTS=(
     test_YoloV8SegPostProcess
     test_yolov5_detect_awnn
     test_yolov8_detect_awnn
+    test_mobilenetv2_classify_awnn
 )
 
 PERCEPT_INSTALL_BENCHMARKS=(
     bench_yolov5_post_process
     bench_yolov8_post_process
+    bench_mobilenetv2_classify
 )
 
 show_help() {

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -60,6 +61,20 @@ struct PoseResultGroup
     std::vector<PoseDetectionObject> objects;
 };
 
+struct ClassificationEntry
+{
+    int class_id = 0;
+    float prob = 0.f;
+    std::string label;
+};
+
+struct ClassificationResult
+{
+    bool success = false;
+    std::string message;
+    std::vector<ClassificationEntry> top_k;
+};
+
 namespace post_process
 {
 
@@ -70,6 +85,8 @@ using DetectionObject = deploy_percept::DetectionObject;
 using ResultGroup = deploy_percept::ResultGroup;
 using PoseDetectionObject = deploy_percept::PoseDetectionObject;
 using PoseResultGroup = deploy_percept::PoseResultGroup;
+using ClassificationEntry = deploy_percept::ClassificationEntry;
+using ClassificationResult = deploy_percept::ClassificationResult;
 
 } // namespace post_process
 

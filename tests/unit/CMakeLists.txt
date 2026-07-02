@@ -18,3 +18,9 @@ add_percept_test(
     SOURCES post_process/test_YoloV8SegPostProcess.cpp
     LINK_LIBS deploy_percept_core deploy_percept_utils test_utils
     USE_CUSTOM_MAIN)
+
+add_percept_test(
+    NAME test_ClassificationPostProcessAwnn
+    TIER unit
+    SOURCES post_process/test_ClassificationPostProcessAwnn.cpp
+    LINK_LIBS deploy_percept_core deploy_percept_utils test_utils)

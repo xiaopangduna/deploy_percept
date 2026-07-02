@@ -13,6 +13,7 @@
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
 #endif
+#include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
 
 #include "deploy_percept/core/engine/EngineFactory.hpp"

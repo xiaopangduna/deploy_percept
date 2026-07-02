@@ -5,6 +5,7 @@ set(CORE_SOURCES
     post_process/YoloV5SegPostProcess.cpp
     post_process/YoloV8PosePostProcess.cpp
     post_process/YoloV8SegPostProcess.cpp
+    post_process/ClassificationPostProcessAwnn.cpp
 )
 
 add_library(deploy_percept_core STATIC ${CORE_SOURCES})

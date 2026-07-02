@@ -20,6 +20,7 @@ struct ModelBenchSpec
     const char *default_model{nullptr};
     ModelInputLayout input_layout{ModelInputLayout::YoloV5};
     InputPackLayout pack_layout{InputPackLayout::Chw};
+    const char *default_input{"dog.jpg"};
 };
 
 struct BenchRunContext
