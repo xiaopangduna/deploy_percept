@@ -3,7 +3,6 @@
 #include "deploy_percept/core/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
 
-#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -34,9 +33,8 @@ namespace deploy_percept
 
             struct Result
             {
-                ResultGroup group{};
+                DetectionResult group{};
                 bool success = false;
-                std::string message{};
             };
 
             ~YoloV5DetectPostProcess() override = default;
@@ -52,7 +50,7 @@ namespace deploy_percept
                 float nms_threshold,
                 std::vector<int> &index_array);
 
-            /** 将 NMS 保留的候选框转为 DetectionObject 并写入 result.group。 */
+            /** 将 NMS 保留的候选框转为 Detection 并写入 result.group。 */
             static bool collectDetections(
                 const std::vector<int> &index_array,
                 const std::vector<float> &candidate_boxes,

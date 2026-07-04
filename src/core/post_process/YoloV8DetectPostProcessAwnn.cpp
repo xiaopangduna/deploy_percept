@@ -64,8 +64,7 @@ namespace deploy_percept
                 int num_class,
                 StrideTensors &s8,
                 StrideTensors &s16,
-                StrideTensors &s32,
-                std::string &message)
+                StrideTensors &s32)
             {
                 std::vector<std::pair<std::size_t, const float *>> tensors;
                 tensors.reserve(inputs.size());
@@ -80,7 +79,6 @@ namespace deploy_percept
 
                 if (tensors.size() < 6)
                 {
-                    message = "Expected 6 FP32 outputs, got " + std::to_string(tensors.size());
                     return false;
                 }
 
@@ -109,7 +107,6 @@ namespace deploy_percept
 
                     if (out.grid == nullptr || out.score == nullptr)
                     {
-                        message = "Missing grid/score tensors for stride " + std::to_string(stride);
                         return false;
                     }
                     return true;
@@ -131,9 +128,8 @@ namespace deploy_percept
 
         void YoloV8DetectPostProcessAwnn::resetResult()
         {
-            result_.group = ResultGroup{};
+            result_.group = DetectionResult{};
             result_.success = false;
-            result_.message.clear();
         }
 
         void YoloV8DetectPostProcessAwnn::generateProposals(
@@ -211,7 +207,6 @@ namespace deploy_percept
         {
             if (proposals.empty())
             {
-                result_.message = "No objects detected";
                 return false;
             }
 
@@ -255,12 +250,11 @@ namespace deploy_percept
             const int model_w = params_.model_in_w;
             const int model_h = params_.model_in_h;
 
-            result_.group.count = 0;
-            result_.group.detection_objects.clear();
+            result_.group.detections.clear();
 
             for (int idx : picked)
             {
-                if (result_.group.count >= params_.obj_numb_max_size)
+                if (result_.group.detections.size() >= static_cast<std::size_t>(params_.obj_numb_max_size))
                 {
                     break;
                 }
@@ -284,26 +278,23 @@ namespace deploy_percept
                     continue;
                 }
 
-                DetectionObject det_obj{};
-                det_obj.box.left = static_cast<int>(std::floor(obj.x));
-                det_obj.box.top = static_cast<int>(std::floor(obj.y));
-                det_obj.box.right = static_cast<int>(std::ceil(obj.x + obj.w));
-                det_obj.box.bottom = static_cast<int>(std::ceil(obj.y + obj.h));
-                det_obj.prop = obj.prob;
-                det_obj.cls_id = obj.label;
-                std::snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", obj.label);
+                Detection det{};
+                det.box.left = static_cast<int>(std::floor(obj.x));
+                det.box.top = static_cast<int>(std::floor(obj.y));
+                det.box.right = static_cast<int>(std::ceil(obj.x + obj.w));
+                det.box.bottom = static_cast<int>(std::ceil(obj.y + obj.h));
+                det.score = obj.prob;
+                det.class_id = obj.label;
 
-                if (det_obj.box.right <= det_obj.box.left || det_obj.box.bottom <= det_obj.box.top)
+                if (det.box.right <= det.box.left || det.box.bottom <= det.box.top)
                 {
                     continue;
                 }
 
-                result_.group.detection_objects.push_back(det_obj);
-                ++result_.group.count;
+                result_.group.detections.push_back(det);
             }
 
-            result_.success = (result_.group.count > 0);
-            result_.message = result_.success ? "Processing completed successfully" : "No objects detected";
+            result_.success = !result_.group.detections.empty();
             return result_.success;
         }
 
@@ -312,15 +303,12 @@ namespace deploy_percept
             if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
             {
                 result_.success = false;
-                result_.message = "Invalid Params: model_in_h and model_in_w must be positive";
                 return false;
             }
 
             if (inputs.size() != 6)
             {
                 result_.success = false;
-                result_.message =
-                    "Invalid input count: expected 6 inputs, got " + std::to_string(inputs.size());
                 return false;
             }
 
@@ -330,13 +318,11 @@ namespace deploy_percept
                 if (view.data == nullptr)
                 {
                     result_.success = false;
-                    result_.message = "Input tensor " + std::to_string(i) + " has null data";
                     return false;
                 }
                 if (view.dtype != TensorDtype::FP32)
                 {
                     result_.success = false;
-                    result_.message = "Input tensor " + std::to_string(i) + " is not FP32";
                     return false;
                 }
             }
@@ -351,8 +337,7 @@ namespace deploy_percept
                     params_.obj_class_num,
                     s8,
                     s16,
-                    s32,
-                    result_.message))
+                    s32))
             {
                 result_.success = false;
                 return false;

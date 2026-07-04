@@ -144,7 +144,7 @@ int main(int argc, char **argv)
     YoloV8DetectPostProcessAwnn processor(post_params);
     if (!processor.run(engine_result_guard.views()))
     {
-        std::fprintf(stderr, "post process failed: %s\n", processor.getResult().message.c_str());
+        std::fprintf(stderr, "post process failed\n");
         return 1;
     }
 
@@ -159,7 +159,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("detection num: %d\n", processor.getResult().group.count);
+    std::printf("detection num: %zu\n", processor.getResult().group.detections.size());
     std::printf("saved detect result to %s\n", output_path);
     return 0;
 }

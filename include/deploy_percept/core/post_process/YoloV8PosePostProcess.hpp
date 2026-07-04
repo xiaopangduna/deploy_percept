@@ -26,7 +26,8 @@ public:
 
     struct Result
     {
-        PoseResultGroup group{};
+        PoseResult group{};
+        bool success = false;
     };
 
     explicit YoloV8PosePostProcess(const Params &params);
@@ -79,7 +80,7 @@ private:
                                    int32_t zp,
                                    float scale);
 
-    void gatherKeypointsForDetection(PoseDetectionObject &out,
+    void gatherKeypointsForDetection(PoseDetection &out,
                                        const void *kpt_buf,
                                        int32_t kpt_type,
                                        int32_t kpt_zp,

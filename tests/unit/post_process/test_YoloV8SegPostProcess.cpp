@@ -17,6 +17,7 @@
 namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
+using deploy_percept::Detection;
 using namespace deploy_percept::utils;
 using percept::test::fixture_data;
 using percept::test::output_dir;
@@ -55,13 +56,13 @@ protected:
 
 TEST_F(YoloV8SegPostProcessTest, run)
 {
-    std::vector<DetectionObject> expected_results = {
-        MakeDetectResult(5, "class_5", 0.9113f, 87, 137, 553, 439),
-        MakeDetectResult(0, "class_0", 0.8998f, 108, 236, 227, 537),
-        MakeDetectResult(0, "class_0", 0.8693f, 211, 241, 283, 508),
-        MakeDetectResult(0, "class_0", 0.8655f, 477, 232, 559, 519),
-        MakeDetectResult(0, "class_0", 0.5403f, 79, 327, 125, 514),
-        MakeDetectResult(27, "class_27", 0.2741f, 248, 284, 259, 310)};
+    std::vector<Detection> expected_results = {
+        MakeDetectResult(5, 0.9113f, 87, 137, 553, 439),
+        MakeDetectResult(0, 0.8998f, 108, 236, 227, 537),
+        MakeDetectResult(0, 0.8693f, 211, 241, 283, 508),
+        MakeDetectResult(0, 0.8655f, 477, 232, 559, 519),
+        MakeDetectResult(0, 0.5403f, 79, 327, 125, 514),
+        MakeDetectResult(27, 0.2741f, 248, 284, 259, 310)};
 
     std::vector<uint8_t> expected_seg_mask = loadUint8VectorFromBinFile(path_seg_result);
 
@@ -117,11 +118,11 @@ TEST_F(YoloV8SegPostProcessTest, run)
 
     const auto &result = processor->getResult().group;
 
-    EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, result.detection_objects));
+    EXPECT_TRUE(isDetectionVectorEqualWithinTolerance(expected_results, result.detections));
 
     const auto &actual_results = processor->getResult().group;
 
-    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
+    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.label_mask, 0.03));
 
     // deploy_percept::utils::drawDetectionResults(img, result);
 

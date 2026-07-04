@@ -11,7 +11,6 @@
 #include "deploy_percept/core/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/core/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
-#include "deploy_percept/common/types.hpp"
 #include "tests/test_common/paths.hpp"
 #include "utils/environment.hpp"
 
@@ -26,7 +25,7 @@ using percept::test::fixture_data;
 namespace {
 
 // A733 + mobilenetv2.nb + cat.jpg 板端标定（imagenet_10/1.jpg）
-const std::vector<int> kExpectedTop5ClassIds = {281, 282, 285, 287, 478};
+constexpr int kExpectedTop1ClassId = 281;
 
 bool prepare_model_input(
     const std::string &input_path,
@@ -62,22 +61,9 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
     }
 }
 
-void expect_top_k_class_ids_match(
-    const std::vector<int> &expected,
-    const std::vector<deploy_percept::ClassificationEntry> &actual)
-{
-    ASSERT_EQ(expected.size(), actual.size());
-
-    for (std::size_t i = 0; i < expected.size(); ++i)
-    {
-        SCOPED_TRACE("top_k index " + std::to_string(i));
-        EXPECT_EQ(expected[i], actual[i].class_id);
-    }
-}
-
 } // namespace
 
-TEST(MobileNetV2ClassifyAwnnIntegration, CatTop5MatchGolden)
+TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
 {
     const fs::path model_path = fixture_data("integration/awnn/mobilenetv2_classify/mobilenetv2.nb");
     const fs::path input_path = fixture_data("integration/awnn/mobilenetv2_classify/cat.jpg");
@@ -113,17 +99,12 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop5MatchGolden)
     ASSERT_FALSE(engine_result_guard.empty());
     ASSERT_GE(engine_result_guard.views().size(), 1u);
 
-    ClassificationPostProcessAwnn::Params post_params;
-    post_params.top_k = 5;
-
-    ClassificationPostProcessAwnn processor(post_params);
-    ASSERT_TRUE(processor.run(engine_result_guard.views())) << processor.getResult().message;
+    ClassificationPostProcessAwnn processor({});
+    ASSERT_TRUE(processor.run(engine_result_guard.views()));
 
     const auto &result = processor.getResult();
     ASSERT_TRUE(result.success);
-    ASSERT_EQ(result.top_k.size(), kExpectedTop5ClassIds.size());
-
-    expect_top_k_class_ids_match(kExpectedTop5ClassIds, result.top_k);
+    EXPECT_EQ(result.class_id, kExpectedTop1ClassId);
 }
 
 int main(int argc, char **argv)

@@ -24,8 +24,6 @@ namespace deploy_percept
             if (inputs.size() != 3)
             {
                 result_.success = false;
-                result_.message =
-                    "Invalid input count: expected 3 inputs, got " + std::to_string(inputs.size());
                 return false;
             }
 
@@ -77,7 +75,7 @@ namespace deploy_percept
             const int valid_count = valid_count0 + valid_count1 + valid_count2;
             if (valid_count <= 0)
             {
-                result_.message = "No objects detected";
+                result_.success = false;
                 return false;
             }
 

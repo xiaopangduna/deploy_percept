@@ -119,9 +119,8 @@ namespace deploy_percept
             // ===============================
             // 0. reset state
             // ===============================
-            result_.group.count = 0;
-            result_.group.segmentation_mask.clear();
-            result_.group.detection_objects.clear();
+            result_.group.detections.clear();
+            result_.group.label_mask.clear();
 
             for (int i = 0; i < validCount; ++i)
             {
@@ -149,23 +148,18 @@ namespace deploy_percept
                 }
 
                 // 填充检测结果结构体（与YOLOv5版本一致，不进行边界限制）
-                DetectionObject det_obj{};
-                det_obj.box.left = static_cast<int>(clamp(x1, 0, input_image_width));
-                det_obj.box.top = static_cast<int>(clamp(y1, 0, input_image_height));
-                det_obj.box.right =static_cast<int>(clamp(x2, 0, input_image_width));
-                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, input_image_height));
-                det_obj.prop = obj_conf;
-                det_obj.cls_id = id;
+                Detection det{};
+                det.box.left = static_cast<int>(clamp(x1, 0, input_image_width));
+                det.box.top = static_cast<int>(clamp(y1, 0, input_image_height));
+                det.box.right = static_cast<int>(clamp(x2, 0, input_image_width));
+                det.box.bottom = static_cast<int>(clamp(y2, 0, input_image_height));
+                det.score = obj_conf;
+                det.class_id = id;
 
-                // 设置类别名称
-                snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
-
-                result_.group.detection_objects.push_back(det_obj);
+                result_.group.detections.push_back(det);
 
                 last_count++; // 增加有效检测计数
             }
-
-            result_.group.count = last_count;
 
             if (last_count <= 0)
             {
@@ -182,11 +176,11 @@ namespace deploy_percept
 
             for (int i = 0; i < boxes_num; ++i)
             {
-                filterBoxes_by_nms[i * 4 + 0] = result_.group.detection_objects[i].box.left;
-                filterBoxes_by_nms[i * 4 + 1] = result_.group.detection_objects[i].box.top;
-                filterBoxes_by_nms[i * 4 + 2] = result_.group.detection_objects[i].box.right;
-                filterBoxes_by_nms[i * 4 + 3] = result_.group.detection_objects[i].box.bottom;
-                cls_id[i] = result_.group.detection_objects[i].cls_id;
+                filterBoxes_by_nms[i * 4 + 0] = result_.group.detections[i].box.left;
+                filterBoxes_by_nms[i * 4 + 1] = result_.group.detections[i].box.top;
+                filterBoxes_by_nms[i * 4 + 2] = result_.group.detections[i].box.right;
+                filterBoxes_by_nms[i * 4 + 3] = result_.group.detections[i].box.bottom;
+                cls_id[i] = result_.group.detections[i].class_id;
             }
 
             // ===============================
@@ -235,8 +229,8 @@ namespace deploy_percept
             {
                 const size_t mask_size = input_image_height * input_image_width;
 
-                result_.group.segmentation_mask.resize(mask_size, 0);
-                memcpy(result_.group.segmentation_mask.data(),
+                result_.group.label_mask.resize(mask_size, 0);
+                memcpy(result_.group.label_mask.data(),
                        all_mask_in_one_.data(),
                        mask_size);
             }

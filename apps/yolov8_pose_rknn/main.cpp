@@ -115,18 +115,18 @@ int main()
         return 1;
     }
 
-    const PoseResultGroup &pose_results = pose_processor.getResult().group;
-    printf("pose_results.count=%d\n", pose_results.count);
-    for (int i = 0; i < pose_results.count && i < 5; ++i)
+    const PoseResult &pose_results = pose_processor.getResult().group;
+    printf("pose_results count=%zu\n", pose_results.detections.size());
+    for (std::size_t i = 0; i < pose_results.detections.size() && i < 5; ++i)
     {
-        printf("  [%d] cls=%d prop=%.3f box=(%d,%d)-(%d,%d)\n",
+        printf("  [%zu] cls=%d score=%.3f box=(%d,%d)-(%d,%d)\n",
                i,
-               pose_results.objects[i].cls_id,
-               pose_results.objects[i].prop,
-               pose_results.objects[i].box.left,
-               pose_results.objects[i].box.top,
-               pose_results.objects[i].box.right,
-               pose_results.objects[i].box.bottom);
+               pose_results.detections[i].class_id,
+               pose_results.detections[i].score,
+               pose_results.detections[i].box.left,
+               pose_results.detections[i].box.top,
+               pose_results.detections[i].box.right,
+               pose_results.detections[i].box.bottom);
     }
 
     cv::Mat result_img = orig_img.clone();

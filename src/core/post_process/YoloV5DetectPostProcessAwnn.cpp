@@ -113,7 +113,6 @@ namespace deploy_percept
             if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
             {
                 result_.success = false;
-                result_.message = "Invalid Params: model_in_h and model_in_w must be positive";
                 return false;
             }
 
@@ -123,8 +122,6 @@ namespace deploy_percept
             if (inputs.size() != 3)
             {
                 result_.success = false;
-                result_.message =
-                    "Invalid input count: expected 3 inputs, got " + std::to_string(inputs.size());
                 return false;
             }
 
@@ -135,13 +132,11 @@ namespace deploy_percept
                 if (view.data == nullptr)
                 {
                     result_.success = false;
-                    result_.message = "Input tensor " + std::to_string(i) + " has null data";
                     return false;
                 }
                 if (view.dtype != TensorDtype::FP32)
                 {
                     result_.success = false;
-                    result_.message = "Input tensor " + std::to_string(i) + " is not FP32";
                     return false;
                 }
                 head_ptrs[i] = static_cast<const float *>(view.data);
@@ -186,7 +181,7 @@ namespace deploy_percept
             const int candidate_count = valid_count0 + valid_count1 + valid_count2;
             if (candidate_count <= 0)
             {
-                result_.message = "No objects detected";
+                result_.success = false;
                 return false;
             }
 

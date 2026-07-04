@@ -34,9 +34,8 @@ namespace deploy_percept
 
             struct Result
             {
-                ResultGroup group{};
+                DetectionResult group{};
                 bool success = false;
-                std::string message{};
             };
 
             explicit YoloV8DetectPostProcessAwnn(const Params &params);

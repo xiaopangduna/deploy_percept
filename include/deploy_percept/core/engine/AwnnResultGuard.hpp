@@ -16,7 +16,7 @@ namespace deploy_percept
             explicit AwnnResultGuard(AwnnEngine &engine) : engine_(engine) {}
             ~AwnnResultGuard() { engine_.releaseResult(); }
 
-            const std::vector<post_process::TensorView> &views() const
+            const std::vector<TensorView> &views() const
             {
                 return engine_.getResult().outputs;
             }

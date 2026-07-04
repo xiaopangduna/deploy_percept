@@ -47,7 +47,7 @@ namespace deploy_percept
             {
                 std::vector<std::uint32_t> input_num_dims;
                 std::vector<std::array<std::uint32_t, 6>> input_sizes;
-                std::vector<post_process::TensorDtype> input_dtypes;
+                std::vector<TensorDtype> input_dtypes;
                 std::vector<std::uint32_t> input_quant_formats;
                 std::vector<std::int32_t> input_fixed_point_pos;
                 std::vector<float> input_tf_scale;
@@ -57,7 +57,7 @@ namespace deploy_percept
 
                 std::vector<std::uint32_t> output_num_dims;
                 std::vector<std::array<std::uint32_t, 6>> output_sizes;
-                std::vector<post_process::TensorDtype> output_dtypes;
+                std::vector<TensorDtype> output_dtypes;
                 std::vector<std::uint32_t> output_quant_formats;
                 std::vector<std::int32_t> output_fixed_point_pos;
                 std::vector<float> output_tf_scale;
@@ -70,7 +70,7 @@ namespace deploy_percept
             struct Result
             {
                 bool ready{false};
-                std::vector<post_process::TensorView> outputs;
+                std::vector<TensorView> outputs;
             };
 
             explicit AwnnEngine(const Param &param);

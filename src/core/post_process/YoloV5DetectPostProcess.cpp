@@ -11,9 +11,8 @@ namespace deploy_percept
 
         void YoloV5DetectPostProcess::resetResult(Result &result)
         {
-            result.group = ResultGroup{};
+            result.group = DetectionResult{};
             result.success = false;
-            result.message.clear();
         }
 
         void YoloV5DetectPostProcess::applyNmsToCandidates(
@@ -59,9 +58,10 @@ namespace deploy_percept
             int model_in_w,
             int model_in_h)
         {
+            (void)obj_name_max_size;
+
             int last_count = 0;
-            result.group.count = 0;
-            result.group.detection_objects.clear();
+            result.group.detections.clear();
             for (int i = 0; i < candidate_count; ++i)
             {
                 if (index_array[i] == -1 || last_count >= obj_numb_max_size)
@@ -78,23 +78,19 @@ namespace deploy_percept
                 const int id = class_ids[n];
                 const float obj_conf = candidate_scores[n];
 
-                DetectionObject det_obj{};
-                det_obj.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
-                det_obj.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
-                det_obj.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
-                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
-                det_obj.prop = obj_conf;
-                det_obj.cls_id = id;
+                Detection det{};
+                det.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
+                det.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
+                det.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
+                det.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
+                det.score = obj_conf;
+                det.class_id = id;
 
-                std::snprintf(det_obj.name, obj_name_max_size, "class_%d", id);
-
-                result.group.detection_objects.push_back(det_obj);
+                result.group.detections.push_back(det);
                 ++last_count;
             }
-            result.group.count = last_count;
 
             result.success = (last_count > 0);
-            result.message = "Processing completed successfully";
             return true;
         }
 

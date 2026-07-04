@@ -166,7 +166,7 @@ int main()
     cv::imwrite(path_save_output_img, result_img);
     printf("Save computed detect result to %s\n", path_save_output_img.c_str());
 
-    if (saveUint8VectorToBinFile(seg_results.segmentation_mask, path_save_mask_bin))
+    if (saveUint8VectorToBinFile(seg_results.label_mask, path_save_mask_bin))
     {
         printf("Save computed segmentation mask to %s\n", path_save_mask_bin.c_str());
     }

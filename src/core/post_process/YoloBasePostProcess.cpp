@@ -65,10 +65,6 @@ void resizeGray8Linear(
 
 } // namespace
 
-YoloBasePostProcess::YoloBasePostProcess() {
-    // 无状态构造函数，不需要任何初始化
-}
-
 // clamp函数实现
 int YoloBasePostProcess::clamp(float val, int min, int max) {
     return val > min ? (val < max ? static_cast<int>(val) : max) : min;
@@ -227,32 +223,6 @@ void YoloBasePostProcess::mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_
             }
         }
     }
-}
-
-void YoloBasePostProcess::seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                                       int input_image_height, int input_image_width, int cropped_height, int cropped_width,
-                                       int ori_in_height, int ori_in_width, int y_pad, int x_pad)
-{
-    if (y_pad == 0 && x_pad == 0 && ori_in_height == input_image_height && ori_in_width == input_image_width)
-    {
-        memcpy(seg_mask_real, seg_mask, ori_in_height * ori_in_width);
-        return;
-    }
-
-    int cropped_index = 0;
-    for (int i = 0; i < input_image_height; i++)
-    {
-        for (int j = 0; j < input_image_width; j++)
-        {
-            if (i >= y_pad && i < input_image_height - y_pad && j >= x_pad && j < input_image_width - x_pad)
-            {
-                int seg_index = i * input_image_width + j;
-                cropped_seg[cropped_index] = seg_mask[seg_index];
-                cropped_index++;
-            }
-        }
-    }
-    resizeSegMasks(cropped_seg, cropped_width, cropped_height, 1, seg_mask_real, ori_in_width, ori_in_height);
 }
 
 } // namespace post_process

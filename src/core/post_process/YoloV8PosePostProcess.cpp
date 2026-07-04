@@ -252,7 +252,7 @@ float YoloV8PosePostProcess::readKeypointValue(const void *buf,
     }
 }
 
-void YoloV8PosePostProcess::gatherKeypointsForDetection(PoseDetectionObject &out,
+void YoloV8PosePostProcess::gatherKeypointsForDetection(PoseDetection &out,
                                                         const void *kpt_buf,
                                                         int32_t kpt_type,
                                                         int32_t kpt_zp,
@@ -272,9 +272,9 @@ void YoloV8PosePostProcess::gatherKeypointsForDetection(PoseDetectionObject &out
             readKeypointValue(kpt_buf, keypoints_index, j, 1, kpt_type, kpt_zp, kpt_scale);
         const float c =
             readKeypointValue(kpt_buf, keypoints_index, j, 2, kpt_type, kpt_zp, kpt_scale);
-        out.keypoints[j][0] = (x - x_pad) / letter_scale;
-        out.keypoints[j][1] = (y - y_pad) / letter_scale;
-        out.keypoints[j][2] = c;
+        out.keypoints[j].x = (x - x_pad) / letter_scale;
+        out.keypoints[j].y = (y - y_pad) / letter_scale;
+        out.keypoints[j].score = c;
     }
     (void)model_in_w;
     (void)model_in_h;
@@ -288,8 +288,8 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
                                 std::vector<int32_t> &output_zps,
                                 const std::vector<int32_t> &output_types)
 {
-    result_.group.objects.clear();
-    result_.group.count = 0;
+    result_.group.detections.clear();
+    result_.success = false;
 
     if (outputs.size() < 4 || output_dims.size() < 4 || output_scales.size() < 4 ||
         output_zps.size() < 4 || output_types.size() < 4)
@@ -368,7 +368,7 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
         const float h = filter_boxes[n * 5 + 3];
         const int keypoints_index = static_cast<int>(filter_boxes[n * 5 + 4]);
 
-        PoseDetectionObject det{};
+        PoseDetection det{};
         gatherKeypointsForDetection(det,
                                     kpt_buf,
                                     kpt_type,
@@ -381,18 +381,18 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
                                     x_pad,
                                     y_pad);
 
-        det.cls_id = class_ids[n];
-        det.prop = obj_probs[n];
+        det.class_id = class_ids[n];
+        det.score = obj_probs[n];
         det.box.left = YoloBasePostProcess::clamp(x1, 0, model_in_w) / letter_scale;
         det.box.top = YoloBasePostProcess::clamp(y1, 0, model_in_h) / letter_scale;
         det.box.right = YoloBasePostProcess::clamp(x1 + w, 0, model_in_w) / letter_scale;
         det.box.bottom = YoloBasePostProcess::clamp(y1 + h, 0, model_in_h) / letter_scale;
 
-        result_.group.objects.push_back(det);
+        result_.group.detections.push_back(det);
         last_count++;
     }
 
-    result_.group.count = last_count;
+    result_.success = (last_count > 0);
     return true;
 }
 

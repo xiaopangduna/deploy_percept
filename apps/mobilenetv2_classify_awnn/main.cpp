@@ -2,9 +2,9 @@
  * Allwinner MobileNetV2 ImageNet 分类 demo（AwnnEngine + ClassificationPostProcessAwnn）
  *
  * 用法（路径相对当前工作目录，或使用绝对路径）：
- *   mobilenetv2_classify_awnn [model.nb] [input.jpg] [top_k]
+ *   mobilenetv2_classify_awnn [model.nb] [input.jpg]
  *
- * 默认：./mobilenetv2.nb  ./cat.jpg  5
+ * 默认：./mobilenetv2.nb  ./cat.jpg
  * 性能对比见 benchmarks/awnn/bench_mobilenetv2_classify
  */
 #include <cstdio>
@@ -32,8 +32,6 @@ using deploy_percept::utils::fixture_path;
 
 namespace
 {
-
-constexpr int kDefaultTopK = 5;
 
 const fs::path &default_model_path()
 {
@@ -72,20 +70,6 @@ bool prepare_model_input(
     return true;
 }
 
-void print_top_k(const ClassificationPostProcessAwnn &processor)
-{
-    const auto &result = processor.getResult();
-    std::printf("========== top%d ==========\n", static_cast<int>(result.top_k.size()));
-    for (const auto &entry : result.top_k)
-    {
-        std::printf(
-            "class id: %3d, prob: %f, label: %s\n",
-            entry.class_id,
-            entry.prob,
-            entry.label.c_str());
-    }
-}
-
 } // namespace
 
 int main(int argc, char **argv)
@@ -94,13 +78,6 @@ int main(int argc, char **argv)
     const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
-    const int top_k = (argc > 3) ? std::atoi(argv[3]) : kDefaultTopK;
-
-    if (top_k <= 0)
-    {
-        std::fprintf(stderr, "top_k must be positive\n");
-        return 1;
-    }
 
     if (!fs::is_regular_file(model_path))
     {
@@ -157,16 +134,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    ClassificationPostProcessAwnn::Params post_params;
-    post_params.top_k = top_k;
-
-    ClassificationPostProcessAwnn processor(post_params);
+    ClassificationPostProcessAwnn processor({});
     if (!processor.run(engine_result_guard.views()))
     {
-        std::fprintf(stderr, "post process failed: %s\n", processor.getResult().message.c_str());
+        std::fprintf(stderr, "post process failed\n");
         return 1;
     }
 
-    print_top_k(processor);
     return 0;
 }

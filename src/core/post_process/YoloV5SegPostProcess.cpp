@@ -11,9 +11,9 @@ namespace deploy_percept
         // 构造函数
         YoloV5SegPostProcess::YoloV5SegPostProcess(const Params &params) : params_(params)
         {
-            result_.group.detection_objects.resize(params_.obj_numb_max_size);
+            result_.group.detections.resize(params_.obj_numb_max_size);
             // 初始化分割掩码容器
-            result_.group.segmentation_mask.resize(1);
+            result_.group.label_mask.resize(1);
         }
 
         int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
@@ -144,20 +144,16 @@ namespace deploy_percept
                 }
 
                 // 填充检测结果结构体
-                DetectionObject det_obj{};
-                det_obj.box.left = x1;
-                det_obj.box.top = y1;
-                det_obj.box.right = x2;
-                det_obj.box.bottom = y2;
-                det_obj.prop = obj_conf;
+                Detection det{};
+                det.box.left = x1;
+                det.box.top = y1;
+                det.box.right = x2;
+                det.box.bottom = y2;
+                det.score = obj_conf;
 
-                // 设置类别名称
-                snprintf(det_obj.name, sizeof(det_obj.name), "class_%d", id);
+                det.class_id = id;
 
-                // 设置类别ID
-                det_obj.cls_id = id;
-
-                result_.group.detection_objects.push_back(det_obj);
+                result_.group.detections.push_back(det);
                 last_count++; // 增加有效检测计数
             }
         }
@@ -173,15 +169,13 @@ namespace deploy_percept
             // ===============================
             // 0. reset state
             // ===============================
-            result_.group.count = 0;
-            result_.group.detection_objects.clear(); // 清空之前的检测结果
+            result_.group.detections.clear(); // 清空之前的检测结果
             result_.success = false;
-            result_.message.clear();
 
             // 清空分割掩码
-            if (!result_.group.segmentation_mask.empty())
+            if (!result_.group.label_mask.empty())
             {
-                result_.group.segmentation_mask.clear();
+                result_.group.label_mask.clear();
             }
 
             std::vector<float> filterBoxes;
@@ -287,7 +281,6 @@ namespace deploy_percept
                 filterSegments_by_nms,
                 last_count);
 
-            result_.group.count = last_count;
             if (last_count <= 0)
             {
                 result_.success = true;
@@ -304,11 +297,11 @@ namespace deploy_percept
 
             for (int i = 0; i < boxes_num; ++i)
             {
-                filterBoxes_by_nms[i * 4 + 0] = result_.group.detection_objects[i].box.left;
-                filterBoxes_by_nms[i * 4 + 1] = result_.group.detection_objects[i].box.top;
-                filterBoxes_by_nms[i * 4 + 2] = result_.group.detection_objects[i].box.right;
-                filterBoxes_by_nms[i * 4 + 3] = result_.group.detection_objects[i].box.bottom;
-                cls_id[i] = result_.group.detection_objects[i].cls_id;
+                filterBoxes_by_nms[i * 4 + 0] = result_.group.detections[i].box.left;
+                filterBoxes_by_nms[i * 4 + 1] = result_.group.detections[i].box.top;
+                filterBoxes_by_nms[i * 4 + 2] = result_.group.detections[i].box.right;
+                filterBoxes_by_nms[i * 4 + 3] = result_.group.detections[i].box.bottom;
+                cls_id[i] = result_.group.detections[i].class_id;
             }
 
             // ===============================
@@ -358,8 +351,8 @@ namespace deploy_percept
                 const size_t mask_size = input_image_height * input_image_width;
 
                 // 为分割掩码分配内存
-                result_.group.segmentation_mask.resize(mask_size, 0);
-                memcpy(result_.group.segmentation_mask.data(),
+                result_.group.label_mask.resize(mask_size, 0);
+                memcpy(result_.group.label_mask.data(),
                        all_mask_in_one_.data(),
                        mask_size);
             }

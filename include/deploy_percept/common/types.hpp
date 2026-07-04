@@ -1,8 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -22,6 +22,7 @@ struct TensorView
     TensorDtype dtype{TensorDtype::FP32};
 };
 
+/** 轴对齐框，像素整数坐标（与 OpenCV 绘制一致） */
 struct BoxRect
 {
     int left = 0;
@@ -30,64 +31,62 @@ struct BoxRect
     int bottom = 0;
 };
 
-struct DetectionObject
+/** 单个关键点：x/y 为像素坐标，score 为置信度 */
+struct Keypoint
 {
-    float prop = 0.0f;
-    int cls_id = 0;
-    char name[16] = {};
-    BoxRect box{};
+    float x = 0.f;
+    float y = 0.f;
+    float score = 0.f;
 };
 
-struct ResultGroup
-{
-    int id = 0;
-    int count = 0;
-    std::vector<DetectionObject> detection_objects;
-    std::vector<std::uint8_t> segmentation_mask;
-};
+inline constexpr std::size_t kCocoPoseKeypointCount = 17;
 
-/** YOLOv8-Pose：检测框 + 17 个 COCO 关键点 (x, y, conf)，坐标为原图像素 */
-struct PoseDetectionObject
+// ---------------------------------------------------------------------------
+// 检测（Detect）
+// ---------------------------------------------------------------------------
+
+struct Detection
 {
     BoxRect box{};
-    float prop = 0.f;
-    int cls_id = 0;
-    float keypoints[17][3] = {};
-};
-
-struct PoseResultGroup
-{
-    int count = 0;
-    std::vector<PoseDetectionObject> objects;
-};
-
-struct ClassificationEntry
-{
     int class_id = 0;
-    float prob = 0.f;
-    std::string label;
+    float score = 0.f;
 };
 
-struct ClassificationResult
+struct DetectionResult
 {
-    bool success = false;
-    std::string message;
-    std::vector<ClassificationEntry> top_k;
+    std::vector<Detection> detections;
 };
 
-namespace post_process
+// ---------------------------------------------------------------------------
+// 分割（Segmentation）：检测框 + 全图 label mask
+// ---------------------------------------------------------------------------
+
+struct SegmentationResult
 {
+    std::vector<Detection> detections;
 
-using TensorDtype = deploy_percept::TensorDtype;
-using TensorView = deploy_percept::TensorView;
-using BoxRect = deploy_percept::BoxRect;
-using DetectionObject = deploy_percept::DetectionObject;
-using ResultGroup = deploy_percept::ResultGroup;
-using PoseDetectionObject = deploy_percept::PoseDetectionObject;
-using PoseResultGroup = deploy_percept::PoseResultGroup;
-using ClassificationEntry = deploy_percept::ClassificationEntry;
-using ClassificationResult = deploy_percept::ClassificationResult;
+    /**
+     * 与模型输入同分辨率的 label mask，长度 = width * height。
+     * 0 = 背景；非 0 = 该像素 class_id + 1（与 mergeBoxMasks 编码一致）。
+     */
+    std::vector<std::uint8_t> label_mask;
+};
 
-} // namespace post_process
+// ---------------------------------------------------------------------------
+// 姿态（Pose）
+// ---------------------------------------------------------------------------
+
+struct PoseDetection
+{
+    BoxRect box{};
+    int class_id = 0;
+    float score = 0.f;
+    std::array<Keypoint, kCocoPoseKeypointCount> keypoints{};
+};
+
+struct PoseResult
+{
+    std::vector<PoseDetection> detections;
+};
 
 } // namespace deploy_percept

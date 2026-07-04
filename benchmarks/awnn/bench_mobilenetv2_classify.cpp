@@ -66,9 +66,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    ClassificationPostProcessAwnn::Params post_params;
-    post_params.top_k = 5;
-    ClassificationPostProcessAwnn processor(post_params);
+    ClassificationPostProcessAwnn processor({});
 
     std::printf("bench_mobilenetv2_classify\n");
     std::printf("  suite: post_process (full pipeline, focus=copy_out+post)\n");

@@ -16,6 +16,7 @@
 namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
+using deploy_percept::Detection;
 using percept::test::fixture_data;
 using percept::test::output_dir;
 
@@ -49,12 +50,12 @@ protected:
 };
 TEST_F(YoloV5DetectPostProcessRknnTest, run)
 {
-    std::vector<DetectionObject> expected_results = {
-        MakeDetectResult(0, "class_0", 0.3495f, 209, 243, 286, 510),
-        MakeDetectResult(0, "class_0", 0.2487f, 479, 238, 560, 526),
-        MakeDetectResult(0, "class_0", 0.3010f, 109, 238, 231, 534),
-        MakeDetectResult(5, "class_5", 0.3672f, 91, 129, 555, 464),
-        MakeDetectResult(0, "class_0", 0.5035f, 79, 353, 121, 517)};
+    std::vector<Detection> expected_results = {
+        MakeDetectResult(0, 0.3495f, 209, 243, 286, 510),
+        MakeDetectResult(0, 0.2487f, 479, 238, 560, 526),
+        MakeDetectResult(0, 0.3010f, 109, 238, 231, 534),
+        MakeDetectResult(5, 0.3672f, 91, 129, 555, 464),
+        MakeDetectResult(0, 0.5035f, 79, 353, 121, 517)};
 
 
     auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output_", 3); 
@@ -74,7 +75,7 @@ TEST_F(YoloV5DetectPostProcessRknnTest, run)
 
     auto &detection_result = processor->getResult().group;
 
-    EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, detection_result.detection_objects));
+    EXPECT_TRUE(isDetectionVectorEqualWithinTolerance(expected_results, detection_result.detections));
 
     // deploy_percept::utils::drawDetectionResults(img, detection_result);
 

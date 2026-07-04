@@ -8,9 +8,10 @@
 namespace deploy_percept {
 namespace post_process {
 
+/** YOLO 后处理共用 static 工具（NMS、量化、分割 mask 等），无实例状态。 */
 class YoloBasePostProcess : public BasePostProcess {
 public:
-    YoloBasePostProcess();
+    YoloBasePostProcess() = default;
     virtual ~YoloBasePostProcess() = default;
 
     /**
@@ -134,35 +135,6 @@ public:
      */
     static void mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_one, float *boxes, int boxes_num,
                              int *cls_id, int height, int width);
-
-    /**
-     * @brief 反转分割掩码
-     * @param seg_mask 分割掩码
-     * @param cropped_seg 裁剪后的分割掩码
-     * @param seg_mask_real 真实分割掩码
-     * @param input_image_height 输入图像高度
-     * @param input_image_width 输入图像宽度
-     * @param cropped_height 裁剪高度
-     * @param cropped_width 裁剪宽度
-     * @param ori_in_height 原始输入高度
-     * @param ori_in_width 原始输入宽度
-     * @param y_pad y轴填充
-     * @param x_pad x轴填充
-     * @details 将裁剪后的分割掩码映射回原始图像尺寸
-     */
-    static void seg_reverse(uint8_t *seg_mask, uint8_t *cropped_seg, uint8_t *seg_mask_real,
-                           int input_image_height, int input_image_width, int cropped_height, int cropped_width,
-                           int ori_in_height, int ori_in_width, int y_pad, int x_pad);
-
-    void computeSegMask(
-        const std::vector<float>& protos,
-        const std::vector<float>& mask_protos,
-        int crop_width, 
-        int crop_height,
-        int ori_width,
-        int ori_height,
-        int crop_x = 0,
-        int crop_y = 0);
 };
 
 } // namespace post_process

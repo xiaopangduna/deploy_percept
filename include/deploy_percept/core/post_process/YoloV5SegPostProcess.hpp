@@ -39,9 +39,8 @@ namespace deploy_percept
             // 结果结构体
             struct Result
             {
-                ResultGroup group{}; // 使用统一的ResultGroup
+                SegmentationResult group{};
                 bool success = false;
-                std::string message{}; // 可选的详细信息
             };
 
             // 使用参数结构体的构造函数

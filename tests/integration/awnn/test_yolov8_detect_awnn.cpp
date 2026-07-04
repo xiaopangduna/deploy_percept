@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
-using deploy_percept::post_process::DetectionObject;
+using deploy_percept::Detection;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 using percept::test::fixture_data;
 
@@ -31,10 +31,10 @@ namespace {
 constexpr int kBoxTolerancePx = 4;
 
 // A733 + yolov8.nb + dog.jpg 板端标定，resize 640×640，模型输入坐标空间
-const std::vector<DetectionObject> kExpectedDetections = {
-    MakeDetectResult(16, "class_16", 0.8922f, 110, 248, 258, 601),
-    MakeDetectResult(1, "class_1", 0.7918f, 100, 148, 474, 467),
-    MakeDetectResult(2, "class_2", 0.6005f, 387, 83, 578, 191),
+const std::vector<Detection> kExpectedDetections = {
+    MakeDetectResult(16, 0.8922f, 110, 248, 258, 601),
+    MakeDetectResult(1, 0.7918f, 100, 148, 474, 467),
+    MakeDetectResult(2, 0.6005f, 387, 83, 578, 191),
 };
 
 bool prepare_model_input(
@@ -60,8 +60,8 @@ bool prepare_model_input(
 }
 
 void expect_class_and_box_match(
-    const std::vector<DetectionObject> &expected,
-    const std::vector<DetectionObject> &actual)
+    const std::vector<Detection> &expected,
+    const std::vector<Detection> &actual)
 {
     ASSERT_EQ(expected.size(), actual.size());
 
@@ -72,7 +72,7 @@ void expect_class_and_box_match(
 
         SCOPED_TRACE("detection index " + std::to_string(i));
 
-        EXPECT_EQ(exp.cls_id, act.cls_id);
+        EXPECT_EQ(exp.class_id, act.class_id);
 
         EXPECT_LE(std::abs(exp.box.left - act.box.left), kBoxTolerancePx) << "box.left";
         EXPECT_LE(std::abs(exp.box.top - act.box.top), kBoxTolerancePx) << "box.top";
@@ -138,9 +138,9 @@ TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
     post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
-    ASSERT_TRUE(processor.run(engine_result_guard.views())) << processor.getResult().message;
+    ASSERT_TRUE(processor.run(engine_result_guard.views()));
 
-    expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detection_objects);
+    expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detections);
 }
 
 int main(int argc, char **argv)

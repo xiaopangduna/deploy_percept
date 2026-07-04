@@ -18,15 +18,15 @@ namespace deploy_percept
         namespace
         {
 
-            std::optional<post_process::TensorDtype> dtypeFromFormat(int format)
+            std::optional<TensorDtype> dtypeFromFormat(int format)
             {
                 if (format == VIP_BUFFER_FORMAT_INT8 || format == VIP_BUFFER_FORMAT_UINT8)
                 {
-                    return post_process::TensorDtype::INT8;
+                    return TensorDtype::INT8;
                 }
                 if (format == VIP_BUFFER_FORMAT_FP32)
                 {
-                    return post_process::TensorDtype::FP32;
+                    return TensorDtype::FP32;
                 }
                 return std::nullopt;
             }
@@ -92,7 +92,7 @@ namespace deploy_percept
                 const vip_buffer_create_params_t &param,
                 std::uint32_t byte_size,
                 const std::string &name,
-                post_process::TensorDtype dtype)
+                TensorDtype dtype)
             {
                 std::array<std::uint32_t, 6> sizes{};
                 std::copy_n(param.sizes, sizes.size(), sizes.begin());
@@ -327,7 +327,7 @@ namespace deploy_percept
             result_.outputs.reserve(info_.output_byte_sizes.size());
             for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
             {
-                post_process::TensorView view{};
+                TensorView view{};
                 view.byte_size = info_.output_byte_sizes[i];
                 view.data = output_data_[i];
                 view.dtype = info_.output_dtypes[i];

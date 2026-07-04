@@ -2,7 +2,6 @@
 
 #include "deploy_percept/common/types.hpp"
 
-#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -11,8 +10,8 @@ namespace deploy_percept
     {
 
         /**
-         * ImageNet 分类 Top-K 后处理（AWNN FP32 单路 logits 输出）。
-         * 与 awnpu_model_zoo examples/mobilenetv2 class_post.cpp 语义一致。
+         * ImageNet 分类后处理（AWNN FP32 单路 logits 输出）。
+         * 对 logits 做 argmax，输出 Top-1 class_id / score。
          */
         class ClassificationPostProcessAwnn
         {
@@ -20,14 +19,20 @@ namespace deploy_percept
             struct Params
             {
                 int num_classes = 1000;
-                int top_k = 5;
+            };
+
+            struct Result
+            {
+                bool success = false;
+                int class_id = -1;
+                float score = 0.f;
             };
 
             explicit ClassificationPostProcessAwnn(const Params &params);
             ~ClassificationPostProcessAwnn() = default;
 
             const Params &getParams() const { return params_; }
-            const ClassificationResult &getResult() const { return result_; }
+            const Result &getResult() const { return result_; }
 
             bool run(const std::vector<TensorView> &inputs);
 
@@ -35,7 +40,7 @@ namespace deploy_percept
             void resetResult();
 
             Params params_;
-            ClassificationResult result_{};
+            Result result_{};
         };
 
     } // namespace post_process

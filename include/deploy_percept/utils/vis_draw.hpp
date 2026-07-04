@@ -9,8 +9,9 @@ namespace deploy_percept
 namespace utils
 {
 
-void drawDetectionResults(cv::Mat &image, const ResultGroup &results);
-void drawPoseResults(cv::Mat &image, const PoseResultGroup &results);
+void drawDetectionResults(cv::Mat &image, const DetectionResult &results);
+void drawDetectionResults(cv::Mat &image, const SegmentationResult &results);
+void drawPoseResults(cv::Mat &image, const PoseResult &results);
 
 } // namespace utils
 } // namespace deploy_percept
