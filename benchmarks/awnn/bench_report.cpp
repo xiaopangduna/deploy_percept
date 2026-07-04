@@ -25,6 +25,11 @@ void print_ms_cell(double value)
     std::printf("%8.2f  ", value);
 }
 
+const char *is_copy_host_label(const BenchRowConfig &cfg)
+{
+    return cfg.is_copy_host ? "host" : "mapped";
+}
+
 const BenchRowStats *find_baseline_row(const BenchReport &report)
 {
     for (const BenchRowStats &row : report.rows)
@@ -54,25 +59,7 @@ const BenchRowStats *find_fastest_row(const BenchReport &report)
 
 bool validate_bench_row_config(const BenchRowConfig &cfg)
 {
-    if (cfg.tag == nullptr || cfg.focus == nullptr || cfg.preprocess == nullptr ||
-        cfg.infer == nullptr || cfg.copy_in == nullptr || cfg.copy_out == nullptr ||
-        cfg.post == nullptr)
-    {
-        return false;
-    }
-
-    const bool mapped_out = streq(cfg.copy_out, "mapped");
-    const bool hostcopy_out = streq(cfg.copy_out, "hostcopy");
-    if (!mapped_out && !hostcopy_out)
-    {
-        return false;
-    }
-
-    if (mapped_out && !streq(cfg.post, "awnn_mapped"))
-    {
-        return false;
-    }
-    if (hostcopy_out && !streq(cfg.post, "awnn_host"))
+    if (cfg.tag == nullptr || cfg.focus == nullptr || cfg.preprocess == nullptr)
     {
         return false;
     }
@@ -80,11 +67,6 @@ bool validate_bench_row_config(const BenchRowConfig &cfg)
     const bool mem = streq(cfg.preprocess, "opencv_mem");
     const bool disk = streq(cfg.preprocess, "opencv_disk");
     return mem || disk;
-}
-
-bool host_copy_before_post(const BenchRowConfig &cfg)
-{
-    return streq(cfg.copy_out, "hostcopy");
 }
 
 void print_bench_report(const BenchReport &report)
@@ -96,21 +78,17 @@ void print_bench_report(const BenchReport &report)
         report.input_path != nullptr ? report.input_path : "-",
         report.warmup,
         report.loops);
-    std::printf("pipeline = pre + infer + copy + post (ms/frame)\n\n");
+    std::printf("pipeline = pre + infer + post (ms/frame)\n\n");
 
     std::printf(
-        "%-14s  %-14s  %-11s  %-5s  %-8s  %-9s  %-11s  "
-        "%8s  %8s  %8s  %8s  %8s\n",
+        "%-14s  %-14s  %-11s  %-9s  "
+        "%8s  %8s  %8s  %8s\n",
         "tag",
         "focus",
         "preprocess",
-        "infer",
-        "copy_in",
         "copy_out",
-        "post",
         "pre",
         "infer",
-        "copy",
         "post",
         "pipeline");
 
@@ -120,13 +98,9 @@ void print_bench_report(const BenchReport &report)
         std::printf("%-14s  ", cfg.tag);
         std::printf("%-14s  ", cfg.focus);
         print_config_cell(cfg.preprocess, 11);
-        print_config_cell(cfg.infer, 5);
-        print_config_cell(cfg.copy_in, 8);
-        print_config_cell(cfg.copy_out, 9);
-        print_config_cell(cfg.post, 11);
+        print_config_cell(is_copy_host_label(cfg), 9);
         print_ms_cell(row.pre_ms);
         print_ms_cell(row.infer_ms);
-        print_ms_cell(row.copy_ms);
         print_ms_cell(row.post_ms);
         print_ms_cell(row.pipeline_ms);
         std::printf("\n");

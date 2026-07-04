@@ -74,8 +74,9 @@ bool init_bench_run_context(
 
     static AwnnEngine::Params params;
     params.model_path = ctx.model_path;
+    params.is_copy_host = true;
 
-    static AwnnEngine engine(params);
+    AwnnEngine engine(params);
     if (!engine.is_valid())
     {
         std::fprintf(stderr, "AwnnEngine init failed\n");
@@ -86,7 +87,6 @@ bool init_bench_run_context(
     const auto &sizes = model_info.input_sizes.at(0);
     parse_model_input_dims(sizes, spec.input_layout, ctx.model_w, ctx.model_h, ctx.model_c);
 
-    ctx.engine = &engine;
     return true;
 }
 

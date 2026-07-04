@@ -246,6 +246,16 @@ namespace deploy_percept
                 return false;
             }
 
+            if (params_.is_copy_host)
+            {
+                if (!copyMappedOutputsToHost())
+                {
+                    release_outputs();
+                    return false;
+                }
+                return true;
+            }
+
             result_.tensor_views.clear();
             result_.tensor_views.reserve(info_.output_byte_sizes.size());
             for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
@@ -419,6 +429,44 @@ namespace deploy_percept
             return true;
         }
 
+        bool AwnnEngine::copyMappedOutputsToHost()
+        {
+            host_output_storage_.resize(info_.output_byte_sizes.size());
+            result_.tensor_views.clear();
+            result_.tensor_views.reserve(info_.output_byte_sizes.size());
+
+            for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
+            {
+                const std::size_t byte_size = info_.output_byte_sizes[i];
+                host_output_storage_[i].resize(byte_size);
+
+                if (output_data_[i] != nullptr && byte_size > 0)
+                {
+                    std::memcpy(
+                        host_output_storage_[i].data(),
+                        output_data_[i],
+                        byte_size);
+                }
+
+                TensorView view{};
+                view.byte_size = byte_size;
+                view.data = byte_size > 0 ? host_output_storage_[i].data() : nullptr;
+                view.dtype = info_.output_dtypes[i];
+                result_.tensor_views.push_back(view);
+            }
+
+            for (std::uint32_t i = 0; i < output_buffers_vip_.size(); ++i)
+            {
+                if (output_data_[i] != nullptr)
+                {
+                    vip_unmap_buffer(static_cast<vip_buffer>(output_buffers_vip_[i]));
+                    output_data_[i] = nullptr;
+                }
+            }
+
+            return true;
+        }
+
         void AwnnEngine::release_outputs()
         {
             for (std::uint32_t i = 0; i < output_buffers_vip_.size(); ++i)
@@ -430,6 +478,7 @@ namespace deploy_percept
                 }
             }
 
+            host_output_storage_.clear();
             result_.tensor_views.clear();
         }
 

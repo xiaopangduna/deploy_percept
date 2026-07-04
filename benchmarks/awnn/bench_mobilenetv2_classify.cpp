@@ -1,5 +1,5 @@
 /**
- * MobileNetV2 AWNN 全流程 benchmark：后处理路径对比（opencv_mem + mapped vs hostcopy）
+ * MobileNetV2 AWNN 全流程 benchmark：对比 is_copy_host mapped vs host
  *
  * 用法:
  *   bench_mobilenetv2_classify [loops] [model.nb] [input.jpg]
@@ -28,24 +28,8 @@ using percept::bench::awnn::run_bench_suite;
 namespace {
 
 const BenchRowConfig kRows[] = {
-    {
-        "out_mapped",
-        "copy_out+post",
-        "opencv_mem",
-        "NPU",
-        "hostcopy",
-        "mapped",
-        "awnn_mapped",
-    },
-    {
-        "out_hostcopy",
-        "copy_out+post",
-        "opencv_mem",
-        "NPU",
-        "hostcopy",
-        "hostcopy",
-        "awnn_host",
-    },
+    {"mapped", "pipeline", "opencv_mem", false},
+    {"host", "pipeline", "opencv_mem", true},
 };
 
 constexpr ModelBenchSpec kSpec{
@@ -69,7 +53,7 @@ int main(int argc, char **argv)
     ClassificationPostProcessAwnn processor({});
 
     std::printf("bench_mobilenetv2_classify\n");
-    std::printf("  suite: post_process (full pipeline, focus=copy_out+post)\n");
+    std::printf("  suite: full pipeline (is_copy_host mapped vs host)\n");
     std::printf("  model  : %s\n", ctx.model_path.c_str());
     std::printf("  input  : %s\n", ctx.input_path.c_str());
     std::printf("  warmup : %d  loops: %d\n", kDefaultWarmup, ctx.loops);

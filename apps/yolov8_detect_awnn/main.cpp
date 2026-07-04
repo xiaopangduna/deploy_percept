@@ -16,7 +16,6 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
 #include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/npy.hpp"
@@ -26,7 +25,6 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 using deploy_percept::data::kCoco80Labels;
@@ -108,6 +106,10 @@ int main(int argc, char **argv)
 
     AwnnEngine::Params engine_params;
     engine_params.model_path = model_path;
+    // 默认：is_copy_host=true，run() 内输出拷至 host，post 前可直接 getResult()
+    // 零拷贝 mapped（非默认）：取消下行注释，并改用下方 EngineResultGuard 取 tensor_views
+    // （需 #include "deploy_percept/core/engine/EngineResultGuard.hpp"）
+    // engine_params.is_copy_host = false;
 
     AwnnEngine engine(engine_params);
     if (!engine.is_valid())
@@ -135,8 +137,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    EngineResultGuard engine_result_guard(engine);
-    const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
+    // 默认（is_copy_host=true）：输出已在 host，直接读取
+    const auto &tensor_views = engine.getResult().tensor_views;
+    // 零拷贝 mapped（is_copy_host=false 时改用）：
+    // deploy_percept::engine::EngineResultGuard engine_result_guard(engine);
+    // const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
     if (tensor_views.empty())
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");

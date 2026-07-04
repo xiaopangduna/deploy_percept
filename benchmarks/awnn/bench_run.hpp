@@ -28,7 +28,6 @@ struct BenchRunContext
     int loops{50};
     std::string model_path;
     std::string input_path;
-    deploy_percept::engine::AwnnEngine *engine{nullptr};
     int model_w{0};
     int model_h{0};
     int model_c{0};
@@ -38,7 +37,7 @@ struct BenchRunContext
 constexpr int kDefaultWarmup = 5;
 constexpr int kDefaultLoops = 50;
 
-/** Parse [loops] [model.nb] [input.jpg]; initialize runtime and engine. */
+/** Parse [loops] [model.nb] [input.jpg]; query model input dims. */
 bool init_bench_run_context(
     int argc,
     char **argv,
@@ -68,9 +67,29 @@ BenchReport run_bench_suite(
             continue;
         }
 
-        std::printf("\n--- running tag=%s focus=%s ---\n", row_cfg.tag, row_cfg.focus);
+        deploy_percept::engine::AwnnEngine::Params engine_params;
+        engine_params.model_path = ctx.model_path;
+        engine_params.is_copy_host = row_cfg.is_copy_host;
+
+        deploy_percept::engine::AwnnEngine engine(engine_params);
+        if (!engine.is_valid())
+        {
+            std::fprintf(
+                stderr,
+                "AwnnEngine init failed for tag=%s (is_copy_host=%d)\n",
+                row_cfg.tag,
+                row_cfg.is_copy_host ? 1 : 0);
+            continue;
+        }
+
+        std::printf(
+            "\n--- running tag=%s focus=%s is_copy_host=%d ---\n",
+            row_cfg.tag,
+            row_cfg.focus,
+            row_cfg.is_copy_host ? 1 : 0);
+
         const BenchRowStats stats = bench_one_row(
-            *ctx.engine,
+            engine,
             processor,
             ctx.input_path,
             ctx.model_w,

@@ -13,7 +13,9 @@ namespace deploy_percept
         // 在 engine.run() 成功之后构造；guard 存活期间可安全读取 tensor_views，
         // 析构时自动调用 engine.releaseResult()（unmap VIP buffer 等）。
         //
-        // 典型用法：
+        // is_copy_host==true（默认）时 run() 已将输出拷至 host 并 unmap，Guard 可选。
+        //
+        // 典型用法（零拷贝）：
         //   engine.run(input, size);
         //   EngineResultGuard guard(engine);
         //   processor.run(guard.getEngineResult().tensor_views);

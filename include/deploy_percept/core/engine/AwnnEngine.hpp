@@ -55,12 +55,15 @@ namespace deploy_percept
          *
          * 前置条件：进程内已成功 vip_init（由同命名空间 VipLiteRuntime 保证）。
          *
-         * 典型流程：
+         * 典型流程（默认 is_copy_host，输出在 host）：
          *   VipLiteRuntime runtime;
          *   AwnnEngine engine(params);
          *   engine.run(input, size);
-         *   EngineResultGuard guard(engine);
-         *   processor.run(guard.getEngineResult().tensor_views);
+         *   processor.run(engine.getResult().tensor_views);
+         *   engine.releaseResult();
+         *
+         * is_copy_host == true（默认）时 run() 内将输出拷至 host，unmap VIP buffer。
+         * is_copy_host == false：零拷贝 mapped，须 EngineResultGuard。
          */
         class AwnnEngine : public BaseEngine
         {
@@ -69,6 +72,11 @@ namespace deploy_percept
             {
                 /** .nb 模型文件路径（传给 vip_create_network FROM_FILE） */
                 std::string model_path;
+                /**
+                 * true（默认）：run() 内 memcpy 至 host 并 unmap，tensor_views 指向 engine 自有 buffer。
+                 * false：tensor_views 指向 VIP mapped 内存，须 EngineResultGuard 或 post 前勿 release。
+                 */
+                bool is_copy_host = true;
             };
 
             /**
@@ -117,12 +125,12 @@ namespace deploy_percept
             bool is_valid() const { return valid_; }
 
             /**
-             * 拷贝 host 输入 → vip_run_network → map 输出到 getResult().tensor_views。
-             * 失败时不保证 tensor_views 有效；成功后可配合 EngineResultGuard 交给 post_process。
+             * 拷贝 host 输入 → vip_run_network → 填充 getResult().tensor_views。
+             * is_copy_host==false：views 指向 mapped；is_copy_host==true：views 指向 host 缓存。
              */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
-            /** unmap 输出 VIP buffer 并清空 result_.tensor_views */
+            /** 释放输出（unmap VIP 或清空 host 缓存）并清空 result_.tensor_views */
             void releaseResult() override;
 
         private:
@@ -133,6 +141,7 @@ namespace deploy_percept
             bool copyInput(const void *user_input, std::size_t input_byte_size);
             bool map_outputs();
             void release_outputs();
+            bool copyMappedOutputsToHost();
 
             Params params_;
             Info info_{};
@@ -145,6 +154,8 @@ namespace deploy_percept
             std::vector<void *> input_buffers_;
             std::vector<void *> output_buffers_vip_;
             std::vector<void *> output_data_;
+            /** is_copy_host==true 时持有 run() 输出字节 */
+            std::vector<std::vector<std::uint8_t>> host_output_storage_;
         };
 
     } // namespace engine
