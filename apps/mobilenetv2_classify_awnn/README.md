@@ -2,17 +2,14 @@
 
 全志 VIPLite MobileNetV2 ImageNet 分类（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`，后处理见 `ClassificationPostProcessAwnn`（与 `tmp/awnpu_model_zoo-.../examples/mobilenetv2` 单路 FP32 logits + Top-K 一致）。
 
-## 资源
-
-源码目录 `apps/mobilenetv2_classify_awnn/`（开发/ctest 用）与 install 目录 `share/percept/apps/mobilenetv2_classify_awnn/`：
+## 资源（install → share/percept/fixtures/integration/awnn/mobilenetv2_classify/）
 
 | 文件 | 说明 |
 |------|------|
-| `mobilenetv2-12_pcq_a733.nb` | 源码侧 Acuity 导出模型 |
-| `mobilenetv2.nb` | 指向上述模型的 symlink（demo / 测试默认名） |
+| `mobilenetv2.nb` | A733 Acuity 导出模型 |
 | `cat.jpg` | 默认输入图（任意尺寸，demo 内 resize 至 224×224） |
 
-`cmake --install` 会将模型安装为 `share/percept/apps/mobilenetv2_classify_awnn/mobilenetv2.nb`。
+模型与图片位于 `tests/fixtures/integration/awnn/mobilenetv2_classify/`，install 时复制到 `share/percept/fixtures/`。
 
 ## 模型转换
 
@@ -31,11 +28,10 @@ cd tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/mobilenetv2/convert_mod
 
 `config_yml.py` 需保持 `ADD_PREPROC_NODE=True`、`PREPROC_TYPE=IMAGE_RGB`、`ADD_POSTPROC_NODE=True`（NPU 内 mean/scale + FP32 输出）。
 
-导出产物 `mobilenetv2-12_pcq_a733.nb` 放入 `apps/mobilenetv2_classify_awnn/`，并创建 symlink：
+将导出产物 `mobilenetv2-12_pcq_a733.nb` 复制为 fixture：
 
 ```bash
-cd apps/mobilenetv2_classify_awnn
-ln -sf mobilenetv2-12_pcq_a733.nb mobilenetv2.nb
+cp mobilenetv2-12_pcq_a733.nb tests/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb
 ```
 
 ## 构建与安装
@@ -59,8 +55,8 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ```bash
 ./bin/mobilenetv2_classify_awnn \
-  share/percept/apps/mobilenetv2_classify_awnn/mobilenetv2.nb \
-  share/percept/apps/mobilenetv2_classify_awnn/cat.jpg 5
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg 5
 ```
 
 ## 预处理
@@ -90,7 +86,8 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ## 正确性回归
 
 ```bash
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept
 ```
 
 对应 `share/percept/tests/test_mobilenetv2_classify_awnn`。Top-5 class_id 真值：`{281, 282, 285, 287, 478}`。
@@ -99,7 +96,8 @@ bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
 
 ```bash
 # 板端：测试完成后加 --bench
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept --bench 50
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept --bench 50
 
 # 或 install prefix 本地直接跑
 export PERCEPT_ROOT=$PWD/share/percept

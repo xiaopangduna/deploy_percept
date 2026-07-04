@@ -34,8 +34,7 @@ enum class ModelInputLayout
 
 PreprocessMode parse_preprocess_mode(const char *preprocess);
 
-std::filesystem::path percept_root();
-std::filesystem::path app_resource(const char *app_name, const char *relative);
+std::filesystem::path fixture_resource(const char *case_name, const char *relative);
 
 void parse_model_input_dims(
     const std::array<std::uint32_t, 6> &sizes,

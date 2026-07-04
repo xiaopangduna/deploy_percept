@@ -21,7 +21,7 @@ using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::ClassificationPostProcessAwnn;
-using percept::test::app_data;
+using percept::test::fixture_data;
 
 namespace {
 
@@ -79,8 +79,8 @@ void expect_top_k_class_ids_match(
 
 TEST(MobileNetV2ClassifyAwnnIntegration, CatTop5MatchGolden)
 {
-    const fs::path model_path = app_data("mobilenetv2_classify_awnn/mobilenetv2.nb");
-    const fs::path input_path = app_data("mobilenetv2_classify_awnn/cat.jpg");
+    const fs::path model_path = fixture_data("integration/awnn/mobilenetv2_classify/mobilenetv2.nb");
+    const fs::path input_path = fixture_data("integration/awnn/mobilenetv2_classify/cat.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     VipLiteRuntime runtime;

@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
 using namespace deploy_percept::utils;
-using percept::test::app_data;
+using percept::test::fixture_data;
 using percept::test::output_dir;
 
 class YoloV5SegPostProcessTest : public ::testing::Test
@@ -32,11 +32,11 @@ protected:
         processor = std::make_unique<YoloV5SegPostProcess>(params);
 
         model_outputs_npz = cnpy::npz_load(
-            app_data("yolov5_seg_rknn/yolov5_seg_result_model_outputs.npz"));
+            fixture_data("unit/post_process/yolov5_seg/model_outputs.npz"));
 
-        path_seg_result = app_data("yolov5_seg_rknn/yolov5_seg_result_mask.bin");
+        path_seg_result = fixture_data("unit/post_process/yolov5_seg/mask.bin");
 
-        img = cv::imread(app_data("yolov5_seg_rknn/bus.jpg"));
+        img = cv::imread(fixture_data("unit/post_process/yolov5_seg/bus.jpg"));
 
         path_save_img_with_detect_result = (output_dir() / "yolov5_seg_result.jpg").string();
     }
@@ -101,7 +101,7 @@ TEST_F(YoloV5SegPostProcessTest, run)
 
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.segmentation_mask, 0.03));
 
-    deploy_percept::utils::drawDetectionResults(img, result);
+    // deploy_percept::utils::drawDetectionResults(img, result);
     cv::imwrite(path_save_img_with_detect_result, img);
 }
 

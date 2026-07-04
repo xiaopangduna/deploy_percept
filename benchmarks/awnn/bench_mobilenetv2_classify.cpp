@@ -49,7 +49,7 @@ const BenchRowConfig kRows[] = {
 };
 
 constexpr ModelBenchSpec kSpec{
-    "mobilenetv2_classify_awnn",
+    "mobilenetv2_classify",
     "mobilenetv2.nb",
     ModelInputLayout::YoloV8,
     InputPackLayout::Hwc,

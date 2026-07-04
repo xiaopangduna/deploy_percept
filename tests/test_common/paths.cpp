@@ -31,7 +31,6 @@ fs::path install_prefix_from_executable()
 
     const fs::path exe_dir = fs::path(buf).parent_path();
 
-    // <prefix>/share/percept/tests/<exe>
     if (exe_dir.filename() == "tests")
     {
         const fs::path percept_dir = exe_dir.parent_path();
@@ -41,7 +40,6 @@ fs::path install_prefix_from_executable()
         }
     }
 
-    // <prefix>/bin/<exe>（兼容旧 layout）
     if (exe_dir.filename() == "bin")
     {
         return exe_dir.parent_path();
@@ -69,11 +67,6 @@ fs::path resolve_root()
     }
     return {};
 #endif
-}
-
-fs::path app_data(const std::string &relative)
-{
-    return resolve_root() / "apps" / relative;
 }
 
 fs::path output_dir()

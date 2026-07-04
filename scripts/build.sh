@@ -26,8 +26,8 @@ show_help() {
     echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release"
     echo ""
     echo "相关脚本:"
-    echo "  bash scripts/test.sh    运行 ctest（需先 build）"
-    echo "  bash scripts/install.sh 安装到 install/<platform>/"
+    echo "  bash scripts/test.sh    build + install + 验证 install 包"
+    echo "  bash scripts/install.sh 仅安装到 install/<platform>/"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -69,6 +69,6 @@ echo ""
 echo "构建完成: ${BUILD_DIR}"
 echo ""
 echo "下一步:"
-echo "  ctest:   cd ${BUILD_DIR} && ctest --output-on-failure"
 echo "  测试:    bash scripts/test.sh --preset ${PRESET}"
 echo "  安装:    bash scripts/install.sh --preset ${PRESET}"
+echo "  ctest:   cd ${BUILD_DIR} && ctest --output-on-failure"

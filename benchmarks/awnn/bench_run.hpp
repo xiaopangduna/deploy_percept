@@ -16,7 +16,7 @@ namespace awnn {
 
 struct ModelBenchSpec
 {
-    const char *app_name{nullptr};
+    const char *fixture_case{nullptr};
     const char *default_model{nullptr};
     ModelInputLayout input_layout{ModelInputLayout::YoloV5};
     InputPackLayout pack_layout{InputPackLayout::Chw};

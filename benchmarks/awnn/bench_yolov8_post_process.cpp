@@ -49,7 +49,7 @@ const BenchRowConfig kRows[] = {
 };
 
 constexpr ModelBenchSpec kSpec{
-    "yolov8_detect_awnn",
+    "yolov8_detect",
     "yolov8.nb",
     ModelInputLayout::YoloV8,
     InputPackLayout::Hwc,

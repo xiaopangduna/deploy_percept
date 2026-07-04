@@ -24,7 +24,7 @@ using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::DetectionObject;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
-using percept::test::app_data;
+using percept::test::fixture_data;
 
 namespace {
 
@@ -97,8 +97,8 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 
 TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
 {
-    const fs::path model_path = app_data("yolov8_detect_awnn/yolov8.nb");
-    const fs::path input_path = app_data("yolov8_detect_awnn/dog.jpg");
+    const fs::path model_path = fixture_data("integration/awnn/yolov8_detect/yolov8.nb");
+    const fs::path input_path = fixture_data("integration/awnn/yolov8_detect/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     VipLiteRuntime runtime;

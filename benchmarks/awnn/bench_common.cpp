@@ -10,6 +10,8 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "deploy_percept/utils/fixture_path.hpp"
+
 namespace fs = std::filesystem;
 
 namespace percept {
@@ -25,54 +27,10 @@ PreprocessMode parse_preprocess_mode(const char *preprocess)
     return PreprocessMode::OpenCvMem;
 }
 
-fs::path percept_root()
+fs::path fixture_resource(const char *case_name, const char *relative)
 {
-    if (const char *root = std::getenv("PERCEPT_ROOT"))
-    {
-        return root;
-    }
-
-    const fs::path cwd_share = fs::current_path() / "share" / "percept";
-    if (fs::is_directory(cwd_share / "apps"))
-    {
-        return cwd_share;
-    }
-
-    char exe_path[4096];
-    const ssize_t len = ::readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len > 0)
-    {
-        exe_path[len] = '\0';
-        const fs::path exe = exe_path;
-        const fs::path exe_dir = exe.parent_path();
-
-        if (exe_dir.filename() == "benchmarks")
-        {
-            const fs::path percept_dir = exe_dir.parent_path();
-            if (percept_dir.filename() == "percept")
-            {
-                return percept_dir;
-            }
-        }
-
-        const fs::path prefix = exe_dir.parent_path();
-        const fs::path install_share = prefix / "share" / "percept";
-        if (fs::is_directory(install_share / "apps"))
-        {
-            return install_share;
-        }
-    }
-
-    return {};
-}
-
-fs::path app_resource(const char *app_name, const char *relative)
-{
-    if (const fs::path root = percept_root(); !root.empty())
-    {
-        return root / "apps" / app_name / relative;
-    }
-    return fs::path("apps") / app_name / relative;
+    return deploy_percept::utils::fixture_path(
+        std::string("integration/awnn/") + case_name + "/" + relative);
 }
 
 void parse_model_input_dims(

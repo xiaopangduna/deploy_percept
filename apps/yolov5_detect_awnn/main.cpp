@@ -19,6 +19,7 @@
 #include "deploy_percept/core/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/core/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
+#include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
 
 namespace fs = std::filesystem;
@@ -28,13 +29,24 @@ using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 using deploy_percept::utils::drawDetectionResults;
+using deploy_percept::utils::fixture_path;
 
 namespace
 {
 
-constexpr const char *kDefaultModel = "yolov5.nb";
-constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov5_detect_awnn_out.jpg";
+
+const fs::path &default_model_path()
+{
+    static const fs::path path = fixture_path("integration/awnn/yolov5_detect/yolov5.nb");
+    return path;
+}
+
+const fs::path &default_input_path()
+{
+    static const fs::path path = fixture_path("integration/awnn/yolov5_detect/dog.jpg");
+    return path;
+}
 
 /**
  * 将 BGR 图像 pack 为 VIP input buffer 字节序。
@@ -89,8 +101,10 @@ bool prepare_model_input(
 
 int main(int argc, char **argv)
 {
-    const char *model_path = (argc > 1) ? argv[1] : kDefaultModel;
-    const char *input_path = (argc > 2) ? argv[2] : kDefaultInput;
+    const std::string model_path_str = (argc > 1) ? argv[1] : default_model_path().string();
+    const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
+    const char *model_path = model_path_str.c_str();
+    const char *input_path = input_path_str.c_str();
     const char *output_path = (argc > 3) ? argv[3] : kDefaultOutput;
 
     std::printf("yolov5_detect_awnn\n");

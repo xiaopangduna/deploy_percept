@@ -35,7 +35,7 @@ deploy_percept/
 ├── scripts/                       # 构建与测试脚本
 │   ├── build.sh                   # 编译（cmake configure + build）
 │   ├── install.sh                 # 安装（cmake install → install/<platform>/）
-│   ├── test.sh                    # 测试（ctest / install 包 / 开发板 SSH）
+│   ├── test.sh                    # build + install + 验证 install 包（PC / 开发板）
 │   └── third_party_builders/      # 第三方库构建脚本
 ├── src/                           # 源代码
 │   ├── engine/                    # 推理引擎实现
@@ -43,9 +43,10 @@ deploy_percept/
 │   ├── pre_process/               # 预处理算法实现
 │   └── utils/                     # 工具函数实现
 ├── tests/                         # 测试代码
-│   ├── post_process/              # 后处理算法测试
-│   ├── test_common/               # 测试通用组件
-│   └── utils/                     # 测试工具函数
+│   ├── fixtures/                  # 测试与 demo 共用数据（install → share/percept/fixtures/）
+│   ├── unit/                      # 单元测试
+│   ├── integration/               # 集成测试
+│   └── test_common/               # 测试通用组件
 └── third_party/                   # 第三方依赖（可能在.gitignore中）
 ```
 
@@ -81,7 +82,7 @@ deploy_percept/
 |------|------|
 | `scripts/build.sh` | 仅编译，产物在 `build/<preset>/` |
 | `scripts/install.sh` | 仅安装，打包到 `install/<platform>/`（需先 build） |
-| `scripts/test.sh` | 仅测试：build tree `ctest`、本地 install 包、开发板 SSH |
+| `scripts/test.sh` | build + install + 验证 install 包（PC 本地或开发板 rsync+SSH） |
 
 ### 环境准备
 
@@ -103,11 +104,21 @@ bash scripts/third_party_builder.sh x86_64 --libs all
 bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,gtest,opencv,spdlog
 ```
 
+# 与平台相关的库需要参考 /cmake/modules/ 自行配置
+
 ### 宿主机开发（x86_64）
 
 ```bash
-bash scripts/build.sh --preset x86_64-debug
 bash scripts/test.sh --preset x86_64-debug
+```
+
+等价于依次执行 build、install，并在 `install/x86_64/` 上跑 `share/percept/tests/`。
+
+开发期 build tree GTest（不经过 test.sh）：
+
+```bash
+bash scripts/build.sh --preset x86_64-debug
+cd build/x86_64-debug && ctest --output-on-failure
 ```
 
 ### 交叉编译（Orange Pi 4 Pro A733）
@@ -125,45 +136,35 @@ cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
 cmake --install build/aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
-### 测试
+### 测试（install 包）
 
-#### 1. build tree（宿主机日常开发）
+`test.sh` 固定流程：**build → install → 跑 install 内测试**（与板端部署形态一致）。
+
+#### PC（本地 install）
 
 ```bash
-bash scripts/build.sh --preset x86_64-debug
 bash scripts/test.sh --preset x86_64-debug
+bash scripts/test.sh --preset x86_64-debug --bench 50   # 含 benchmark
 ```
 
-等价于在 `build/x86_64-debug/` 下执行 `ctest --output-on-failure`。
+#### 开发板（build + install + rsync + SSH 远程测）
 
-#### 2. install tree（验证安装包）
+板子无需 cmake/ctest/源码，只需完整 install 目录。
 
 ```bash
-bash scripts/build.sh --preset x86_64-debug
-bash scripts/install.sh --preset x86_64-debug
-bash scripts/test.sh --install-dir install/x86_64
+# 密钥登录（推荐：ssh-copy-id orangepi@192.168.0.103）
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@192.168.0.103:~/deploy_percept
+
+# 密码登录：当前 shell 导出 SSHPASS（需 sshpass，devcontainer 已安装）
+export SSHPASS='your_password'
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@192.168.0.103:~/deploy_percept --bench 100
 ```
 
-#### 3. 开发板（交叉编译产物上板验证）
+**PC 依赖**：`ssh`、`rsync`；使用密码时需 `sshpass` 且设置环境变量 `SSHPASS`（勿提交仓库）。
 
-将 install 包同步到板子，在 PC 上通过 SSH 远程触发测试（板子无需 cmake/ctest/源码）：
-
-```bash
-# 1. 交叉编译 + 打 install 包
-bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
-bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
-
-# 2. 拷贝 install 目录到开发板
-rsync -avz install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
-  orangepi@192.168.0.103:~/deploy_percept/
-
-# 3. PC 上远程跑测（输出回显到 PC 终端）
-bash scripts/test.sh --board orangepi@192.168.0.103:~/deploy_percept
-```
-
-**PC 依赖**：`ssh` 客户端，能登录板子（密码或 SSH 密钥）。
-
-**板子依赖**：完整 install 目录（`bin/`、`share/percept/apps/`、`share/percept/tests/`），以及系统基础库（`libc`、`libstdc++`）。无需安装 CMake 或拷贝源码树。
+**板子依赖**：`bin/`、`lib/`、`share/percept/` 等 install 内容，以及系统基础库（`libc`、`libstdc++`）。
 
 路径可使用 `~/deploy_percept` 或绝对路径 `/home/orangepi/deploy_percept`。
 
@@ -185,7 +186,7 @@ install/<platform>/
 ├── lib/                         # libdeploy_percept.a、VIPLite 等
 ├── include/deploy_percept/      # 头文件
 ├── share/percept/
-│   ├── apps/                    # 示例/测试 fixture 数据
+│   ├── fixtures/                # 测试与 demo 共用 fixture 数据
 │   └── tests/                   # 测试可执行文件（INSTALL_TESTS=ON）
 └── var/percept/output/          # 测试输出（运行时自动创建）
 ```

@@ -2,11 +2,11 @@
 
 全志 VIPLite YOLOv8 检测（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`，后处理见 `YoloV8DetectPostProcessAwnn`（与 `tmp/awnpu_model_zoo-.../examples/yolov8` 六路 FP32 输出一致）。
 
-## 资源（install → share/percept/apps/yolov8_detect_awnn/）
+## 资源（install → share/percept/fixtures/integration/awnn/yolov8_detect/）
 
 | 文件 | 说明 |
 |------|------|
-| `yolov8.nb` | A733 模型（`yolov8n_6_uint8_a733.nb` 的 symlink） |
+| `yolov8.nb` | A733 模型 |
 | `dog.jpg` | 默认输入图（768×576） |
 
 ## 模型训练与转换
@@ -37,7 +37,7 @@ cd tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/yolov8/convert_model/
 ### 替换 install 包内模型
 
 ```bash
-cp yolov8n_6_uint8_a733.nb /path/to/install/share/percept/apps/yolov8_detect_awnn/yolov8.nb
+cp yolov8n_6_uint8_a733.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov8_detect/yolov8.nb
 # 板端 rsync install 树后重跑 demo / test.sh
 ```
 
@@ -61,26 +61,13 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov8_detect_awnn
 ```
 
-未设置 `PERCEPT_ROOT` 时，程序从当前目录或可执行文件路径查找 `share/percept/apps/`。也可显式设置：
-
-```bash
-export PERCEPT_ROOT=$PWD/share/percept
-export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
-```
-
-默认输出：`share/percept/apps/yolov8_detect_awnn/yolov8_detect_awnn_out.jpg`
-
-显式指定路径：
-
-```bash
-./bin/yolov8_detect_awnn share/percept/apps/yolov8_detect_awnn/yolov8.nb \
-  share/percept/apps/yolov8_detect_awnn/dog.jpg /tmp/out.jpg
-```
+无参运行时通过 `fixture_path()` 解析默认模型与输入。也可显式传参或设置 `PERCEPT_ROOT=$PWD/share/percept`。
 
 **正确性回归（板端）：**
 
 ```bash
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept
 ```
 
 对应 `share/percept/tests/test_yolov8_detect_awnn`（integration test）。
@@ -89,7 +76,8 @@ bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
 
 ```bash
 # 板端：先跑正确性测试，再加 --bench 跑性能
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept --bench 50
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept --bench 50
 
 # 或 install prefix 本地直接跑 benchmark
 export PERCEPT_ROOT=$PWD/share/percept

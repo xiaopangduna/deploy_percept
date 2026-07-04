@@ -30,10 +30,12 @@ bool init_bench_run_context(
     BenchRunContext &ctx)
 {
     const fs::path base = fs::current_path();
-    const std::string default_model = app_resource(spec.app_name, spec.default_model).string();
+    const std::string default_model =
+        fixture_resource(spec.fixture_case, spec.default_model).string();
     const char *default_input_name =
         (spec.default_input != nullptr) ? spec.default_input : "dog.jpg";
-    const std::string default_input = app_resource(spec.app_name, default_input_name).string();
+    const std::string default_input =
+        fixture_resource(spec.fixture_case, default_input_name).string();
 
     int loops = kDefaultLoops;
     int argi = 1;

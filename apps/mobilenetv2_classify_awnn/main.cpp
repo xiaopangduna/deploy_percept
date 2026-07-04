@@ -20,6 +20,7 @@
 #include "deploy_percept/core/engine/VipLiteRuntime.hpp"
 #include "deploy_percept/core/engine/AwnnResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
+#include "deploy_percept/utils/fixture_path.hpp"
 
 namespace fs = std::filesystem;
 
@@ -27,13 +28,26 @@ using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::AwnnResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::ClassificationPostProcessAwnn;
+using deploy_percept::utils::fixture_path;
 
 namespace
 {
 
-constexpr const char *kDefaultModel = "mobilenetv2.nb";
-constexpr const char *kDefaultInput = "cat.jpg";
 constexpr int kDefaultTopK = 5;
+
+const fs::path &default_model_path()
+{
+    static const fs::path path =
+        fixture_path("integration/awnn/mobilenetv2_classify/mobilenetv2.nb");
+    return path;
+}
+
+const fs::path &default_input_path()
+{
+    static const fs::path path =
+        fixture_path("integration/awnn/mobilenetv2_classify/cat.jpg");
+    return path;
+}
 
 bool prepare_model_input(
     const std::string &input_path,
@@ -76,8 +90,10 @@ void print_top_k(const ClassificationPostProcessAwnn &processor)
 
 int main(int argc, char **argv)
 {
-    const char *model_path = (argc > 1) ? argv[1] : kDefaultModel;
-    const char *input_path = (argc > 2) ? argv[2] : kDefaultInput;
+    const std::string model_path_str = (argc > 1) ? argv[1] : default_model_path().string();
+    const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
+    const char *model_path = model_path_str.c_str();
+    const char *input_path = input_path_str.c_str();
     const int top_k = (argc > 3) ? std::atoi(argv[3]) : kDefaultTopK;
 
     if (top_k <= 0)

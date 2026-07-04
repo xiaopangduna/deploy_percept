@@ -2,7 +2,7 @@
 
 全志 VIPLite YOLOv5 检测（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`。
 
-## 资源（install → share/percept/apps/yolov5_detect_awnn/）
+## 资源（install → share/percept/fixtures/integration/awnn/yolov5_detect/）
 
 | 文件 | 说明 |
 |------|------|
@@ -85,7 +85,7 @@ source /path/to/tmp/ai-sdk/models/env.sh v3
 ### 4. 替换 install 包内模型
 
 ```bash
-cp yolov5s-sim_uint8.nb /path/to/install/share/percept/apps/yolov5_detect_awnn/yolov5.nb
+cp yolov5s-sim_uint8.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov5_detect/yolov5.nb
 # 板端 rsync install 树后重跑 demo / test.sh
 ```
 
@@ -111,7 +111,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov5_detect_awnn
 ```
 
-未设置 `PERCEPT_ROOT` 时，程序会从当前目录或可执行文件路径自动查找 `share/percept/apps/`。
+无参运行时通过 `fixture_path()` 解析默认模型与输入（见 `tests/fixtures/integration/awnn/yolov5_detect/`）。也可显式传参或使用 `PERCEPT_ROOT` 指向 install 的 `share/percept`。
 也可显式设置：`export PERCEPT_ROOT=$PWD/share/percept`
 
 **必须**保证 VIPLite 动态库来自 install 的 `lib/`（与构建版本一致）：
@@ -128,14 +128,16 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 
 诊断日志（stderr）会逐步打印 `AwnnEngine: vip_create_network ok` 等；请记下**最后一条**再反馈。
 
-默认输出：`share/percept/apps/yolov5_detect_awnn/yolov5_detect_awnn_out.jpg`
+默认输出：`yolov5_detect_awnn_out.jpg`（当前工作目录）
 
 **性能 benchmark（install 后，与测试同一脚本）：**
 
 ```bash
 # 板端：先跑正确性测试，再加 --bench 跑性能
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept
-bash scripts/test.sh --board orangepi@<ip>:~/deploy_percept --bench 50
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept --bench 50
 
 # 或 install prefix 本地直接跑 benchmark
 export PERCEPT_ROOT=$PWD/share/percept

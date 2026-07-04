@@ -16,7 +16,7 @@
 namespace fs = std::filesystem;
 
 using namespace deploy_percept::post_process;
-using percept::test::app_data;
+using percept::test::fixture_data;
 using percept::test::output_dir;
 
 class YoloV5DetectPostProcessTest : public ::testing::Test
@@ -30,9 +30,9 @@ protected:
         processor = std::make_unique<YoloV5DetectPostProcess>(params);
 
         model_outputs_npz = cnpy::npz_load(
-            app_data("yolov5_detect_rknn/yolov5_detect_result_model_outputs.npz"));
+            fixture_data("unit/post_process/yolov5_detect/model_outputs.npz"));
 
-        img = cv::imread(app_data("yolov5_detect_rknn/bus.jpg"));
+        img = cv::imread(fixture_data("unit/post_process/yolov5_detect/bus.jpg"));
 
         path_save_img_with_detect_result = (output_dir() / "yolov5_detect_result.jpg").string();
     }
@@ -76,7 +76,7 @@ TEST_F(YoloV5DetectPostProcessTest, run)
 
     EXPECT_TRUE(isDetectionObjectVectorEqualWithinTolerance(expected_results, detection_result.detection_objects));
 
-    deploy_percept::utils::drawDetectionResults(img, detection_result);
+    // deploy_percept::utils::drawDetectionResults(img, detection_result);
 
     cv::imwrite(path_save_img_with_detect_result.c_str(), img);
 }
