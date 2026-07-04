@@ -21,6 +21,7 @@
 #include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
+#include "deploy_percept/data/class_labels.hpp"
 
 namespace fs = std::filesystem;
 
@@ -28,6 +29,7 @@ using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
+using deploy_percept::data::kCoco80Labels;
 using deploy_percept::utils::drawDetectionResults;
 using deploy_percept::utils::convertTensorViewsToNpz;
 using deploy_percept::utils::fixture_path;
@@ -211,7 +213,7 @@ int main(int argc, char **argv)
     }
 
     cv::Mat result_img = model_input.clone();
-    drawDetectionResults(result_img, processor.getResult());
+    drawDetectionResults(result_img, processor.getResult(), &kCoco80Labels);
 
     fs::create_directories(fs::path(output_path).parent_path(), ec);
     if (!cv::imwrite(output_path, result_img))

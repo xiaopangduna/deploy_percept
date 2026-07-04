@@ -11,7 +11,7 @@ namespace post_process
 {
 
 /** YOLOv8 姿态估计后处理（RKNN，int8 检测头 + 关键点张量） */
-class YoloV8PosePostProcess : public YoloDetectPostProcess
+class YoloV8PosePostProcessRknn : public YoloDetectPostProcess
 {
 public:
     struct Params
@@ -26,8 +26,8 @@ public:
 
     using Result = PoseResult;
 
-    explicit YoloV8PosePostProcess(const Params &params);
-    ~YoloV8PosePostProcess() = default;
+    explicit YoloV8PosePostProcessRknn(const Params &params);
+    ~YoloV8PosePostProcessRknn() = default;
 
     const Params &getParams() const { return params_; }
     const Result &getResult() const { return result_; }

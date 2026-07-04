@@ -68,5 +68,5 @@ TEST_F(YoloV5DetectPostProcessRknnTest, GoldenRun)
     expectDetectionsMatchGolden(expected_detections, detection_result.detections);
 
     deploy_percept::utils::drawDetectionResults(img, detection_result);
-    cv::imwrite((output_dir() / "yolov5_detect_result.jpg").string(), img);
+    cv::imwrite((output_dir() / "yolov5_detect_rknn_result.jpg").string(), img);
 }

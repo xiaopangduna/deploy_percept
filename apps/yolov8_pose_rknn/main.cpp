@@ -12,9 +12,10 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/core/engine/RknnEngine.hpp"
-#include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV8PosePostProcessRknn.hpp"
 #include "deploy_percept/common/types.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
+#include "deploy_percept/data/class_labels.hpp"
 
 using namespace deploy_percept::post_process;
 
@@ -96,8 +97,8 @@ int main()
         output_types.push_back(static_cast<int32_t>(engine.model_output_attrs_[i].type));
     }
 
-    YoloV8PosePostProcess::Params ppose;
-    YoloV8PosePostProcess pose_processor(ppose);
+    YoloV8PosePostProcessRknn::Params ppose;
+    YoloV8PosePostProcessRknn pose_processor(ppose);
 
     const bool ok = pose_processor.run(output_ptrs,
                                        in_w,
@@ -111,7 +112,7 @@ int main()
 
     if (!ok)
     {
-        fprintf(stderr, "YoloV8PosePostProcess::run failed\n");
+        fprintf(stderr, "YoloV8PosePostProcessRknn::run failed\n");
         return 1;
     }
 
@@ -130,7 +131,8 @@ int main()
     }
 
     cv::Mat result_img = orig_img.clone();
-    deploy_percept::utils::drawPoseResults(result_img, pose_results);
+    deploy_percept::utils::drawPoseResults(
+        result_img, pose_results, &deploy_percept::data::kCoco80Labels);
 
     std::filesystem::create_directories(std::filesystem::path(path_save_output_img).parent_path());
     cv::imwrite(path_save_output_img, result_img);

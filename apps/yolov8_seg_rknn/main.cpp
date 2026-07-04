@@ -18,12 +18,13 @@
 
 #include "cnpy.h"
 
-#include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV8SegPostProcessRknn.hpp"
 #include "deploy_percept/common/types.hpp"
 #include "deploy_percept/core/engine/RknnEngine.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
+#include "deploy_percept/data/class_labels.hpp"
 
 using namespace deploy_percept::utils;
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
@@ -145,8 +146,8 @@ int main()
         output_zps.push_back(engine.model_output_attrs_[i].zp);
     }
 
-    deploy_percept::post_process::YoloV8SegPostProcess::Params params_post;
-    deploy_percept::post_process::YoloV8SegPostProcess seg_processor(params_post);
+    deploy_percept::post_process::YoloV8SegPostProcessRknn::Params params_post;
+    deploy_percept::post_process::YoloV8SegPostProcessRknn seg_processor(params_post);
     // output_dims 这个参数可以省略
     bool success = seg_processor.run(
         output_buffers_int8,
@@ -161,7 +162,7 @@ int main()
     auto seg_results = seg_processor.getResult();
 
     cv::Mat result_img = orig_img.clone();
-    deploy_percept::utils::drawDetectionResults(result_img, seg_results);
+    drawSegmentationResults(result_img, seg_results, &deploy_percept::data::kCoco80Labels);
 
     cv::imwrite(path_save_output_img, result_img);
     printf("Save computed detect result to %s\n", path_save_output_img.c_str());

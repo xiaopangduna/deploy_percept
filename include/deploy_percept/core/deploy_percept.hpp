@@ -7,14 +7,14 @@
 
 #include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessRknn.hpp"
-#include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
-#include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5SegPostProcessRknn.hpp"
+#include "deploy_percept/core/post_process/YoloV8SegPostProcessRknn.hpp"
 #ifdef AWNN_FOUND
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
 #endif
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
-#include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV8PosePostProcessRknn.hpp"
 
 #ifdef AWNN_FOUND
 #include "deploy_percept/core/engine/AwnnEngine.hpp"

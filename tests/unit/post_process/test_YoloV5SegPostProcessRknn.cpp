@@ -8,7 +8,7 @@
 
 #include "cnpy.h"
 
-#include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5SegPostProcessRknn.hpp"
 #include "deploy_percept/utils/io.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
@@ -19,20 +19,20 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::Detection;
-using deploy_percept::post_process::YoloV5SegPostProcess;
+using deploy_percept::post_process::YoloV5SegPostProcessRknn;
 using deploy_percept::utils::loadUint8VectorFromBinFile;
 using percept::test::fixture_data;
 using percept::test::makeInt8PtrInputs;
 using percept::test::output_dir;
 
-class YoloV5SegPostProcessTest : public ::testing::Test
+class YoloV5SegPostProcessRknnTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
         fs::create_directories(output_dir());
 
-        processor = std::make_unique<YoloV5SegPostProcess>(YoloV5SegPostProcess::Params{});
+        processor = std::make_unique<YoloV5SegPostProcessRknn>(YoloV5SegPostProcessRknn::Params{});
 
         model_outputs_npz = cnpy::npz_load(
             fixture_data("unit/post_process/yolov5_seg/model_outputs.npz").string());
@@ -41,13 +41,13 @@ protected:
         img = cv::imread(fixture_data("unit/post_process/yolov5_seg/bus.jpg").string());
     }
 
-    std::unique_ptr<YoloV5SegPostProcess> processor;
+    std::unique_ptr<YoloV5SegPostProcessRknn> processor;
     cnpy::npz_t model_outputs_npz;
     fs::path path_seg_result;
     cv::Mat img;
 };
 
-TEST_F(YoloV5SegPostProcessTest, GoldenRun)
+TEST_F(YoloV5SegPostProcessRknnTest, GoldenRun)
 {
     const std::vector<Detection> expected_detections = {
         MakeDetectResult(0, 0.8823f, 213, 239, 284, 516),
@@ -85,6 +85,6 @@ TEST_F(YoloV5SegPostProcessTest, GoldenRun)
     expectDetectionsMatchGolden(expected_detections, result.detections);
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, result.label_mask, 0.03));
 
-    deploy_percept::utils::drawDetectionResults(img, result);
-    cv::imwrite((output_dir() / "yolov5_seg_result.jpg").string(), img);
+    deploy_percept::utils::drawSegmentationResults(img, result);
+    cv::imwrite((output_dir() / "yolov5_seg_rknn_result.jpg").string(), img);
 }

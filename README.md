@@ -172,8 +172,8 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 - `share/percept/tests/smoke_tests`
 - `share/percept/tests/test_YoloV5DetectPostProcessRknn`
-- `share/percept/tests/test_YoloV5SegPostProcess`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
-- `share/percept/tests/test_YoloV8SegPostProcess`
+- `share/percept/tests/test_YoloV5SegPostProcessRknn`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
+- `share/percept/tests/test_YoloV8SegPostProcessRknn`
 - `share/percept/tests/test_yolov5_detect_awnn`（仅 AWNN/aarch64 install 包）
 
 构建 install 包时需 `ENABLE_TESTS=ON`（默认）且 `INSTALL_TESTS=ON`（默认）。量产包可 `-DINSTALL_TESTS=OFF`，仅保留 `bin/` demo。

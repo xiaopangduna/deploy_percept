@@ -1,4 +1,4 @@
-#include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV8PosePostProcessRknn.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -87,9 +87,9 @@ enum RknnTensorTypeCompat : int32_t
 
 } // namespace
 
-YoloV8PosePostProcess::YoloV8PosePostProcess(const Params &params) : params_(params) {}
+YoloV8PosePostProcessRknn::YoloV8PosePostProcessRknn(const Params &params) : params_(params) {}
 
-int YoloV8PosePostProcess::decodeHeadInt8(const int8_t *input,
+int YoloV8PosePostProcessRknn::decodeHeadInt8(const int8_t *input,
                                          int grid_h,
                                          int grid_w,
                                          int stride,
@@ -165,7 +165,7 @@ int YoloV8PosePostProcess::decodeHeadInt8(const int8_t *input,
     return valid_count;
 }
 
-float YoloV8PosePostProcess::readKeypointValue(const void *buf,
+float YoloV8PosePostProcessRknn::readKeypointValue(const void *buf,
                                                int kp_index,
                                                int keypoint_j,
                                                int plane,
@@ -198,7 +198,7 @@ float YoloV8PosePostProcess::readKeypointValue(const void *buf,
     }
 }
 
-void YoloV8PosePostProcess::gatherKeypointsForDetection(PoseDetection &out,
+void YoloV8PosePostProcessRknn::gatherKeypointsForDetection(PoseDetection &out,
                                                         const void *kpt_buf,
                                                         int32_t kpt_type,
                                                         int32_t kpt_zp,
@@ -226,7 +226,7 @@ void YoloV8PosePostProcess::gatherKeypointsForDetection(PoseDetection &out,
     (void)model_in_h;
 }
 
-bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
+bool YoloV8PosePostProcessRknn::run(const std::vector<void *> &outputs,
                                 int input_image_width,
                                 int input_image_height,
                                 std::vector<std::vector<int>> &output_dims,

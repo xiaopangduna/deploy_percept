@@ -1,15 +1,15 @@
-#include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV8SegPostProcessRknn.hpp"
 #include <algorithm>
 
 namespace deploy_percept
 {
     namespace post_process
     {
-        YoloV8SegPostProcess::YoloV8SegPostProcess(const Params &params) : params_(params)
+        YoloV8SegPostProcessRknn::YoloV8SegPostProcessRknn(const Params &params) : params_(params)
         {
         }
 
-        bool YoloV8SegPostProcess::run(
+        bool YoloV8SegPostProcessRknn::run(
             const std::vector<int8_t *> &outputs,
             int input_image_width,
             int input_image_height,
@@ -134,7 +134,7 @@ namespace deploy_percept
 
             return true;
         }
-        int YoloV8SegPostProcess::decodeDetectionAndSegmentationHead(const std::vector<int8_t *> *all_input, int input_id, int grid_h, int grid_w,
+        int YoloV8SegPostProcessRknn::decodeDetectionAndSegmentationHead(const std::vector<int8_t *> *all_input, int input_id, int grid_h, int grid_w,
                                                                    int stride,
                                                                    std::vector<float> &boxes, std::vector<float> &segments,
                                                                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,

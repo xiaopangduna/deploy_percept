@@ -1,4 +1,4 @@
-#include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5SegPostProcessRknn.hpp"
 #include <algorithm>
 
 namespace deploy_percept
@@ -6,14 +6,14 @@ namespace deploy_percept
     namespace post_process
     {
         // 构造函数
-        YoloV5SegPostProcess::YoloV5SegPostProcess(const Params &params) : params_(params)
+        YoloV5SegPostProcessRknn::YoloV5SegPostProcessRknn(const Params &params) : params_(params)
         {
             result_.detections.resize(params_.obj_numb_max_size);
             // 初始化分割掩码容器
             result_.label_mask.resize(1);
         }
 
-        bool YoloV5SegPostProcess::run(
+        bool YoloV5SegPostProcessRknn::run(
             const std::vector<int8_t *> &outputs,
             int input_image_width,
             int input_image_height,
@@ -151,7 +151,7 @@ namespace deploy_percept
 
             return true;
         }
-        int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
+        int YoloV5SegPostProcessRknn::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
                                                       int stride,
                                                       std::vector<float> &boxes, std::vector<float> &segments,
                                                       std::vector<float> &objProbs, std::vector<int> &classId, float threshold,

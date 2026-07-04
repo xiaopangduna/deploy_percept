@@ -5,15 +5,15 @@ add_percept_test(
     LINK_LIBS deploy_percept_core deploy_percept_utils)
 
 add_percept_test(
-    NAME test_YoloV5SegPostProcess
+    NAME test_YoloV5SegPostProcessRknn
     TIER unit
-    SOURCES post_process/test_YoloV5SegPostProcess.cpp
+    SOURCES post_process/test_YoloV5SegPostProcessRknn.cpp
     LINK_LIBS deploy_percept_core deploy_percept_utils)
 
 add_percept_test(
-    NAME test_YoloV8SegPostProcess
+    NAME test_YoloV8SegPostProcessRknn
     TIER unit
-    SOURCES post_process/test_YoloV8SegPostProcess.cpp
+    SOURCES post_process/test_YoloV8SegPostProcessRknn.cpp
     LINK_LIBS deploy_percept_core deploy_percept_utils)
 
 add_percept_test(

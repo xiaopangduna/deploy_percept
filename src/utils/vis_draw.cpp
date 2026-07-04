@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 
 namespace deploy_percept
@@ -13,7 +14,37 @@ namespace utils
 namespace
 {
 
-void drawDetectionBoxes(cv::Mat &image, const std::vector<Detection> &detections)
+std::string formatScorePercent(const float score)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.2f%%", score * 100.f);
+    return buf;
+}
+
+std::string formatObjectCaption(const int class_id,
+                                const float score,
+                                const data::ClassLabelTable *labels)
+{
+    const std::string score_str = formatScorePercent(score);
+    if (labels != nullptr)
+    {
+        const char *name = data::lookup_label(*labels, class_id);
+        if (name != nullptr)
+        {
+            return std::string(name) + " | " + score_str;
+        }
+    }
+    return "id " + std::to_string(class_id) + " | " + score_str;
+}
+
+std::string formatDetectionCaption(const Detection &det, const data::ClassLabelTable *labels)
+{
+    return formatObjectCaption(det.class_id, det.score, labels);
+}
+
+void drawDetectionBoxes(cv::Mat &image,
+                        const std::vector<Detection> &detections,
+                        const data::ClassLabelTable *labels)
 {
     unsigned char class_colors[][3] = {
         {255, 56, 56},
@@ -49,8 +80,7 @@ void drawDetectionBoxes(cv::Mat &image, const std::vector<Detection> &detections
                       color,
                       2);
 
-        const std::string label = "Class " + std::to_string(det.class_id) + " " +
-                                  std::to_string(det.score * 100) + "%";
+        const std::string label = formatDetectionCaption(det, labels);
         int baseline = 0;
         const cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
         cv::rectangle(image,
@@ -123,19 +153,28 @@ void drawLabelMaskOverlay(cv::Mat &image, const std::vector<std::uint8_t> &label
     }
 }
 
+std::string formatPoseCaption(const PoseDetection &det, const data::ClassLabelTable *labels)
+{
+    return formatObjectCaption(det.class_id, det.score, labels);
+}
+
 } // namespace
 
-void drawDetectionResults(cv::Mat &image, const DetectionResult &results)
+void drawDetectionResults(cv::Mat &image,
+                          const DetectionResult &results,
+                          const data::ClassLabelTable *labels)
 {
     if (image.empty())
     {
         return;
     }
 
-    drawDetectionBoxes(image, results.detections);
+    drawDetectionBoxes(image, results.detections, labels);
 }
 
-void drawDetectionResults(cv::Mat &image, const SegmentationResult &results)
+void drawSegmentationResults(cv::Mat &image,
+                             const SegmentationResult &results,
+                             const data::ClassLabelTable *labels)
 {
     if (image.empty())
     {
@@ -147,10 +186,10 @@ void drawDetectionResults(cv::Mat &image, const SegmentationResult &results)
         drawLabelMaskOverlay(image, results.label_mask);
     }
 
-    drawDetectionBoxes(image, results.detections);
+    drawDetectionBoxes(image, results.detections, labels);
 }
 
-void drawPoseResults(cv::Mat &image, const PoseResult &results)
+void drawPoseResults(cv::Mat &image, const PoseResult &results, const data::ClassLabelTable *labels)
 {
     if (image.empty())
     {
@@ -173,10 +212,7 @@ void drawPoseResults(cv::Mat &image, const PoseResult &results)
                       color_box,
                       2);
 
-        const std::string cls_name = (det.class_id == 0) ? "人" : ("类" + std::to_string(det.class_id));
-        const float score_pct = det.score * 100.f;
-        const std::string label =
-            cls_name + " id=" + std::to_string(det.class_id) + " " + std::to_string(score_pct) + "%";
+        const std::string label = formatPoseCaption(det, labels);
         int baseline = 0;
         const cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseline);
 

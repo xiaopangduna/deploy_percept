@@ -9,8 +9,8 @@ namespace deploy_percept
 {
     namespace post_process
     {
-        /** YOLOv8 实例分割后处理（RKNN int8，DFL 三头 + proto） */
-        class YoloV8SegPostProcess : public YoloDetectPostProcess
+        /** YOLOv5 实例分割后处理（RKNN int8，anchor 三头 + proto） */
+        class YoloV5SegPostProcessRknn : public YoloDetectPostProcess
         {
         public:
             struct Params
@@ -24,13 +24,17 @@ namespace deploy_percept
                 int proto_height = 160;
                 int proto_width = 160;
 
+                std::vector<int> anchor_stride8 = YoloV5CocoAnchors::kStride8;
+                std::vector<int> anchor_stride16 = YoloV5CocoAnchors::kStride16;
+                std::vector<int> anchor_stride32 = YoloV5CocoAnchors::kStride32;
+
                 int prop_box_size = 5;
             };
 
             using Result = SegmentationResult;
 
-            explicit YoloV8SegPostProcess(const Params &params);
-            ~YoloV8SegPostProcess() = default;
+            explicit YoloV5SegPostProcessRknn(const Params &params);
+            ~YoloV5SegPostProcessRknn() = default;
 
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }
@@ -39,9 +43,9 @@ namespace deploy_percept
                 const std::vector<int8_t *> &outputs,
                 int input_image_width,
                 int input_image_height,
-                std::vector<std::vector<int>> &output_dims,
-                std::vector<float> &output_scales,
-                std::vector<int32_t> &output_zps);
+                const std::vector<std::vector<int>> &output_dims,
+                const std::vector<float> &output_scales,
+                const std::vector<int32_t> &output_zps);
 
         private:
             Params params_;
@@ -50,9 +54,10 @@ namespace deploy_percept
             std::vector<uint8_t> seg_mask_;
             std::vector<uint8_t> all_mask_in_one_;
 
-            int decodeDetectionAndSegmentationHead(
-                const std::vector<int8_t *> *all_input,
+            int decodeDetectionHead(
+                const std::vector<int8_t *> &all_input,
                 int input_id,
+                int *anchor,
                 int grid_h,
                 int grid_w,
                 int stride,
@@ -61,9 +66,8 @@ namespace deploy_percept
                 std::vector<float> &objProbs,
                 std::vector<int> &classId,
                 float threshold,
-                int dfl_len,
-                std::vector<float> &output_scales,
-                std::vector<int32_t> &output_zps);
+                const std::vector<float> &output_scales,
+                const std::vector<int32_t> &output_zps);
         };
     } // namespace post_process
 } // namespace deploy_percept

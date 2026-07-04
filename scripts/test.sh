@@ -15,8 +15,8 @@ PERCEPT_BENCHMARKS_REL="share/percept/benchmarks"
 PERCEPT_INSTALL_TESTS=(
     test_smoke
     test_YoloV5DetectPostProcessRknn
-    test_YoloV5SegPostProcess
-    test_YoloV8SegPostProcess
+    test_YoloV5SegPostProcessRknn
+    test_YoloV8SegPostProcessRknn
     test_ClassificationPostProcessAwnn
     test_YoloV5DetectPostProcessAwnn
     test_YoloV8DetectPostProcessAwnn
