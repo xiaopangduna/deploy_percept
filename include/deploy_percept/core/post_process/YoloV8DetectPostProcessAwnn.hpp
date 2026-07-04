@@ -1,10 +1,8 @@
 #pragma once
 
-#include <string>
-#include <vector>
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 
-#include "deploy_percept/core/post_process/YoloBasePostProcess.hpp"
-#include "deploy_percept/common/types.hpp"
+#include <vector>
 
 namespace deploy_percept
 {
@@ -16,7 +14,7 @@ namespace deploy_percept
          * inputs[0/1] stride 8 grid/score，[2/3] stride 16，[4/5] stride 32；
          * layout 与 awnpu_model_zoo examples/yolov8 一致。
          */
-        class YoloV8DetectPostProcessAwnn : public YoloBasePostProcess
+        class YoloV8DetectPostProcessAwnn : public YoloDetectPostProcess
         {
         public:
             struct Params
@@ -28,18 +26,13 @@ namespace deploy_percept
                 float conf_threshold = 0.4f;
                 float nms_threshold = 0.45f;
                 int obj_class_num = 80;
-                int obj_name_max_size = 16;
                 int obj_numb_max_size = 128;
             };
 
-            struct Result
-            {
-                DetectionResult group{};
-                bool success = false;
-            };
+            using Result = YoloDetectPostProcess::Result;
 
             explicit YoloV8DetectPostProcessAwnn(const Params &params);
-            ~YoloV8DetectPostProcessAwnn() = default;
+            ~YoloV8DetectPostProcessAwnn() override = default;
 
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }
@@ -47,17 +40,7 @@ namespace deploy_percept
             bool run(const std::vector<TensorView> &inputs);
 
         private:
-            struct Proposal
-            {
-                float x{0.f};
-                float y{0.f};
-                float w{0.f};
-                float h{0.f};
-                int label{0};
-                float prob{0.f};
-            };
-
-            void resetResult();
+            using Proposal = DetectionProposal;
 
             bool finalizeDetections(std::vector<Proposal> &proposals);
 

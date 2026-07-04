@@ -3,14 +3,14 @@
 #include <vector>
 #include <cstring>
 #include <string>
-#include "deploy_percept/core/post_process/YoloBasePostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
 
 namespace deploy_percept
 {
     namespace post_process
     {
-        class YoloV5SegPostProcess : public YoloBasePostProcess
+        class YoloV5SegPostProcess : public YoloDetectPostProcess
         {
         public:
             // 参数配置结构体
@@ -19,7 +19,6 @@ namespace deploy_percept
                 float conf_threshold = 0.25f;
                 float nms_threshold = 0.45f;
                 int obj_class_num = 80;
-                int obj_name_max_size = 16;
                 int obj_numb_max_size = 64;
 
                 // 分割相关参数

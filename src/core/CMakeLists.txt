@@ -1,7 +1,7 @@
 set(CORE_SOURCES
     engine/BaseEngine.cpp
     post_process/YoloBasePostProcess.cpp
-    post_process/YoloV5DetectPostProcess.cpp
+    post_process/YoloDetectPostProcess.cpp
     post_process/YoloV5DetectPostProcessRknn.cpp
     post_process/YoloV5SegPostProcess.cpp
     post_process/YoloV8PosePostProcess.cpp

@@ -118,7 +118,6 @@ namespace deploy_percept
                 class_ids,
                 candidate_count,
                 params_.obj_numb_max_size,
-                params_.obj_name_max_size,
                 result_,
                 params_.model_in_w,
                 params_.model_in_h);
@@ -140,7 +139,7 @@ namespace deploy_percept
             const int feat_h = model_in_h / stride;
             const int cls_num = params_.obj_class_num;
 
-            const float deprob_threshold = desigmoid(threshold);
+            const float deprob_threshold = YoloBasePostProcess::desigmoid(threshold);
             const int feat_size = feat_w * feat_h;
             const int feat_size_cls_5 = feat_size * (cls_num + 5);
 
@@ -171,16 +170,17 @@ namespace deploy_percept
                         float final_score = 0.f;
                         if (box_score >= deprob_threshold && class_score >= deprob_threshold)
                         {
-                            final_score = sigmoid(box_score) * sigmoid(class_score);
+                            final_score = YoloBasePostProcess::sigmoid(box_score) *
+                                          YoloBasePostProcess::sigmoid(class_score);
                         }
 
                         if (final_score >= threshold)
                         {
                             const int loc_idx = a_idx;
-                            const float dx = sigmoid(feat[loc_idx + 0]);
-                            const float dy = sigmoid(feat[loc_idx + 1]);
-                            const float dw = sigmoid(feat[loc_idx + 2]);
-                            const float dh = sigmoid(feat[loc_idx + 3]);
+                            const float dx = YoloBasePostProcess::sigmoid(feat[loc_idx + 0]);
+                            const float dy = YoloBasePostProcess::sigmoid(feat[loc_idx + 1]);
+                            const float dw = YoloBasePostProcess::sigmoid(feat[loc_idx + 2]);
+                            const float dh = YoloBasePostProcess::sigmoid(feat[loc_idx + 3]);
                             const float pred_cx = (dx * 2.f - 0.5f + w) * stride;
                             const float pred_cy = (dy * 2.f - 0.5f + h) * stride;
                             const float anchor_w = static_cast<float>(anchors[a * 2 + 0]);
@@ -201,16 +201,6 @@ namespace deploy_percept
             }
 
             return valid_count;
-        }
-
-        float YoloV5DetectPostProcessAwnn::sigmoid(float x)
-        {
-            return 1.f / (1.f + std::exp(-x));
-        }
-
-        float YoloV5DetectPostProcessAwnn::desigmoid(float x)
-        {
-            return -std::log(1.f / x - 1.f);
         }
 
     } // namespace post_process

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 
-#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -14,17 +13,26 @@ namespace deploy_percept
          * YOLOv5 检测后处理（AWNN FP32 三头输出，sigmoid 解码）。
          * inputs[0/1/2] 对应 stride 8/16/32，layout 与 ai-sdk yolov5.nb 一致。
          */
-        class YoloV5DetectPostProcessAwnn : public YoloV5DetectPostProcess
+        class YoloV5DetectPostProcessAwnn : public YoloDetectPostProcess
         {
         public:
-            struct Params : YoloV5DetectPostProcess::Params
+            struct Params
             {
+                float conf_threshold = 0.25f;
+                float nms_threshold = 0.45f;
+                int obj_class_num = 80;
+                int obj_numb_max_size = 64;
+
+                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
+                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
+                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
+
                 /** 模型输入高宽（VIP 顺序 [W,H,C,N]） */
                 int model_in_h{0};
                 int model_in_w{0};
             };
 
-            using Result = YoloV5DetectPostProcess::Result;
+            using Result = YoloDetectPostProcess::Result;
 
             explicit YoloV5DetectPostProcessAwnn(const Params &params);
             ~YoloV5DetectPostProcessAwnn() override = default;
@@ -43,9 +51,6 @@ namespace deploy_percept
                 std::vector<float> &obj_probs,
                 std::vector<int> &class_ids,
                 float threshold);
-
-            static float sigmoid(float x);
-            static float desigmoid(float x);
 
             Params params_;
             Result result_{};

@@ -9,6 +9,16 @@
 namespace deploy_percept {
 namespace post_process {
 
+float YoloBasePostProcess::sigmoid(float x)
+{
+    return 1.f / (1.f + std::exp(-x));
+}
+
+float YoloBasePostProcess::desigmoid(float x)
+{
+    return -std::log(1.f / x - 1.f);
+}
+
 namespace
 {
 

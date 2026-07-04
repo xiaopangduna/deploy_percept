@@ -89,7 +89,6 @@ namespace deploy_percept
                 class_ids,
                 valid_count,
                 params_.obj_numb_max_size,
-                params_.obj_name_max_size,
                 result_,
                 model_in_w,
                 model_in_h);

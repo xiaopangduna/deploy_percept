@@ -1,6 +1,6 @@
 #pragma once
 
-#include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -11,11 +11,22 @@ namespace deploy_percept
     {
 
         /** YOLOv5 检测后处理（RKNN int8 三头输出） */
-        class YoloV5DetectPostProcessRknn : public YoloV5DetectPostProcess
+        class YoloV5DetectPostProcessRknn : public YoloDetectPostProcess
         {
         public:
-            using Params = YoloV5DetectPostProcess::Params;
-            using Result = YoloV5DetectPostProcess::Result;
+            struct Params
+            {
+                float conf_threshold = 0.25f;
+                float nms_threshold = 0.45f;
+                int obj_class_num = 80;
+                int obj_numb_max_size = 64;
+
+                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
+                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
+                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
+            };
+
+            using Result = YoloDetectPostProcess::Result;
 
             explicit YoloV5DetectPostProcessRknn(const Params &params);
             ~YoloV5DetectPostProcessRknn() override = default;

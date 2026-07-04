@@ -5,7 +5,7 @@
 
 #include "deploy_percept/common/types.hpp"
 
-#include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessRknn.hpp"
 #include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"

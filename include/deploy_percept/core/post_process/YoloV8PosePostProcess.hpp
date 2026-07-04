@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "deploy_percept/core/post_process/YoloBasePostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
 
 namespace deploy_percept
@@ -11,7 +11,7 @@ namespace deploy_percept
 namespace post_process
 {
 
-class YoloV8PosePostProcess : public YoloBasePostProcess
+class YoloV8PosePostProcess : public YoloDetectPostProcess
 {
 public:
     struct Params

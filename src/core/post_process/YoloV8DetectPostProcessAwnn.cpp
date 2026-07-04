@@ -4,7 +4,6 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
-#include <set>
 #include <vector>
 
 namespace deploy_percept
@@ -23,16 +22,6 @@ namespace deploy_percept
                 const float *grid{nullptr};
                 const float *score{nullptr};
             };
-
-            float sigmoid(float x)
-            {
-                return 1.f / (1.f + std::exp(-x));
-            }
-
-            float desigmoid(float x)
-            {
-                return -std::log(1.f / x - 1.f);
-            }
 
             float softmaxExpectation(const float *src, float *dst, int length)
             {
@@ -122,7 +111,7 @@ namespace deploy_percept
         } // namespace
 
         YoloV8DetectPostProcessAwnn::YoloV8DetectPostProcessAwnn(const Params &params)
-            : YoloBasePostProcess(), params_(params)
+            : params_(params)
         {
         }
 
@@ -171,7 +160,7 @@ namespace deploy_percept
                 return false;
             }
 
-            resetResult();
+            resetResult(result_);
 
             std::vector<Proposal> proposals;
             generateProposals(8, s8.grid, s8.score, params_.conf_threshold, proposals);
@@ -181,12 +170,6 @@ namespace deploy_percept
             return finalizeDetections(proposals);
         }
 
-        void YoloV8DetectPostProcessAwnn::resetResult()
-        {
-            result_.group = DetectionResult{};
-            result_.success = false;
-        }
-
         bool YoloV8DetectPostProcessAwnn::finalizeDetections(std::vector<Proposal> &proposals)
         {
             if (proposals.empty())
@@ -194,42 +177,8 @@ namespace deploy_percept
                 return false;
             }
 
-            std::sort(
-                proposals.begin(),
-                proposals.end(),
-                [](const Proposal &a, const Proposal &b) { return a.prob > b.prob; });
-
             std::vector<int> picked;
-            const int n = static_cast<int>(proposals.size());
-            std::vector<float> areas(n);
-            for (int i = 0; i < n; ++i)
-            {
-                areas[i] = proposals[i].w * proposals[i].h;
-            }
-            for (int i = 0; i < n; ++i)
-            {
-                const auto &a = proposals[i];
-                int keep = 1;
-                for (int j : picked)
-                {
-                    const auto &b = proposals[j];
-                    const float x1 = std::max(a.x, b.x);
-                    const float y1 = std::max(a.y, b.y);
-                    const float x2 = std::min(a.x + a.w, b.x + b.w);
-                    const float y2 = std::min(a.y + a.h, b.y + b.h);
-                    const float inter = std::max(0.f, x2 - x1) * std::max(0.f, y2 - y1);
-                    const float uni = areas[i] + areas[j] - inter;
-                    if (uni > 0.f && inter / uni > params_.nms_threshold)
-                    {
-                        keep = 0;
-                        break;
-                    }
-                }
-                if (keep)
-                {
-                    picked.push_back(i);
-                }
-            }
+            applyNmsToProposals(proposals, params_.nms_threshold, picked);
 
             const int model_w = params_.model_in_w;
             const int model_h = params_.model_in_h;
@@ -243,7 +192,7 @@ namespace deploy_percept
                     break;
                 }
 
-                Proposal obj = proposals[idx];
+                Proposal obj = proposals[static_cast<std::size_t>(idx)];
 
                 if (obj.w <= 0.f || obj.h <= 0.f)
                 {
@@ -297,7 +246,7 @@ namespace deploy_percept
             const int num_grid_y = letterbox_rows / stride;
             const int num_grid_size = num_grid_x * num_grid_y;
 
-            const float deprob_threshold = desigmoid(prob_threshold);
+            const float deprob_threshold = YoloBasePostProcess::desigmoid(prob_threshold);
             float dst[kRegMax]{};
 
             for (int y = 0; y < num_grid_y; ++y)
@@ -323,7 +272,7 @@ namespace deploy_percept
                         continue;
                     }
 
-                    score = sigmoid(score);
+                    score = YoloBasePostProcess::sigmoid(score);
                     if (score < prob_threshold)
                     {
                         continue;

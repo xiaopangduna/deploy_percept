@@ -1,5 +1,4 @@
 #include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
-#include <set>
 #include <algorithm>
 #include <cmath>
 #include <malloc.h>
@@ -112,21 +111,14 @@ namespace deploy_percept
             // ===============================
             // 3. NMS
             // ===============================
-            std::vector<int> indexArray(validCount);
-            for (int i = 0; i < validCount; ++i)
-                indexArray[i] = i;
-
-            // 使用 std::sort 按 objProbs 降序排列索引
-            std::sort(indexArray.begin(), indexArray.end(),
-                      [&objProbs](int a, int b)
-                      { return objProbs[a] > objProbs[b]; });
-
-            // 对每个类别执行 NMS
-            std::set<int> class_set(classId.begin(), classId.end());
-            for (int c : class_set)
-            {
-                retainHighestScoringBoxesByNMS(validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
-            }
+            std::vector<int> indexArray;
+            applyNmsToCandidates(
+                filterBoxes,
+                objProbs,
+                classId,
+                validCount,
+                params_.nms_threshold,
+                indexArray);
 
             int last_count = 0;
             collectDetectionsAfterNMS(
