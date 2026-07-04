@@ -16,148 +16,6 @@ namespace deploy_percept
             result_.group.label_mask.resize(1);
         }
 
-        int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
-                                                      int stride,
-                                                      std::vector<float> &boxes, std::vector<float> &segments,
-                                                      std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                                      //   const std::vector<std::vector<int>> &output_dims,
-                                                      const std::vector<float> &output_scales,
-                                                      const std::vector<int32_t> &output_zps)
-        {
-            int validCount = 0;
-            int grid_len = grid_h * grid_w;
-
-            // 原型掩码 (proto) 现由 run() 函数单独处理
-
-            const int8_t *input = all_input[input_id];         // 修复：直接使用数组访问而不是解引用
-            const int8_t *input_seg = all_input[input_id + 1]; // 修复：直接使用数组访问而不是解引用
-            int32_t zp = output_zps[input_id];
-            float scale = output_scales[input_id];
-            int32_t zp_seg = output_zps[input_id + 1];
-            float scale_seg = output_scales[input_id + 1];
-
-            int8_t thres_i8 = qntF32ToAffine(threshold, zp, scale);
-
-            for (int a = 0; a < 3; a++)
-            {
-                for (int i = 0; i < grid_h; i++)
-                {
-                    for (int j = 0; j < grid_w; j++)
-                    {
-                        int8_t box_confidence = input[((params_.prop_box_size + params_.obj_class_num) * a + 4) * grid_len + i * grid_w + j];
-                        if (box_confidence >= thres_i8)
-                        {
-                            int offset = ((params_.prop_box_size + params_.obj_class_num) * a) * grid_len + i * grid_w + j;
-                            int offset_seg = (params_.proto_channel * a) * grid_len + i * grid_w + j;
-                            const int8_t *in_ptr = input + offset;             // 使用const指针
-                            const int8_t *in_ptr_seg = input_seg + offset_seg; // 使用const指针
-
-                            float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
-
-                            if (box_conf_f32 > threshold)
-                            {
-                                // 在条件内部进行类别概率计算和边界框解码
-                                int8_t maxClassProbs = in_ptr[5 * grid_len];
-                                int maxClassId = 0;
-                                for (int k = 1; k < params_.obj_class_num; ++k)
-                                {
-                                    int8_t prob = in_ptr[(5 + k) * grid_len];
-                                    if (prob > maxClassProbs)
-                                    {
-                                        maxClassId = k;
-                                        maxClassProbs = prob;
-                                    }
-                                }
-
-                                float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
-                                float limit_score = box_conf_f32 * class_prob_f32;
-
-                                if (limit_score > threshold)
-                                {
-                                    // 边界框解码
-                                    float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-                                    float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-                                    float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-                                    float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
-                                    box_x = (box_x + j) * (float)stride;
-                                    box_y = (box_y + i) * (float)stride;
-                                    box_w = box_w * box_w * (float)anchor[a * 2];
-                                    box_h = box_h * box_h * (float)anchor[a * 2 + 1];
-                                    box_x -= (box_w / 2.0);
-                                    box_y -= (box_h / 2.0);
-
-                                    for (int k = 0; k < params_.proto_channel; k++)
-                                    {
-                                        float seg_element_fp = deqntAffineToF32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
-                                        segments.push_back(seg_element_fp);
-                                    }
-
-                                    objProbs.push_back(limit_score);
-                                    classId.push_back(maxClassId);
-                                    validCount++;
-                                    boxes.push_back(box_x);
-                                    boxes.push_back(box_y);
-                                    boxes.push_back(box_w);
-                                    boxes.push_back(box_h);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return validCount;
-        }
-
-        void YoloV5SegPostProcess::collectDetectionsAfterNMS(
-            const std::vector<int> &indexArray,
-            const std::vector<float> &filterBoxes,
-            const std::vector<int> &classId,
-            const std::vector<float> &objProbs,
-            const std::vector<float> &filterSegments,
-            int validCount,
-            std::vector<float> &filterSegments_by_nms,
-            int &last_count)
-        {
-            for (int i = 0; i < validCount; ++i)
-            {
-                // 跳过被NMS标记为冗余的检测框，或超出最大检测数量限制的框
-                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
-                {
-                    continue;
-                }
-
-                int n = indexArray[i]; // 获取原始检测框的索引
-
-                // 提取并计算边界框坐标
-                float x1 = filterBoxes[n * 4 + 0];      // 左上角x
-                float y1 = filterBoxes[n * 4 + 1];      // 左上角y
-                float x2 = x1 + filterBoxes[n * 4 + 2]; // 右下角x (x1 + width)
-                float y2 = y1 + filterBoxes[n * 4 + 3]; // 右下角y (y1 + height)
-
-                int id = classId[n];          // 保存真实的类别ID
-                float obj_conf = objProbs[n]; // 获取该检测框的置信度
-
-                // 收集该检测框对应的分割特征向量
-                for (int k = 0; k < params_.proto_channel; k++)
-                {
-                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
-                }
-
-                // 填充检测结果结构体
-                Detection det{};
-                det.box.left = x1;
-                det.box.top = y1;
-                det.box.right = x2;
-                det.box.bottom = y2;
-                det.score = obj_conf;
-
-                det.class_id = id;
-
-                result_.group.detections.push_back(det);
-                last_count++; // 增加有效检测计数
-            }
-        }
-
         bool YoloV5SegPostProcess::run(
             const std::vector<int8_t *> &outputs,
             int input_image_width,
@@ -360,5 +218,147 @@ namespace deploy_percept
             result_.success = true;
             return true;
         }
+        int YoloV5SegPostProcess::decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
+                                                      int stride,
+                                                      std::vector<float> &boxes, std::vector<float> &segments,
+                                                      std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
+                                                      //   const std::vector<std::vector<int>> &output_dims,
+                                                      const std::vector<float> &output_scales,
+                                                      const std::vector<int32_t> &output_zps)
+        {
+            int validCount = 0;
+            int grid_len = grid_h * grid_w;
+
+            // 原型掩码 (proto) 现由 run() 函数单独处理
+
+            const int8_t *input = all_input[input_id];         // 修复：直接使用数组访问而不是解引用
+            const int8_t *input_seg = all_input[input_id + 1]; // 修复：直接使用数组访问而不是解引用
+            int32_t zp = output_zps[input_id];
+            float scale = output_scales[input_id];
+            int32_t zp_seg = output_zps[input_id + 1];
+            float scale_seg = output_scales[input_id + 1];
+
+            int8_t thres_i8 = qntF32ToAffine(threshold, zp, scale);
+
+            for (int a = 0; a < 3; a++)
+            {
+                for (int i = 0; i < grid_h; i++)
+                {
+                    for (int j = 0; j < grid_w; j++)
+                    {
+                        int8_t box_confidence = input[((params_.prop_box_size + params_.obj_class_num) * a + 4) * grid_len + i * grid_w + j];
+                        if (box_confidence >= thres_i8)
+                        {
+                            int offset = ((params_.prop_box_size + params_.obj_class_num) * a) * grid_len + i * grid_w + j;
+                            int offset_seg = (params_.proto_channel * a) * grid_len + i * grid_w + j;
+                            const int8_t *in_ptr = input + offset;             // 使用const指针
+                            const int8_t *in_ptr_seg = input_seg + offset_seg; // 使用const指针
+
+                            float box_conf_f32 = deqntAffineToF32(box_confidence, zp, scale);
+
+                            if (box_conf_f32 > threshold)
+                            {
+                                // 在条件内部进行类别概率计算和边界框解码
+                                int8_t maxClassProbs = in_ptr[5 * grid_len];
+                                int maxClassId = 0;
+                                for (int k = 1; k < params_.obj_class_num; ++k)
+                                {
+                                    int8_t prob = in_ptr[(5 + k) * grid_len];
+                                    if (prob > maxClassProbs)
+                                    {
+                                        maxClassId = k;
+                                        maxClassProbs = prob;
+                                    }
+                                }
+
+                                float class_prob_f32 = deqntAffineToF32(maxClassProbs, zp, scale);
+                                float limit_score = box_conf_f32 * class_prob_f32;
+
+                                if (limit_score > threshold)
+                                {
+                                    // 边界框解码
+                                    float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
+                                    float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
+                                    float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
+                                    float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
+                                    box_x = (box_x + j) * (float)stride;
+                                    box_y = (box_y + i) * (float)stride;
+                                    box_w = box_w * box_w * (float)anchor[a * 2];
+                                    box_h = box_h * box_h * (float)anchor[a * 2 + 1];
+                                    box_x -= (box_w / 2.0);
+                                    box_y -= (box_h / 2.0);
+
+                                    for (int k = 0; k < params_.proto_channel; k++)
+                                    {
+                                        float seg_element_fp = deqntAffineToF32(in_ptr_seg[(k)*grid_len], zp_seg, scale_seg);
+                                        segments.push_back(seg_element_fp);
+                                    }
+
+                                    objProbs.push_back(limit_score);
+                                    classId.push_back(maxClassId);
+                                    validCount++;
+                                    boxes.push_back(box_x);
+                                    boxes.push_back(box_y);
+                                    boxes.push_back(box_w);
+                                    boxes.push_back(box_h);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return validCount;
+        }
+
+        void YoloV5SegPostProcess::collectDetectionsAfterNMS(
+            const std::vector<int> &indexArray,
+            const std::vector<float> &filterBoxes,
+            const std::vector<int> &classId,
+            const std::vector<float> &objProbs,
+            const std::vector<float> &filterSegments,
+            int validCount,
+            std::vector<float> &filterSegments_by_nms,
+            int &last_count)
+        {
+            for (int i = 0; i < validCount; ++i)
+            {
+                // 跳过被NMS标记为冗余的检测框，或超出最大检测数量限制的框
+                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
+                {
+                    continue;
+                }
+
+                int n = indexArray[i]; // 获取原始检测框的索引
+
+                // 提取并计算边界框坐标
+                float x1 = filterBoxes[n * 4 + 0];      // 左上角x
+                float y1 = filterBoxes[n * 4 + 1];      // 左上角y
+                float x2 = x1 + filterBoxes[n * 4 + 2]; // 右下角x (x1 + width)
+                float y2 = y1 + filterBoxes[n * 4 + 3]; // 右下角y (y1 + height)
+
+                int id = classId[n];          // 保存真实的类别ID
+                float obj_conf = objProbs[n]; // 获取该检测框的置信度
+
+                // 收集该检测框对应的分割特征向量
+                for (int k = 0; k < params_.proto_channel; k++)
+                {
+                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
+                }
+
+                // 填充检测结果结构体
+                Detection det{};
+                det.box.left = x1;
+                det.box.top = y1;
+                det.box.right = x2;
+                det.box.bottom = y2;
+                det.score = obj_conf;
+
+                det.class_id = id;
+
+                result_.group.detections.push_back(det);
+                last_count++; // 增加有效检测计数
+            }
+        }
+
     } // namespace post_process
 } // namespace deploy_percept

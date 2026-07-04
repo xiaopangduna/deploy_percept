@@ -1,10 +1,27 @@
 ---
-description: 通用 C++ 编码规范（当前仅命名约定）
+description: 通用 C++ 编码规范（命名与成员/实现顺序）
 globs: "**/*.{cpp,h,hpp,cc,cxx}"
 alwaysApply: false
 ---
 
 # C++ Conventions
+
+## Class member order (`.hpp`)
+
+Within each class, declare members in this order:
+
+1. Nested types (`Params`, `Info`, `Result`, …)
+2. Constructors / destructor
+3. Getters and simple accessors
+4. Public API (`run`, `releaseResult`, …)
+5. Private methods
+6. Member variables
+
+## Implementation order (`.cpp`)
+
+1. File-level helpers (anonymous namespace or `static` free functions) first
+2. Classes in the same order as they appear in the header
+3. Within each class, implement methods in the same order as declared in the header (skip inline-only methods)
 
 ## Naming
 

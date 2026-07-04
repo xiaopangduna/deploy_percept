@@ -130,7 +130,7 @@ int main(int argc, char **argv)
     }
 
     EngineResultGuard engine_result_guard(engine);
-    if (!engine.getResult().ready)
+    if (engine.getResult().tensor_views.empty())
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
@@ -141,7 +141,7 @@ int main(int argc, char **argv)
     post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
-    if (!processor.run(engine_result_guard.getEngineResult().outputs))
+    if (!processor.run(engine_result_guard.getEngineResult().tensor_views))
     {
         std::fprintf(stderr, "post process failed\n");
         return 1;

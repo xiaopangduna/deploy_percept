@@ -129,15 +129,15 @@ TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
 
     EngineResultGuard engine_result_guard(engine);
-    ASSERT_TRUE(engine.getResult().ready);
-    ASSERT_EQ(engine_result_guard.getEngineResult().outputs.size(), 6u);
+    ASSERT_FALSE(engine.getResult().tensor_views.empty());
+    ASSERT_EQ(engine_result_guard.getEngineResult().tensor_views.size(), 6u);
 
     YoloV8DetectPostProcessAwnn::Params post_params;
     post_params.model_in_w = model_w;
     post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
-    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().outputs));
+    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
     expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detections);
 }

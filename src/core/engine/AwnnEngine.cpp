@@ -16,42 +16,6 @@ namespace deploy_percept
     namespace engine
     {
 
-        int VipLiteRuntime::ref_count_ = 0;
-
-        VipLiteRuntime::VipLiteRuntime()
-        {
-            if (ref_count_++ == 0)
-            {
-                const vip_status_e status = vip_init();
-                if (status != VIP_SUCCESS)
-                {
-                    std::fprintf(stderr, "VipLiteRuntime: vip_init failed: %d\n", status);
-                    --ref_count_;
-                    return;
-                }
-            }
-            acquired_ = true;
-            ok_ = true;
-        }
-
-        VipLiteRuntime::~VipLiteRuntime()
-        {
-            if (!acquired_)
-            {
-                return;
-            }
-            acquired_ = false;
-            ok_ = false;
-            if (ref_count_ > 0 && --ref_count_ == 0)
-            {
-                const vip_status_e status = vip_destroy();
-                if (status != VIP_SUCCESS)
-                {
-                    std::fprintf(stderr, "VipLiteRuntime: vip_destroy failed: %d\n", status);
-                }
-            }
-        }
-
         namespace
         {
 
@@ -207,6 +171,42 @@ namespace deploy_percept
 
         } // namespace
 
+        int VipLiteRuntime::ref_count_ = 0;
+
+        VipLiteRuntime::VipLiteRuntime()
+        {
+            if (ref_count_++ == 0)
+            {
+                const vip_status_e status = vip_init();
+                if (status != VIP_SUCCESS)
+                {
+                    std::fprintf(stderr, "VipLiteRuntime: vip_init failed: %d\n", status);
+                    --ref_count_;
+                    return;
+                }
+            }
+            acquired_ = true;
+            ok_ = true;
+        }
+
+        VipLiteRuntime::~VipLiteRuntime()
+        {
+            if (!acquired_)
+            {
+                return;
+            }
+            acquired_ = false;
+            ok_ = false;
+            if (ref_count_ > 0 && --ref_count_ == 0)
+            {
+                const vip_status_e status = vip_destroy();
+                if (status != VIP_SUCCESS)
+                {
+                    std::fprintf(stderr, "VipLiteRuntime: vip_destroy failed: %d\n", status);
+                }
+            }
+        }
+
         AwnnEngine::AwnnEngine(const Params &params) : params_(params)
         {
             valid_ = createNetwork();
@@ -219,6 +219,49 @@ namespace deploy_percept
         AwnnEngine::~AwnnEngine()
         {
             destroyNetwork();
+        }
+
+        bool AwnnEngine::run(const void *input_buffer, std::size_t input_byte_size)
+        {
+            if (!valid_ || input_buffer == nullptr || input_buffers_.empty())
+            {
+                return false;
+            }
+
+            release_outputs();
+
+            if (!copyInput(input_buffer, input_byte_size))
+            {
+                return false;
+            }
+
+            if (vip_run_network(static_cast<vip_network>(network_)) != VIP_SUCCESS)
+            {
+                return false;
+            }
+
+            if (!map_outputs())
+            {
+                release_outputs();
+                return false;
+            }
+
+            result_.tensor_views.clear();
+            result_.tensor_views.reserve(info_.output_byte_sizes.size());
+            for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
+            {
+                TensorView view{};
+                view.byte_size = info_.output_byte_sizes[i];
+                view.data = output_data_[i];
+                view.dtype = info_.output_dtypes[i];
+                result_.tensor_views.push_back(view);
+            }
+            return true;
+        }
+
+        void AwnnEngine::releaseResult()
+        {
+            release_outputs();
         }
 
         bool AwnnEngine::createNetwork()
@@ -331,63 +374,25 @@ namespace deploy_percept
             valid_ = false;
         }
 
-        bool AwnnEngine::run(const void *input_buffer, std::size_t input_byte_size)
+        bool AwnnEngine::copyInput(const void *user_input, std::size_t input_byte_size)
         {
-            if (!valid_ || input_buffer == nullptr || input_buffers_.empty())
+            auto *buffer = static_cast<vip_buffer>(input_buffers_[0]);
+            const std::uint32_t buf_size = info_.input_byte_sizes.at(0);
+            if (input_byte_size < buf_size)
             {
                 return false;
             }
 
-            release_outputs();
-
-            if (!copyInput(input_buffer, input_byte_size))
+            void *device_data = vip_map_buffer(buffer);
+            if (device_data == nullptr)
             {
                 return false;
             }
 
-            if (vip_run_network(static_cast<vip_network>(network_)) != VIP_SUCCESS)
-            {
-                return false;
-            }
+            std::memcpy(device_data, user_input, buf_size);
+            vip_unmap_buffer(buffer);
 
-            if (!map_outputs())
-            {
-                release_outputs();
-                return false;
-            }
-
-            result_.outputs.clear();
-            result_.outputs.reserve(info_.output_byte_sizes.size());
-            for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
-            {
-                TensorView view{};
-                view.byte_size = info_.output_byte_sizes[i];
-                view.data = output_data_[i];
-                view.dtype = info_.output_dtypes[i];
-                result_.outputs.push_back(view);
-            }
-            result_.ready = !result_.outputs.empty();
-            return true;
-        }
-
-        void AwnnEngine::releaseResult()
-        {
-            release_outputs();
-        }
-
-        void AwnnEngine::release_outputs()
-        {
-            for (std::uint32_t i = 0; i < output_buffers_vip_.size(); ++i)
-            {
-                if (output_data_[i] != nullptr)
-                {
-                    vip_unmap_buffer(static_cast<vip_buffer>(output_buffers_vip_[i]));
-                    output_data_[i] = nullptr;
-                }
-            }
-
-            result_.outputs.clear();
-            result_.ready = false;
+            return vip_flush_buffer(buffer, VIP_BUFFER_OPER_TYPE_FLUSH) == VIP_SUCCESS;
         }
 
         bool AwnnEngine::map_outputs()
@@ -414,25 +419,18 @@ namespace deploy_percept
             return true;
         }
 
-        bool AwnnEngine::copyInput(const void *user_input, std::size_t input_byte_size)
+        void AwnnEngine::release_outputs()
         {
-            auto *buffer = static_cast<vip_buffer>(input_buffers_[0]);
-            const std::uint32_t buf_size = info_.input_byte_sizes.at(0);
-            if (input_byte_size < buf_size)
+            for (std::uint32_t i = 0; i < output_buffers_vip_.size(); ++i)
             {
-                return false;
+                if (output_data_[i] != nullptr)
+                {
+                    vip_unmap_buffer(static_cast<vip_buffer>(output_buffers_vip_[i]));
+                    output_data_[i] = nullptr;
+                }
             }
 
-            void *device_data = vip_map_buffer(buffer);
-            if (device_data == nullptr)
-            {
-                return false;
-            }
-
-            std::memcpy(device_data, user_input, buf_size);
-            vip_unmap_buffer(buffer);
-
-            return vip_flush_buffer(buffer, VIP_BUFFER_OPER_TYPE_FLUSH) == VIP_SUCCESS;
+            result_.tensor_views.clear();
         }
 
     } // namespace engine

@@ -95,11 +95,11 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
 
     EngineResultGuard engine_result_guard(engine);
-    ASSERT_TRUE(engine.getResult().ready);
-    ASSERT_GE(engine_result_guard.getEngineResult().outputs.size(), 1u);
+    ASSERT_FALSE(engine.getResult().tensor_views.empty());
+    ASSERT_GE(engine_result_guard.getEngineResult().tensor_views.size(), 1u);
 
     ClassificationPostProcessAwnn processor({});
-    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().outputs));
+    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
     const auto &result = processor.getResult();
     ASSERT_TRUE(result.success);

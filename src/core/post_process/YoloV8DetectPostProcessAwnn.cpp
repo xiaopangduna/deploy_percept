@@ -126,81 +126,65 @@ namespace deploy_percept
         {
         }
 
+        bool YoloV8DetectPostProcessAwnn::run(const std::vector<TensorView> &inputs)
+        {
+            if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
+            {
+                result_.success = false;
+                return false;
+            }
+
+            if (inputs.size() != 6)
+            {
+                result_.success = false;
+                return false;
+            }
+
+            for (std::size_t i = 0; i < inputs.size(); ++i)
+            {
+                const TensorView &view = inputs[i];
+                if (view.data == nullptr)
+                {
+                    result_.success = false;
+                    return false;
+                }
+                if (view.dtype != TensorDtype::FP32)
+                {
+                    result_.success = false;
+                    return false;
+                }
+            }
+
+            StrideTensors s8{};
+            StrideTensors s16{};
+            StrideTensors s32{};
+            if (!resolveStrideTensors(
+                    inputs,
+                    params_.model_in_w,
+                    params_.model_in_h,
+                    params_.obj_class_num,
+                    s8,
+                    s16,
+                    s32))
+            {
+                result_.success = false;
+                return false;
+            }
+
+            resetResult();
+
+            std::vector<Proposal> proposals;
+            generateProposals(8, s8.grid, s8.score, params_.conf_threshold, proposals);
+            generateProposals(16, s16.grid, s16.score, params_.conf_threshold, proposals);
+            generateProposals(32, s32.grid, s32.score, params_.conf_threshold, proposals);
+
+            return finalizeDetections(proposals);
+        }
+
         void YoloV8DetectPostProcessAwnn::resetResult()
         {
             result_.group = DetectionResult{};
             result_.success = false;
-        }
-
-        void YoloV8DetectPostProcessAwnn::generateProposals(
-            int stride,
-            const float *feat_grid,
-            const float *feat_score,
-            float prob_threshold,
-            std::vector<Proposal> &objects)
-        {
-            const int letterbox_cols = params_.model_in_w;
-            const int letterbox_rows = params_.model_in_h;
-            const int num_class = params_.obj_class_num;
-
-            const int num_grid_x = letterbox_cols / stride;
-            const int num_grid_y = letterbox_rows / stride;
-            const int num_grid_size = num_grid_x * num_grid_y;
-
-            const float deprob_threshold = desigmoid(prob_threshold);
-            float dst[kRegMax]{};
-
-            for (int y = 0; y < num_grid_y; ++y)
-            {
-                for (int x = 0; x < num_grid_x; ++x)
-                {
-                    const int num_grid_idx = y * num_grid_x + x;
-
-                    int label = -1;
-                    float score = -FLT_MAX;
-                    for (int k = 0; k < num_class; ++k)
-                    {
-                        const float s = feat_score[k * num_grid_size + num_grid_idx];
-                        if (s > score)
-                        {
-                            label = k;
-                            score = s;
-                        }
-                    }
-
-                    if (score < deprob_threshold)
-                    {
-                        continue;
-                    }
-
-                    score = sigmoid(score);
-                    if (score < prob_threshold)
-                    {
-                        continue;
-                    }
-
-                    float pred_grid[kRegMax * 4]{};
-                    const float *cur_pred_grid = feat_grid + num_grid_idx;
-                    for (int i = 0; i < kRegMax * 4; ++i)
-                    {
-                        pred_grid[i] = cur_pred_grid[i * num_grid_size];
-                    }
-
-                    const float x0 = (x + 0.5f - softmaxExpectation(pred_grid, dst, kRegMax)) * stride;
-                    const float y0 = (y + 0.5f - softmaxExpectation(pred_grid + kRegMax, dst, kRegMax)) * stride;
-                    const float x1 = (x + 0.5f + softmaxExpectation(pred_grid + 2 * kRegMax, dst, kRegMax)) * stride;
-                    const float y1 = (y + 0.5f + softmaxExpectation(pred_grid + 3 * kRegMax, dst, kRegMax)) * stride;
-
-                    Proposal obj{};
-                    obj.x = x0;
-                    obj.y = y0;
-                    obj.w = x1 - x0;
-                    obj.h = y1 - y0;
-                    obj.label = label;
-                    obj.prob = score;
-                    objects.push_back(obj);
-                }
-            }
         }
 
         bool YoloV8DetectPostProcessAwnn::finalizeDetections(std::vector<Proposal> &proposals)
@@ -298,59 +282,75 @@ namespace deploy_percept
             return result_.success;
         }
 
-        bool YoloV8DetectPostProcessAwnn::run(const std::vector<TensorView> &inputs)
+        void YoloV8DetectPostProcessAwnn::generateProposals(
+            int stride,
+            const float *feat_grid,
+            const float *feat_score,
+            float prob_threshold,
+            std::vector<Proposal> &objects)
         {
-            if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
-            {
-                result_.success = false;
-                return false;
-            }
+            const int letterbox_cols = params_.model_in_w;
+            const int letterbox_rows = params_.model_in_h;
+            const int num_class = params_.obj_class_num;
 
-            if (inputs.size() != 6)
-            {
-                result_.success = false;
-                return false;
-            }
+            const int num_grid_x = letterbox_cols / stride;
+            const int num_grid_y = letterbox_rows / stride;
+            const int num_grid_size = num_grid_x * num_grid_y;
 
-            for (std::size_t i = 0; i < inputs.size(); ++i)
+            const float deprob_threshold = desigmoid(prob_threshold);
+            float dst[kRegMax]{};
+
+            for (int y = 0; y < num_grid_y; ++y)
             {
-                const TensorView &view = inputs[i];
-                if (view.data == nullptr)
+                for (int x = 0; x < num_grid_x; ++x)
                 {
-                    result_.success = false;
-                    return false;
-                }
-                if (view.dtype != TensorDtype::FP32)
-                {
-                    result_.success = false;
-                    return false;
+                    const int num_grid_idx = y * num_grid_x + x;
+
+                    int label = -1;
+                    float score = -FLT_MAX;
+                    for (int k = 0; k < num_class; ++k)
+                    {
+                        const float s = feat_score[k * num_grid_size + num_grid_idx];
+                        if (s > score)
+                        {
+                            label = k;
+                            score = s;
+                        }
+                    }
+
+                    if (score < deprob_threshold)
+                    {
+                        continue;
+                    }
+
+                    score = sigmoid(score);
+                    if (score < prob_threshold)
+                    {
+                        continue;
+                    }
+
+                    float pred_grid[kRegMax * 4]{};
+                    const float *cur_pred_grid = feat_grid + num_grid_idx;
+                    for (int i = 0; i < kRegMax * 4; ++i)
+                    {
+                        pred_grid[i] = cur_pred_grid[i * num_grid_size];
+                    }
+
+                    const float x0 = (x + 0.5f - softmaxExpectation(pred_grid, dst, kRegMax)) * stride;
+                    const float y0 = (y + 0.5f - softmaxExpectation(pred_grid + kRegMax, dst, kRegMax)) * stride;
+                    const float x1 = (x + 0.5f + softmaxExpectation(pred_grid + 2 * kRegMax, dst, kRegMax)) * stride;
+                    const float y1 = (y + 0.5f + softmaxExpectation(pred_grid + 3 * kRegMax, dst, kRegMax)) * stride;
+
+                    Proposal obj{};
+                    obj.x = x0;
+                    obj.y = y0;
+                    obj.w = x1 - x0;
+                    obj.h = y1 - y0;
+                    obj.label = label;
+                    obj.prob = score;
+                    objects.push_back(obj);
                 }
             }
-
-            StrideTensors s8{};
-            StrideTensors s16{};
-            StrideTensors s32{};
-            if (!resolveStrideTensors(
-                    inputs,
-                    params_.model_in_w,
-                    params_.model_in_h,
-                    params_.obj_class_num,
-                    s8,
-                    s16,
-                    s32))
-            {
-                result_.success = false;
-                return false;
-            }
-
-            resetResult();
-
-            std::vector<Proposal> proposals;
-            generateProposals(8, s8.grid, s8.score, params_.conf_threshold, proposals);
-            generateProposals(16, s16.grid, s16.score, params_.conf_threshold, proposals);
-            generateProposals(32, s32.grid, s32.score, params_.conf_threshold, proposals);
-
-            return finalizeDetections(proposals);
         }
 
     } // namespace post_process

@@ -140,8 +140,8 @@ BenchRowStats bench_one_row(
 
         if (copy_before_post)
         {
-            const std::vector<TensorView> &mapped = engine.getResult().outputs;
-            if (!engine.getResult().ready || mapped.empty())
+            const std::vector<TensorView> &mapped = engine.getResult().tensor_views;
+            if (mapped.empty())
             {
                 std::fprintf(
                     stderr,
@@ -176,8 +176,8 @@ BenchRowStats bench_one_row(
         {
             const auto post_t0 = std::chrono::steady_clock::now();
             deploy_percept::engine::EngineResultGuard engine_result_guard(engine);
-            if (!engine.getResult().ready ||
-                !processor.run(engine_result_guard.getEngineResult().outputs))
+            if (engine_result_guard.getEngineResult().tensor_views.empty() ||
+                !processor.run(engine_result_guard.getEngineResult().tensor_views))
             {
                 std::fprintf(
                     stderr,

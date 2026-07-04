@@ -7,7 +7,7 @@
 
 #include "rknn_api.h"
 
-#include "BaseEngine.hpp"
+#include "deploy_percept/core/engine/BaseEngine.hpp"
 
 namespace deploy_percept
 {

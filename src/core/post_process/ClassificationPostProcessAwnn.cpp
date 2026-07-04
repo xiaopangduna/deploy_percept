@@ -13,11 +13,6 @@ namespace deploy_percept
             resetResult();
         }
 
-        void ClassificationPostProcessAwnn::resetResult()
-        {
-            result_ = Result{};
-        }
-
         bool ClassificationPostProcessAwnn::run(const std::vector<TensorView> &inputs)
         {
             resetResult();
@@ -58,6 +53,11 @@ namespace deploy_percept
             result_.score = best_score;
             result_.success = true;
             return true;
+        }
+
+        void ClassificationPostProcessAwnn::resetResult()
+        {
+            result_ = Result{};
         }
 
     } // namespace post_process

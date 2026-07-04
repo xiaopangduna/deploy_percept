@@ -3,7 +3,6 @@
 #ifdef AWNN_FOUND
 
 #include "deploy_percept/core/engine/BaseEngine.hpp"
-#include "deploy_percept/common/types.hpp"
 
 #include <array>
 #include <cstdint>
@@ -42,6 +41,7 @@ namespace deploy_percept
             VipLiteRuntime(VipLiteRuntime &&) = delete;
             VipLiteRuntime &operator=(VipLiteRuntime &&) = delete;
 
+            /** vip_init 是否成功（或已由同进程其它实例完成 init） */
             bool ok() const { return ok_; }
 
         private:
@@ -60,13 +60,14 @@ namespace deploy_percept
          *   AwnnEngine engine(params);
          *   engine.run(input, size);
          *   EngineResultGuard guard(engine);
-         *   processor.run(guard.getEngineResult().outputs);
+         *   processor.run(guard.getEngineResult().tensor_views);
          */
         class AwnnEngine : public BaseEngine
         {
         public:
             struct Params
             {
+                /** .nb 模型文件路径（传给 vip_create_network FROM_FILE） */
                 std::string model_path;
             };
 
@@ -106,6 +107,8 @@ namespace deploy_percept
             ~AwnnEngine() override;
 
             const Params &getParams() const { return params_; }
+
+            /** prepareIo 完成后可查；用于构造输入 buffer 尺寸与 layout */
             const Info &getInfo() const { return info_; }
 
             const Result &getResult() const override { return result_; }
@@ -113,9 +116,13 @@ namespace deploy_percept
             /** 构造是否成功（模型加载、IO 准备、vip_prepare_network） */
             bool is_valid() const { return valid_; }
 
-            /** 拷贝输入 → 推理 → map 输出并填充 getResult() */
+            /**
+             * 拷贝 host 输入 → vip_run_network → map 输出到 getResult().tensor_views。
+             * 失败时不保证 tensor_views 有效；成功后可配合 EngineResultGuard 交给 post_process。
+             */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
+            /** unmap 输出 VIP buffer 并清空 result_.tensor_views */
             void releaseResult() override;
 
         private:
