@@ -9,8 +9,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
-#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/common/types.hpp"
 #include "tests/test_common/paths.hpp"
@@ -20,7 +19,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::AwnnResultGuard;
+using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::Detection;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
@@ -133,7 +132,7 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
         GTEST_SKIP() << "VipLiteRuntime init failed (need AWNN NPU + LD_LIBRARY_PATH)";
     }
 
-    AwnnEngine::Param engine_params;
+    AwnnEngine::Params engine_params;
     engine_params.model_path = model_path.string();
 
     AwnnEngine engine(engine_params);
@@ -153,15 +152,15 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
 
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
 
-    AwnnResultGuard engine_result_guard(engine);
-    ASSERT_FALSE(engine_result_guard.empty());
+    EngineResultGuard engine_result_guard(engine);
+    ASSERT_TRUE(engine.getResult().ready);
 
     YoloV5DetectPostProcessAwnn::Params post_params;
     post_params.model_in_w = model_w;
     post_params.model_in_h = model_h;
 
     YoloV5DetectPostProcessAwnn processor(post_params);
-    ASSERT_TRUE(processor.run(engine_result_guard.views()));
+    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().outputs));
 
     expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detections);
 }

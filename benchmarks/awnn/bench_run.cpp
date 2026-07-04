@@ -3,7 +3,6 @@
 #include "bench_common.hpp"
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
 
 #include <cstdlib>
 #include <cstdio>
@@ -73,7 +72,7 @@ bool init_bench_run_context(
         return false;
     }
 
-    static AwnnEngine::Param params;
+    static AwnnEngine::Params params;
     params.model_path = ctx.model_path;
 
     static AwnnEngine engine(params);

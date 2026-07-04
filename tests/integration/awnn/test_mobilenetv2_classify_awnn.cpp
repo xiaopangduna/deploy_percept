@@ -8,8 +8,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
-#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "tests/test_common/paths.hpp"
 #include "utils/environment.hpp"
@@ -17,7 +16,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::AwnnResultGuard;
+using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::ClassificationPostProcessAwnn;
 using percept::test::fixture_data;
@@ -75,7 +74,7 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
         GTEST_SKIP() << "VipLiteRuntime init failed (need AWNN NPU + LD_LIBRARY_PATH)";
     }
 
-    AwnnEngine::Param engine_params;
+    AwnnEngine::Params engine_params;
     engine_params.model_path = model_path.string();
 
     AwnnEngine engine(engine_params);
@@ -95,12 +94,12 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
 
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
 
-    AwnnResultGuard engine_result_guard(engine);
-    ASSERT_FALSE(engine_result_guard.empty());
-    ASSERT_GE(engine_result_guard.views().size(), 1u);
+    EngineResultGuard engine_result_guard(engine);
+    ASSERT_TRUE(engine.getResult().ready);
+    ASSERT_GE(engine_result_guard.getEngineResult().outputs.size(), 1u);
 
     ClassificationPostProcessAwnn processor({});
-    ASSERT_TRUE(processor.run(engine_result_guard.views()));
+    ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().outputs));
 
     const auto &result = processor.getResult();
     ASSERT_TRUE(result.success);

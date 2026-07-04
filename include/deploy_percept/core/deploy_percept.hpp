@@ -18,7 +18,6 @@
 
 #ifdef AWNN_FOUND
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
-#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #endif
 #include "deploy_percept/core/engine/RknnEngine.hpp"

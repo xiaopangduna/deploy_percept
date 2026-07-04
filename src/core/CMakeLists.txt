@@ -35,7 +35,6 @@ target_link_libraries(deploy_percept_core PUBLIC deploy_percept_common)
 if(AWNN_FOUND)
     target_sources(deploy_percept_core PRIVATE
         engine/AwnnEngine.cpp
-        engine/VipLiteRuntime.cpp
         post_process/YoloV5DetectPostProcessAwnn.cpp
         post_process/YoloV8DetectPostProcessAwnn.cpp
     )

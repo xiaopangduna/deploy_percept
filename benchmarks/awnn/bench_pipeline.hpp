@@ -4,7 +4,7 @@
 #include "bench_report.hpp"
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/common/types.hpp"
 
 #include <chrono>
@@ -175,8 +175,9 @@ BenchRowStats bench_one_row(
         else
         {
             const auto post_t0 = std::chrono::steady_clock::now();
-            deploy_percept::engine::AwnnResultGuard engine_result_guard(engine);
-            if (engine_result_guard.empty() || !processor.run(engine_result_guard.views()))
+            deploy_percept::engine::EngineResultGuard engine_result_guard(engine);
+            if (!engine.getResult().ready ||
+                !processor.run(engine_result_guard.getEngineResult().outputs))
             {
                 std::fprintf(
                     stderr,

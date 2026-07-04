@@ -16,8 +16,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
-#include "deploy_percept/core/engine/VipLiteRuntime.hpp"
-#include "deploy_percept/core/engine/AwnnResultGuard.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
@@ -25,7 +24,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::AwnnEngine;
-using deploy_percept::engine::AwnnResultGuard;
+using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
 using deploy_percept::utils::drawDetectionResults;
@@ -132,7 +131,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    AwnnEngine::Param engine_params;
+    AwnnEngine::Params engine_params;
     engine_params.model_path = model_path;
 
     AwnnEngine engine(engine_params);
@@ -162,8 +161,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    AwnnResultGuard engine_result_guard(engine);
-    if (engine_result_guard.empty())
+    EngineResultGuard engine_result_guard(engine);
+    if (!engine.getResult().ready)
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
@@ -174,7 +173,7 @@ int main(int argc, char **argv)
     post_params.model_in_h = model_h;
 
     YoloV5DetectPostProcessAwnn processor(post_params);
-    if (!processor.run(engine_result_guard.views()))
+    if (!processor.run(engine_result_guard.getEngineResult().outputs))
     {
         std::fprintf(stderr, "post process failed\n");
         return 1;

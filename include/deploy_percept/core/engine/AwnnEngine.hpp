@@ -7,7 +7,6 @@
 
 #include <array>
 #include <cstdint>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -16,25 +15,57 @@ namespace deploy_percept
     namespace engine
     {
 
+        // ==================================================================
+        // AWNN 推理栈（本头文件）
+        //
+        //   VipLiteRuntime  — 进程级 NPU：vip_init / vip_destroy（ref_count，多实例共享）
+        //   AwnnEngine      — 模型级：加载 .nb、prepare IO、run（每个模型一个实例）
+        //
+        // 使用约定：
+        //   1. 先构造 VipLiteRuntime，再构造 AwnnEngine（可多个 Engine 共用一个 Runtime 窗口）
+        //   2. VipLiteRuntime 须最后析构（作用域包住所有 AwnnEngine）
+        //   3. 同一进程内多个 VipLiteRuntime 仍只 vip_init 一次（引用计数）
+        // ==================================================================
+
         /**
-         * Allwinner VIPLite 推理引擎。
+         * VIPLite 进程级 NPU 运行时（vip_init / vip_destroy）的 RAII 封装。
+         * 与 AwnnEngine 配套使用，见本文件顶部说明。
+         */
+        class VipLiteRuntime
+        {
+        public:
+            VipLiteRuntime();
+            ~VipLiteRuntime();
+
+            VipLiteRuntime(const VipLiteRuntime &) = delete;
+            VipLiteRuntime &operator=(const VipLiteRuntime &) = delete;
+            VipLiteRuntime(VipLiteRuntime &&) = delete;
+            VipLiteRuntime &operator=(VipLiteRuntime &&) = delete;
+
+            bool ok() const { return ok_; }
+
+        private:
+            bool ok_{false};
+            bool acquired_{false};
+            static int ref_count_;
+        };
+
+        /**
+         * Allwinner VIPLite 单模型推理引擎。
          *
-         * 前置条件：进程内已成功 vip_init（通常由 app 层 VipLiteRuntime RAII 保证；
-         * VipLiteRuntime 须在 AwnnEngine 之前构造、之后析构）。
+         * 前置条件：进程内已成功 vip_init（由同命名空间 VipLiteRuntime 保证）。
          *
          * 典型流程：
-         *   AwnnEngine engine(param);
+         *   VipLiteRuntime runtime;
+         *   AwnnEngine engine(params);
          *   engine.run(input, size);
-         *   post(engine.getResult().outputs, ...);
-         *   engine.releaseResult();   // 或 AwnnResultGuard RAII
-         *
-         * getResult().outputs 为 mapped 内存的非 owning 视图，有效至 releaseResult() 或下次 run()。
+         *   EngineResultGuard guard(engine);
+         *   processor.run(guard.getEngineResult().outputs);
          */
         class AwnnEngine : public BaseEngine
         {
         public:
-            /** 构造参数 */
-            struct Param
+            struct Params
             {
                 std::string model_path;
             };
@@ -66,19 +97,18 @@ namespace deploy_percept
                 std::vector<std::string> output_names;
             };
 
-            /** 最近一次 run 的 raw 输出；outputs 指向 VIP mapped 内存，不拥有数据 */
-            struct Result
+            /** 继承 BaseEngine::Result；AWNN 暂无额外字段 */
+            struct Result : BaseEngine::Result
             {
-                bool ready{false};
-                std::vector<TensorView> outputs;
             };
 
-            explicit AwnnEngine(const Param &param);
-            ~AwnnEngine();
+            explicit AwnnEngine(const Params &params);
+            ~AwnnEngine() override;
 
-            const Param &getParam() const { return param_; }
+            const Params &getParams() const { return params_; }
             const Info &getInfo() const { return info_; }
-            const Result &getResult() const { return result_; }
+
+            const Result &getResult() const override { return result_; }
 
             /** 构造是否成功（模型加载、IO 准备、vip_prepare_network） */
             bool is_valid() const { return valid_; }
@@ -86,8 +116,7 @@ namespace deploy_percept
             /** 拷贝输入 → 推理 → map 输出并填充 getResult() */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
-            /** unmap 输出并清空 getResult()；析构与下次 run() 前也会调用 */
-            void releaseResult();
+            void releaseResult() override;
 
         private:
             bool createNetwork();
@@ -96,16 +125,15 @@ namespace deploy_percept
 
             bool copyInput(const void *user_input, std::size_t input_byte_size);
             bool map_outputs();
-            void release_outputs_unlocked();
+            void release_outputs();
 
-            Param param_;
+            Params params_;
             Info info_{};
             Result result_{};
 
             bool valid_{false};
             bool network_prepared_{false};
             void *network_{nullptr};
-            mutable std::mutex mutex_;
 
             std::vector<void *> input_buffers_;
             std::vector<void *> output_buffers_vip_;

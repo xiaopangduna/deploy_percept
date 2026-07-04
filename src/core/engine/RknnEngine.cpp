@@ -57,6 +57,12 @@ namespace deploy_percept
             return true;
         }
 
+        void RknnEngine::releaseResult()
+        {
+            // TODO: rknn_outputs_release(ctx_, ...) paired with rknn_outputs_get in run()
+            result_ = Result{};
+        }
+
         void RknnEngine::dump_tensor_attr(rknn_tensor_attr *attr)
         {
             std::string shape_str = attr->n_dims < 1 ? "" : std::to_string(attr->dims[0]);

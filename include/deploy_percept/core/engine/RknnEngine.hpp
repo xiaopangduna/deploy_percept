@@ -27,6 +27,10 @@ namespace deploy_percept
 
             bool run(rknn_input inputs[], rknn_output outputs[]);
 
+            const Result &getResult() const override { return result_; }
+
+            void releaseResult() override;
+
             rknn_context ctx_;
             rknn_input_output_num model_io_num_;
             std::vector<rknn_tensor_attr> model_input_attrs_;
@@ -37,6 +41,7 @@ namespace deploy_percept
         private:
             Params params_;
 
+            Result result_{};
             std::vector<unsigned char> model_binary_data_;
             size_t model_binary_size_;
         };

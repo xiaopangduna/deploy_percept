@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <optional>
 
@@ -14,6 +15,42 @@ namespace deploy_percept
 {
     namespace engine
     {
+
+        int VipLiteRuntime::ref_count_ = 0;
+
+        VipLiteRuntime::VipLiteRuntime()
+        {
+            if (ref_count_++ == 0)
+            {
+                const vip_status_e status = vip_init();
+                if (status != VIP_SUCCESS)
+                {
+                    std::fprintf(stderr, "VipLiteRuntime: vip_init failed: %d\n", status);
+                    --ref_count_;
+                    return;
+                }
+            }
+            acquired_ = true;
+            ok_ = true;
+        }
+
+        VipLiteRuntime::~VipLiteRuntime()
+        {
+            if (!acquired_)
+            {
+                return;
+            }
+            acquired_ = false;
+            ok_ = false;
+            if (ref_count_ > 0 && --ref_count_ == 0)
+            {
+                const vip_status_e status = vip_destroy();
+                if (status != VIP_SUCCESS)
+                {
+                    std::fprintf(stderr, "VipLiteRuntime: vip_destroy failed: %d\n", status);
+                }
+            }
+        }
 
         namespace
         {
@@ -170,7 +207,7 @@ namespace deploy_percept
 
         } // namespace
 
-        AwnnEngine::AwnnEngine(const Param &param) : param_(param)
+        AwnnEngine::AwnnEngine(const Params &params) : params_(params)
         {
             valid_ = createNetwork();
             if (!valid_)
@@ -188,7 +225,7 @@ namespace deploy_percept
         {
             vip_network network = nullptr;
             if (vip_create_network(
-                    param_.model_path.c_str(),
+                    params_.model_path.c_str(),
                     0,
                     VIP_CREATE_NETWORK_FROM_FILE,
                     &network) != VIP_SUCCESS ||
@@ -269,10 +306,7 @@ namespace deploy_percept
 
         void AwnnEngine::destroyNetwork()
         {
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                release_outputs_unlocked();
-            }
+            release_outputs();
 
             if (network_ != nullptr)
             {
@@ -304,8 +338,7 @@ namespace deploy_percept
                 return false;
             }
 
-            std::lock_guard<std::mutex> lock(mutex_);
-            release_outputs_unlocked();
+            release_outputs();
 
             if (!copyInput(input_buffer, input_byte_size))
             {
@@ -319,7 +352,7 @@ namespace deploy_percept
 
             if (!map_outputs())
             {
-                release_outputs_unlocked();
+                release_outputs();
                 return false;
             }
 
@@ -339,11 +372,10 @@ namespace deploy_percept
 
         void AwnnEngine::releaseResult()
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            release_outputs_unlocked();
+            release_outputs();
         }
 
-        void AwnnEngine::release_outputs_unlocked()
+        void AwnnEngine::release_outputs()
         {
             for (std::uint32_t i = 0; i < output_buffers_vip_.size(); ++i)
             {
@@ -365,14 +397,14 @@ namespace deploy_percept
                 auto *buffer = static_cast<vip_buffer>(output_buffers_vip_[i]);
                 if (vip_flush_buffer(buffer, VIP_BUFFER_OPER_TYPE_INVALIDATE) != VIP_SUCCESS)
                 {
-                    release_outputs_unlocked();
+                    release_outputs();
                     return false;
                 }
 
                 void *out_data = vip_map_buffer(buffer);
                 if (out_data == nullptr)
                 {
-                    release_outputs_unlocked();
+                    release_outputs();
                     return false;
                 }
 
