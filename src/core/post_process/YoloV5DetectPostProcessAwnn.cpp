@@ -3,7 +3,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
-#include <set>
+#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -11,100 +11,19 @@ namespace deploy_percept
     namespace post_process
     {
 
-        namespace
-        {
-
-            float sigmoid(float x)
-            {
-                return 1.f / (1.f + std::exp(-x));
-            }
-
-            float desigmoid(float x)
-            {
-                return -std::log(1.f / x - 1.f);
-            }
-
-        } // namespace
-
         YoloV5DetectPostProcessAwnn::YoloV5DetectPostProcessAwnn(const Params &params)
-            : YoloBasePostProcess(), params_(params)
+            : params_(params)
         {
         }
 
-        void YoloV5DetectPostProcessAwnn::resetResult()
+        float YoloV5DetectPostProcessAwnn::sigmoid(float x)
         {
-            result_.group = ResultGroup{};
-            result_.success = false;
-            result_.message.clear();
+            return 1.f / (1.f + std::exp(-x));
         }
 
-        bool YoloV5DetectPostProcessAwnn::finalizeDetections(
-            std::vector<float> &filterBoxes,
-            std::vector<float> &objProbs,
-            std::vector<int> &classId,
-            int validCount)
+        float YoloV5DetectPostProcessAwnn::desigmoid(float x)
         {
-            const int model_in_h = params_.model_in_h;
-            const int model_in_w = params_.model_in_w;
-            if (validCount <= 0)
-            {
-                result_.message = "No objects detected";
-                return false;
-            }
-
-            std::vector<int> indexArray;
-            indexArray.reserve(validCount);
-            for (int i = 0; i < validCount; ++i)
-            {
-                indexArray.push_back(i);
-            }
-
-            YoloBasePostProcess::quickSortIndices(objProbs, 0, validCount - 1, indexArray);
-
-            const std::set<int> class_set(classId.begin(), classId.end());
-            for (const int c : class_set)
-            {
-                retainHighestScoringBoxesByNMS(
-                    validCount, filterBoxes, classId, indexArray, c, params_.nms_threshold);
-            }
-
-            int last_count = 0;
-            result_.group.count = 0;
-            result_.group.detection_objects.clear();
-            for (int i = 0; i < validCount; ++i)
-            {
-                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
-                {
-                    continue;
-                }
-                const int n = indexArray[i];
-
-                const float x1 = filterBoxes[n * 4 + 0];
-                const float y1 = filterBoxes[n * 4 + 1];
-                const float x2 = x1 + filterBoxes[n * 4 + 2];
-                const float y2 = y1 + filterBoxes[n * 4 + 3];
-
-                const int id = classId[n];
-                const float obj_conf = objProbs[n];
-
-                DetectionObject det_obj{};
-                det_obj.box.left = static_cast<int>(clamp(x1, 0, model_in_w));
-                det_obj.box.top = static_cast<int>(clamp(y1, 0, model_in_h));
-                det_obj.box.right = static_cast<int>(clamp(x2, 0, model_in_w));
-                det_obj.box.bottom = static_cast<int>(clamp(y2, 0, model_in_h));
-                det_obj.prop = obj_conf;
-                det_obj.cls_id = id;
-
-                std::snprintf(det_obj.name, params_.obj_name_max_size, "class_%d", id);
-
-                result_.group.detection_objects.push_back(det_obj);
-                ++last_count;
-            }
-            result_.group.count = last_count;
-
-            result_.success = (last_count > 0);
-            result_.message = "Processing completed successfully";
-            return true;
+            return -std::log(1.f / x - 1.f);
         }
 
         int YoloV5DetectPostProcessAwnn::decodeDetectionHeadFp32(
@@ -112,8 +31,8 @@ namespace deploy_percept
             int stride,
             const std::vector<int> &anchors,
             std::vector<float> &boxes,
-            std::vector<float> &objProbs,
-            std::vector<int> &classId,
+            std::vector<float> &obj_probs,
+            std::vector<int> &class_ids,
             float threshold)
         {
             const int model_in_h = params_.model_in_h;
@@ -127,7 +46,7 @@ namespace deploy_percept
             const int feat_size = feat_w * feat_h;
             const int feat_size_cls_5 = feat_size * (cls_num + 5);
 
-            int validCount = 0;
+            int valid_count = 0;
 
             for (int h = 0; h < feat_h; ++h)
             {
@@ -175,19 +94,22 @@ namespace deploy_percept
                             boxes.push_back(pred_cy - pred_h * 0.5f);
                             boxes.push_back(pred_w);
                             boxes.push_back(pred_h);
-                            objProbs.push_back(final_score);
-                            classId.push_back(class_index);
-                            ++validCount;
+                            obj_probs.push_back(final_score);
+                            class_ids.push_back(class_index);
+                            ++valid_count;
                         }
                     }
                 }
             }
 
-            return validCount;
+            return valid_count;
         }
 
         bool YoloV5DetectPostProcessAwnn::run(const std::vector<TensorView> &inputs)
         {
+            // ===============================
+            // 0. validate params
+            // ===============================
             if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
             {
                 result_.success = false;
@@ -195,6 +117,9 @@ namespace deploy_percept
                 return false;
             }
 
+            // ===============================
+            // 1. validate inputs
+            // ===============================
             if (inputs.size() != 3)
             {
                 result_.success = false;
@@ -222,41 +147,75 @@ namespace deploy_percept
                 head_ptrs[i] = static_cast<const float *>(view.data);
             }
 
-            resetResult();
+            resetResult(result_);
 
-            std::vector<float> filterBoxes;
-            std::vector<float> objProbs;
-            std::vector<int> classId;
+            std::vector<float> candidate_boxes;
+            std::vector<float> candidate_scores;
+            std::vector<int> class_ids;
 
-            const int validCount0 = decodeDetectionHeadFp32(
+            // ===============================
+            // 2. decode detection heads (stride 8 / 16 / 32)
+            // ===============================
+            const int valid_count0 = decodeDetectionHeadFp32(
                 head_ptrs[0],
                 8,
                 params_.anchor_stride8,
-                filterBoxes,
-                objProbs,
-                classId,
+                candidate_boxes,
+                candidate_scores,
+                class_ids,
                 params_.conf_threshold);
 
-            const int validCount1 = decodeDetectionHeadFp32(
+            const int valid_count1 = decodeDetectionHeadFp32(
                 head_ptrs[1],
                 16,
                 params_.anchor_stride16,
-                filterBoxes,
-                objProbs,
-                classId,
+                candidate_boxes,
+                candidate_scores,
+                class_ids,
                 params_.conf_threshold);
 
-            const int validCount2 = decodeDetectionHeadFp32(
+            const int valid_count2 = decodeDetectionHeadFp32(
                 head_ptrs[2],
                 32,
                 params_.anchor_stride32,
-                filterBoxes,
-                objProbs,
-                classId,
+                candidate_boxes,
+                candidate_scores,
+                class_ids,
                 params_.conf_threshold);
 
-            const int validCount = validCount0 + validCount1 + validCount2;
-            return finalizeDetections(filterBoxes, objProbs, classId, validCount);
+            const int candidate_count = valid_count0 + valid_count1 + valid_count2;
+            if (candidate_count <= 0)
+            {
+                result_.message = "No objects detected";
+                return false;
+            }
+
+            // ===============================
+            // 3. NMS
+            // ===============================
+            std::vector<int> index_array;
+            applyNmsToCandidates(
+                candidate_boxes,
+                candidate_scores,
+                class_ids,
+                candidate_count,
+                params_.nms_threshold,
+                index_array);
+
+            // ===============================
+            // 4. collect detections
+            // ===============================
+            return collectDetections(
+                index_array,
+                candidate_boxes,
+                candidate_scores,
+                class_ids,
+                candidate_count,
+                params_.obj_numb_max_size,
+                params_.obj_name_max_size,
+                result_,
+                params_.model_in_w,
+                params_.model_in_h);
         }
 
     } // namespace post_process

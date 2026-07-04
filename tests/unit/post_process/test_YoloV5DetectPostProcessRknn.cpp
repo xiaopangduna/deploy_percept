@@ -5,7 +5,7 @@
 
 #include "cnpy.h"
 
-#include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5DetectPostProcessRknn.hpp"
 #include "deploy_percept/common/types.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
@@ -19,15 +19,15 @@ using namespace deploy_percept::post_process;
 using percept::test::fixture_data;
 using percept::test::output_dir;
 
-class YoloV5DetectPostProcessTest : public ::testing::Test
+class YoloV5DetectPostProcessRknnTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
         fs::create_directories(output_dir());
 
-        YoloV5DetectPostProcess::Params params;
-        processor = std::make_unique<YoloV5DetectPostProcess>(params);
+        YoloV5DetectPostProcessRknn::Params params;
+        processor = std::make_unique<YoloV5DetectPostProcessRknn>(params);
 
         model_outputs_npz = cnpy::npz_load(
             fixture_data("unit/post_process/yolov5_detect/model_outputs.npz"));
@@ -41,13 +41,13 @@ protected:
     {
     }
 
-    std::unique_ptr<YoloV5DetectPostProcess> processor;
+    std::unique_ptr<YoloV5DetectPostProcessRknn> processor;
     cnpy::npz_t model_outputs_npz;
 
     cv::Mat img;
     std::string path_save_img_with_detect_result;
 };
-TEST_F(YoloV5DetectPostProcessTest, run)
+TEST_F(YoloV5DetectPostProcessRknnTest, run)
 {
     std::vector<DetectionObject> expected_results = {
         MakeDetectResult(0, "class_0", 0.3495f, 209, 243, 286, 510),

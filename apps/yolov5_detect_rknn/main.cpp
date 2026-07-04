@@ -17,7 +17,7 @@
 #include "cnpy.h"
 // #include <yaml-cpp/yaml.h>
 
-#include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5DetectPostProcessRknn.hpp"
 #include "deploy_percept/common/types.hpp"
 #include "deploy_percept/core/engine/RknnEngine.hpp"
 #include "deploy_percept/utils/npy.hpp"
@@ -135,8 +135,8 @@ int main()
     output_zps.push_back(engine.model_output_attrs_[i].zp);
   }
 
-  deploy_percept::post_process::YoloV5DetectPostProcess::Params params_post;
-  deploy_percept::post_process::YoloV5DetectPostProcess processor(params_post);
+  deploy_percept::post_process::YoloV5DetectPostProcessRknn::Params params_post;
+  deploy_percept::post_process::YoloV5DetectPostProcessRknn processor(params_post);
 
   processor.run(output_buffers_int8, engine.model_input_attrs_[0].dims[2], engine.model_input_attrs_[0].dims[1], output_zps, output_scales);
 

@@ -1,7 +1,7 @@
 add_percept_test(
-    NAME test_YoloV5DetectPostProcess
+    NAME test_YoloV5DetectPostProcessRknn
     TIER unit
-    SOURCES post_process/test_YoloV5DetectPostProcess.cpp
+    SOURCES post_process/test_YoloV5DetectPostProcessRknn.cpp
     LINK_LIBS deploy_percept_core deploy_percept_utils test_utils
     USE_CUSTOM_MAIN)
 

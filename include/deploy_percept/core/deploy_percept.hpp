@@ -5,8 +5,8 @@
 
 #include "deploy_percept/common/types.hpp"
 
-#include "deploy_percept/core/post_process/PostProcessFactory.hpp"
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcess.hpp"
+#include "deploy_percept/core/post_process/YoloV5DetectPostProcessRknn.hpp"
 #include "deploy_percept/core/post_process/YoloV5SegPostProcess.hpp"
 #include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
 #ifdef AWNN_FOUND
@@ -16,7 +16,6 @@
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8PosePostProcess.hpp"
 
-#include "deploy_percept/core/engine/EngineFactory.hpp"
 #ifdef AWNN_FOUND
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
 #include "deploy_percept/core/engine/VipLiteRuntime.hpp"

@@ -171,7 +171,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 **预期结果**（已安装项均 `[  PASSED  ]`；未安装或平台不适用则 skip）：
 
 - `share/percept/tests/smoke_tests`
-- `share/percept/tests/test_YoloV5DetectPostProcess`
+- `share/percept/tests/test_YoloV5DetectPostProcessRknn`
 - `share/percept/tests/test_YoloV5SegPostProcess`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
 - `share/percept/tests/test_YoloV8SegPostProcess`
 - `share/percept/tests/test_yolov5_detect_awnn`（仅 AWNN/aarch64 install 包）

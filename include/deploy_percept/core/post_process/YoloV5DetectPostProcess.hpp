@@ -1,19 +1,24 @@
 #pragma once
 
-#include <vector>
-#include <cstring>
-#include <string>
 #include "deploy_percept/core/post_process/YoloBasePostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
+
+#include <string>
+#include <vector>
 
 namespace deploy_percept
 {
     namespace post_process
     {
+
+        /**
+         * YOLOv5 目标检测后处理基类（V5 Detect 系列共用）。
+         * 仅提供 Params/Result 类型与无状态算法；不含 run()，不持有成员。
+         * RKNN / AWNN 输入与 decode 由子类实现，状态（params_/result_）只在叶子类。
+         */
         class YoloV5DetectPostProcess : public YoloBasePostProcess
         {
         public:
-            // 参数配置结构体
             struct Params
             {
                 float conf_threshold = 0.25f;
@@ -27,47 +32,38 @@ namespace deploy_percept
                 std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
             };
 
-            // 结果结构体
             struct Result
             {
-                ResultGroup group{};  // 统一使用ResultGroup，检测场景segmentation_masks为空
+                ResultGroup group{};
                 bool success = false;
-                std::string message{}; // 可选的详细信息
+                std::string message{};
             };
 
-            // 使用参数结构体的构造函数
-            explicit YoloV5DetectPostProcess(const Params &params);
-            ~YoloV5DetectPostProcess() = default;
-            const Params &getParams() const { return params_; }
-            const Result &getResult() const { return result_; }
+            ~YoloV5DetectPostProcess() override = default;
 
-            bool run(
-                const std::vector<int8_t*>& inputs,
-                int model_in_h,
+            static void resetResult(Result &result);
+
+            /** 按置信度排序并对候选框执行按类 NMS，结果写入 index_array（-1 表示被抑制）。 */
+            static void applyNmsToCandidates(
+                std::vector<float> &candidate_boxes,
+                std::vector<float> &candidate_scores,
+                std::vector<int> &class_ids,
+                int candidate_count,
+                float nms_threshold,
+                std::vector<int> &index_array);
+
+            /** 将 NMS 保留的候选框转为 DetectionObject 并写入 result.group。 */
+            static bool collectDetections(
+                const std::vector<int> &index_array,
+                const std::vector<float> &candidate_boxes,
+                const std::vector<float> &candidate_scores,
+                const std::vector<int> &class_ids,
+                int candidate_count,
+                int obj_numb_max_size,
+                int obj_name_max_size,
+                Result &result,
                 int model_in_w,
-                std::vector<int32_t> &qnt_zps,
-                std::vector<float> &qnt_scales);
-
-        protected:
-            Params params_;
-            Result result_{};
-
-            void resetResult();
-
-            bool finalizeDetections(
-                std::vector<float> &filterBoxes,
-                std::vector<float> &objProbs,
-                std::vector<int> &classId,
-                int validCount,
-                int model_in_h,
-                int model_in_w);
-
-        private:
-            int decodeDetectionHead(int8_t *input, int *anchor, int grid_h, int grid_w,
-                                  int height, int width, int stride,
-                                  std::vector<float> &boxes, std::vector<float> &objProbs,
-                                  std::vector<int> &classId, float threshold,
-                                  int32_t zp, float scale);
+                int model_in_h);
         };
 
     } // namespace post_process
