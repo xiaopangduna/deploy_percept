@@ -1,8 +1,10 @@
 #pragma once
 
+#include "deploy_percept/common/types.hpp"
+
+#include <cnpy.h>
 #include <string>
 #include <vector>
-#include <cnpy.h>
 
 namespace deploy_percept {
 namespace utils {
@@ -34,6 +36,21 @@ bool compareNpzFiles(const std::string& file1, const std::string& file2);
  * @throws std::runtime_error 如果某个数组不存在或类型不匹配
  */
 std::vector<std::vector<int8_t>> convertNpzToInt8VectorsByPrefix(const cnpy::npz_t &npz,const std::string &prefix,size_t count);
+
+/**
+ * @brief 从 npz 读取 prefix+数字 键名的 float32 数组（如 output_0, output_1, ...）。
+ */
+std::vector<std::vector<float>> convertNpzToFloatVectorsByPrefix(
+    const cnpy::npz_t &npz,
+    const std::string &prefix,
+    size_t count);
+
+/**
+ * @brief AWNN FP32 TensorView 序列转为 npz（键名 output_0, output_1, ...）。
+ */
+cnpy::npz_t convertTensorViewsToNpz(
+    const std::vector<TensorView> &views,
+    const std::string &prefix = "output_");
 
 bool save_npz(const std::string& filename, const cnpy::npz_t& npz_data);
 

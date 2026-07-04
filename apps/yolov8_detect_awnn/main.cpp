@@ -2,7 +2,7 @@
  * Allwinner YOLOv8 检测 demo（AwnnEngine + YoloV8DetectPostProcessAwnn）
  *
  * 用法（路径相对当前工作目录，或使用绝对路径）：
- *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg]
+ *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
  * 默认：./yolov8.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
  * 性能对比见 benchmarks/awnn/bench_yolov8_post_process
@@ -19,6 +19,7 @@
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
 #include "deploy_percept/utils/fixture_path.hpp"
+#include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
 
 namespace fs = std::filesystem;
@@ -28,7 +29,9 @@ using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 using deploy_percept::utils::drawDetectionResults;
+using deploy_percept::utils::convertTensorViewsToNpz;
 using deploy_percept::utils::fixture_path;
+using deploy_percept::utils::save_npz;
 
 namespace
 {
@@ -79,6 +82,7 @@ int main(int argc, char **argv)
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
     const char *output_path = (argc > 3) ? argv[3] : kDefaultOutput;
+    const char *npz_path = (argc > 4) ? argv[4] : nullptr;
 
     if (!fs::is_regular_file(model_path))
     {
@@ -130,10 +134,33 @@ int main(int argc, char **argv)
     }
 
     EngineResultGuard engine_result_guard(engine);
-    if (engine.getResult().tensor_views.empty())
+    const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
+    if (tensor_views.empty())
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
+    }
+
+    std::error_code ec;
+
+    if (npz_path != nullptr)
+    {
+        try
+        {
+            const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
+            fs::create_directories(fs::path(npz_path).parent_path(), ec);
+            if (!save_npz(npz_path, model_outputs_npz))
+            {
+                std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
+                return 1;
+            }
+            std::printf("saved model outputs to %s\n", npz_path);
+        }
+        catch (const std::exception &ex)
+        {
+            std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
+            return 1;
+        }
     }
 
     YoloV8DetectPostProcessAwnn::Params post_params;
@@ -141,7 +168,7 @@ int main(int argc, char **argv)
     post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
-    if (!processor.run(engine_result_guard.getEngineResult().tensor_views))
+    if (!processor.run(tensor_views))
     {
         std::fprintf(stderr, "post process failed\n");
         return 1;
@@ -150,7 +177,6 @@ int main(int argc, char **argv)
     cv::Mat result_img = model_input.clone();
     drawDetectionResults(result_img, processor.getResult());
 
-    std::error_code ec;
     fs::create_directories(fs::path(output_path).parent_path(), ec);
     if (!cv::imwrite(output_path, result_img))
     {

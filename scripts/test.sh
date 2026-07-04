@@ -13,10 +13,12 @@ PERCEPT_TESTS_REL="share/percept/tests"
 PERCEPT_BENCHMARKS_REL="share/percept/benchmarks"
 
 PERCEPT_INSTALL_TESTS=(
-    smoke_tests
+    test_smoke
     test_YoloV5DetectPostProcessRknn
     test_YoloV5SegPostProcess
     test_YoloV8SegPostProcess
+    test_YoloV5DetectPostProcessAwnn
+    test_YoloV8DetectPostProcessAwnn
     test_yolov5_detect_awnn
     test_yolov8_detect_awnn
     test_mobilenetv2_classify_awnn
@@ -37,8 +39,8 @@ show_help() {
     echo "用法: bash $0 --preset <name> [选项]"
     echo ""
     echo "流程:"
-    echo "  PC 模式:     build → install → 本地 share/percept/tests/"
-    echo "  开发板模式:  build → install → rsync → SSH 远程跑同一套测试"
+    echo "  PC 模式:     build → install（清理旧 tests/benchmarks）→ 本地 share/percept/tests/"
+    echo "  开发板模式:  build → install → rsync --delete → SSH 远程跑同一套测试"
     echo ""
     echo "选项:"
     echo "  --preset <name>          CMake preset（默认: x86_64-debug）"
@@ -139,6 +141,24 @@ run_install_tree_tests() {
     echo "prefix:    ${install_dir}"
     echo "tests dir: ${tests_dir}"
 
+    if [[ -d "${tests_dir}" ]]; then
+        local f base t found
+        for f in "${tests_dir}"/*; do
+            [[ -f "${f}" ]] || continue
+            base="$(basename "${f}")"
+            found=0
+            for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
+                if [[ "${t}" == "${base}" ]]; then
+                    found=1
+                    break
+                fi
+            done
+            if [[ "${found}" -eq 0 ]]; then
+                echo "警告: 忽略未登记的旧测试可执行文件: ${base}（请重新 install）"
+            fi
+        done
+    fi
+
     local fail=0
     local t
     for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
@@ -220,7 +240,7 @@ run_rsync_to_board() {
     echo "source:  ${install_dir}/"
     echo "target:  ${ssh_host}:${remote_dir_input}/"
 
-    rsync -avz -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
+    rsync -avz --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
 }
 
 run_install_tree_suite_remote() {

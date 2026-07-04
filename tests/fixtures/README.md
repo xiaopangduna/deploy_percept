@@ -7,8 +7,10 @@
 ```text
 tests/fixtures/
 ├── unit/post_process/          # 后处理单测 golden（无需 NPU）
-│   ├── yolov5_detect/          model_outputs.npz, bus.jpg
+│   ├── yolov5_detect/          model_outputs.npz, bus.jpg（RKNN INT8）
+│   ├── yolov5_detect_awnn/     model_outputs.npz（AWNN FP32，板端 dump）
 │   ├── yolov5_seg/             model_outputs.npz, mask.bin, bus.jpg
+│   ├── yolov8_detect_awnn/     model_outputs.npz（AWNN FP32，板端 dump）
 │   └── yolov8_seg/             model_outputs.npz, mask.bin, bus.jpg
 └── integration/awnn/           # AWNN 集成测 / demo / benchmark
     ├── yolov5_detect/          yolov5.nb, dog.jpg
@@ -16,7 +18,14 @@ tests/fixtures/
     └── mobilenetv2_classify/   mobilenetv2.nb, cat.jpg
 ```
 
-`unit/post_process/*/model_outputs.npz` 由 RKNN 导出得到，单测只比对后处理逻辑，运行时不依赖 RKNN。
+`unit/post_process/yolov5_detect/model_outputs.npz` 由 RKNN 导出（INT8），单测只比对后处理逻辑，运行时不依赖 RKNN。
+
+`unit/post_process/yolov5_detect_awnn/model_outputs.npz` 与 `yolov8_detect_awnn/` 下同名文件由板端 AWNN 推理导出（FP32），输入须为 `integration/awnn/*/dog.jpg`，与 integration golden 对齐。**若 fixture 由旧版 `save_npz` 导出（误按 int8 写入），需用修复后的 demo 重新 dump。**
+
+```bash
+yolov5_detect_awnn yolov5.nb dog.jpg out.jpg model_outputs.npz
+yolov8_detect_awnn yolov8.nb dog.jpg out.jpg model_outputs.npz
+```
 
 ## 路径 API
 

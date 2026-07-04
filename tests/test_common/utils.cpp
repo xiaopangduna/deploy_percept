@@ -47,7 +47,9 @@ bool isUint8VectorEqual(const std::vector<uint8_t> &expected,
 
 bool isDetectionVectorEqualWithinTolerance(
     const std::vector<deploy_percept::Detection> &expected,
-    const std::vector<deploy_percept::Detection> &actual)
+    const std::vector<deploy_percept::Detection> &actual,
+    int box_tolerance_px,
+    float score_tolerance)
 {
     if (expected.size() != actual.size())
     {
@@ -64,21 +66,46 @@ bool isDetectionVectorEqualWithinTolerance(
             return false;
         }
 
-        if (std::fabs(exp.score - act.score) > 0.05f)
+        if (std::fabs(exp.score - act.score) > score_tolerance)
         {
             return false;
         }
 
-        if (std::abs(exp.box.left - act.box.left) > 2 ||
-            std::abs(exp.box.top - act.box.top) > 2 ||
-            std::abs(exp.box.right - act.box.right) > 2 ||
-            std::abs(exp.box.bottom - act.box.bottom) > 2)
+        if (std::abs(exp.box.left - act.box.left) > box_tolerance_px ||
+            std::abs(exp.box.top - act.box.top) > box_tolerance_px ||
+            std::abs(exp.box.right - act.box.right) > box_tolerance_px ||
+            std::abs(exp.box.bottom - act.box.bottom) > box_tolerance_px)
         {
             return false;
         }
     }
 
     return true;
+}
+
+void expectDetectionsMatchGolden(
+    const std::vector<deploy_percept::Detection> &expected,
+    const std::vector<deploy_percept::Detection> &actual,
+    int box_tolerance_px,
+    float score_tolerance)
+{
+    ASSERT_EQ(expected.size(), actual.size());
+
+    for (std::size_t i = 0; i < expected.size(); ++i)
+    {
+        const auto &exp = expected[i];
+        const auto &act = actual[i];
+
+        SCOPED_TRACE("detection index " + std::to_string(i));
+
+        EXPECT_EQ(exp.class_id, act.class_id);
+        EXPECT_NEAR(exp.score, act.score, score_tolerance) << "score";
+
+        EXPECT_LE(std::abs(exp.box.left - act.box.left), box_tolerance_px) << "box.left";
+        EXPECT_LE(std::abs(exp.box.top - act.box.top), box_tolerance_px) << "box.top";
+        EXPECT_LE(std::abs(exp.box.right - act.box.right), box_tolerance_px) << "box.right";
+        EXPECT_LE(std::abs(exp.box.bottom - act.box.bottom), box_tolerance_px) << "box.bottom";
+    }
 }
 
 bool isUint8VectorEqualWithTolerance(const std::vector<uint8_t> &expected,

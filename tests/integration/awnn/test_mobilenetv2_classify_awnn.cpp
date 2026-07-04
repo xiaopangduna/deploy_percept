@@ -11,7 +11,6 @@
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "tests/test_common/paths.hpp"
-#include "utils/environment.hpp"
 
 namespace fs = std::filesystem;
 
@@ -103,11 +102,4 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
 
     const auto &result = processor.getResult();
     EXPECT_EQ(result.class_id, kExpectedTop1ClassId);
-}
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    ::testing::AddGlobalTestEnvironment(new GlobalLoggerEnvironment);
-    return RUN_ALL_TESTS();
 }

@@ -128,9 +128,3 @@ TEST_F(YoloV8SegPostProcessTest, run)
 
     cv::imwrite(path_save_img_with_detect_result, img);
 }
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

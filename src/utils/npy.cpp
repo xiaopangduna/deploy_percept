@@ -176,6 +176,90 @@ namespace deploy_percept
             return result;
         }
 
+        std::vector<std::vector<float>> convertNpzToFloatVectorsByPrefix(
+            const cnpy::npz_t &npz,
+            const std::string &prefix,
+            size_t count)
+        {
+            (void)count;
+
+            std::vector<std::pair<int, std::string>> indices;
+
+            for (const auto &kv : npz)
+            {
+                const std::string &key = kv.first;
+                if (key.compare(0, prefix.size(), prefix) == 0)
+                {
+                    std::string suffix = key.substr(prefix.size());
+
+                    if (!suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit))
+                    {
+                        int idx = std::stoi(suffix);
+                        indices.emplace_back(idx, key);
+                    }
+                }
+            }
+            std::sort(indices.begin(), indices.end());
+            std::vector<std::vector<float>> result;
+            result.reserve(indices.size());
+
+            for (const auto &p : indices)
+            {
+                const std::string &name = p.second;
+                auto it = npz.find(name);
+                const auto &arr = it->second;
+
+                if (arr.word_size != sizeof(float))
+                {
+                    throw std::runtime_error(
+                        "convertNpzToFloatVectorsByPrefix: key '" + name +
+                        "' is not float32 (word_size=" + std::to_string(arr.word_size) + ")");
+                }
+
+                std::vector<float> vec(arr.num_vals);
+                std::memcpy(vec.data(), arr.data<float>(), arr.num_vals * sizeof(float));
+                result.push_back(std::move(vec));
+            }
+
+            if (count > 0 && result.size() != count)
+            {
+                throw std::runtime_error(
+                    "convertNpzToFloatVectorsByPrefix: expected " + std::to_string(count) +
+                    " arrays with prefix '" + prefix + "', got " + std::to_string(result.size()));
+            }
+
+            return result;
+        }
+
+        cnpy::npz_t convertTensorViewsToNpz(
+            const std::vector<TensorView> &views,
+            const std::string &prefix)
+        {
+            cnpy::npz_t npz_result;
+
+            for (std::size_t i = 0; i < views.size(); ++i)
+            {
+                const TensorView &view = views[i];
+                if (view.data == nullptr || view.byte_size == 0)
+                {
+                    throw std::runtime_error("convertTensorViewsToNpz: empty tensor at index " + std::to_string(i));
+                }
+                if (view.dtype != TensorDtype::FP32)
+                {
+                    throw std::runtime_error("convertTensorViewsToNpz: tensor " + std::to_string(i) + " is not FP32");
+                }
+
+                const std::size_t num_vals = view.byte_size / sizeof(float);
+                std::vector<size_t> shape{num_vals};
+                cnpy::NpyArray array(shape, sizeof(float), false);
+                std::memcpy(array.data<float>(), view.data, view.byte_size);
+
+                npz_result[prefix + std::to_string(i)] = std::move(array);
+            }
+
+            return npz_result;
+        }
+
         bool save_npz(const std::string &filename, const cnpy::npz_t &npz_data)
         {
             if (npz_data.empty())
@@ -187,13 +271,30 @@ namespace deploy_percept
 
                 for (const auto &[name, arr] : npz_data)
                 {
-                    cnpy::npz_save(
-                        filename,
-                        name,
-                        arr.data<char>(), // 原始字节数据
-                        arr.shape,
-                        first ? "w" : "a" // 第一次写入，其余追加
-                    );
+                    if (arr.word_size == sizeof(float))
+                    {
+                        cnpy::npz_save(
+                            filename,
+                            name,
+                            arr.data<float>(),
+                            arr.shape,
+                            first ? "w" : "a");
+                    }
+                    else if (arr.word_size == sizeof(int8_t))
+                    {
+                        cnpy::npz_save(
+                            filename,
+                            name,
+                            arr.data<int8_t>(),
+                            arr.shape,
+                            first ? "w" : "a");
+                    }
+                    else
+                    {
+                        throw std::runtime_error(
+                            "save_npz: unsupported dtype word_size=" + std::to_string(arr.word_size) +
+                            " for key '" + name + "'");
+                    }
 
                     first = false;
                 }

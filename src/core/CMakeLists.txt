@@ -3,6 +3,8 @@ set(CORE_SOURCES
     post_process/YoloBasePostProcess.cpp
     post_process/YoloDetectPostProcess.cpp
     post_process/YoloV5DetectPostProcessRknn.cpp
+    post_process/YoloV5DetectPostProcessAwnn.cpp
+    post_process/YoloV8DetectPostProcessAwnn.cpp
     post_process/YoloV5SegPostProcess.cpp
     post_process/YoloV8PosePostProcess.cpp
     post_process/YoloV8SegPostProcess.cpp
@@ -35,8 +37,6 @@ target_link_libraries(deploy_percept_core PUBLIC deploy_percept_common)
 if(AWNN_FOUND)
     target_sources(deploy_percept_core PRIVATE
         engine/AwnnEngine.cpp
-        post_process/YoloV5DetectPostProcessAwnn.cpp
-        post_process/YoloV8DetectPostProcessAwnn.cpp
     )
     target_link_libraries(deploy_percept_core PUBLIC AWNN::VIPLite pthread)
     target_compile_definitions(deploy_percept_core PUBLIC AWNN_FOUND=1)

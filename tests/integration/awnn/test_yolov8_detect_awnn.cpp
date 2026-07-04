@@ -14,7 +14,6 @@
 #include "deploy_percept/common/types.hpp"
 #include "tests/test_common/paths.hpp"
 #include "tests/test_common/utils.hpp"
-#include "utils/environment.hpp"
 
 namespace fs = std::filesystem;
 
@@ -29,7 +28,6 @@ namespace {
 
 constexpr int kBoxTolerancePx = 4;
 
-// A733 + yolov8.nb + dog.jpg 板端标定，resize 640×640，模型输入坐标空间
 const std::vector<Detection> kExpectedDetections = {
     MakeDetectResult(16, 0.8922f, 110, 248, 258, 601),
     MakeDetectResult(1, 0.7918f, 100, 148, 474, 467),
@@ -56,28 +54,6 @@ bool prepare_model_input(
     cv::Mat rgb_hwc(model_h, model_w, CV_8UC3, input_buffer.data());
     cv::cvtColor(resized, rgb_hwc, cv::COLOR_BGR2RGB);
     return true;
-}
-
-void expect_class_and_box_match(
-    const std::vector<Detection> &expected,
-    const std::vector<Detection> &actual)
-{
-    ASSERT_EQ(expected.size(), actual.size());
-
-    for (std::size_t i = 0; i < expected.size(); ++i)
-    {
-        const auto &exp = expected[i];
-        const auto &act = actual[i];
-
-        SCOPED_TRACE("detection index " + std::to_string(i));
-
-        EXPECT_EQ(exp.class_id, act.class_id);
-
-        EXPECT_LE(std::abs(exp.box.left - act.box.left), kBoxTolerancePx) << "box.left";
-        EXPECT_LE(std::abs(exp.box.top - act.box.top), kBoxTolerancePx) << "box.top";
-        EXPECT_LE(std::abs(exp.box.right - act.box.right), kBoxTolerancePx) << "box.right";
-        EXPECT_LE(std::abs(exp.box.bottom - act.box.bottom), kBoxTolerancePx) << "box.bottom";
-    }
 }
 
 void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input_path)
@@ -139,12 +115,5 @@ TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
     YoloV8DetectPostProcessAwnn processor(post_params);
     ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
-    expect_class_and_box_match(kExpectedDetections, processor.getResult().detections);
-}
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    ::testing::AddGlobalTestEnvironment(new GlobalLoggerEnvironment);
-    return RUN_ALL_TESTS();
+    expectDetectionsMatchGolden(kExpectedDetections, processor.getResult().detections, kBoxTolerancePx);
 }

@@ -50,15 +50,34 @@ if [[ ! -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
     exit 1
 fi
 
+INSTALL_DIR="$(grep -E '^CMAKE_INSTALL_PREFIX:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+INSTALL_TESTS_FLAG="$(grep -E '^INSTALL_TESTS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+
+clean_stale_install_artifacts() {
+    if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
+        local tests_dir="${INSTALL_DIR}/share/percept/tests"
+        if [[ -d "${tests_dir}" ]]; then
+            echo "清理旧测试可执行文件: ${tests_dir}/"
+            find "${tests_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+        fi
+    fi
+    if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
+        local bench_dir="${INSTALL_DIR}/share/percept/benchmarks"
+        if [[ -d "${bench_dir}" ]]; then
+            echo "清理旧 benchmark 可执行文件: ${bench_dir}/"
+            find "${bench_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+        fi
+    fi
+}
+
 echo "=== cmake --install ==="
 echo "preset:    ${PRESET}"
 echo "build dir: ${BUILD_DIR}"
 
-cmake --install "${BUILD_DIR}"
+clean_stale_install_artifacts
 
-INSTALL_DIR="$(grep -E '^CMAKE_INSTALL_PREFIX:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
-INSTALL_TESTS_FLAG="$(grep -E '^INSTALL_TESTS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
-INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+cmake --install "${BUILD_DIR}"
 echo ""
 echo "安装完成: ${INSTALL_DIR}"
 echo "  bin/                      demo 可执行文件"

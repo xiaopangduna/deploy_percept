@@ -51,10 +51,10 @@ function(add_percept_test)
 
     if(PARSED_USE_CUSTOM_MAIN)
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest percept_test_paths ${PARSED_LINK_LIBS})
+            GTest::gtest test_common ${PARSED_LINK_LIBS})
     else()
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest_main percept_test_paths ${PARSED_LINK_LIBS})
+            GTest::gtest_main test_common ${PARSED_LINK_LIBS})
     endif()
 
     percept_install_test(${PARSED_NAME})
@@ -101,10 +101,10 @@ function(add_percept_awnn_integration_test)
 
     if(PARSED_USE_CUSTOM_MAIN)
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest percept_test_paths ${PARSED_LINK_LIBS})
+            GTest::gtest test_common ${PARSED_LINK_LIBS})
     else()
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest_main percept_test_paths ${PARSED_LINK_LIBS})
+            GTest::gtest_main test_common ${PARSED_LINK_LIBS})
     endif()
 
     target_link_libraries(${PARSED_NAME} PRIVATE AWNN::VIPLite pthread)

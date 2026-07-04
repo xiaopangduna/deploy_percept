@@ -9,7 +9,6 @@
 #include "deploy_percept/common/types.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
-#include "utils/environment.hpp"
 #include "tests/test_common/utils.hpp"
 #include "tests/test_common/paths.hpp"
 
@@ -79,13 +78,4 @@ TEST_F(YoloV5DetectPostProcessRknnTest, run)
     // deploy_percept::utils::drawDetectionResults(img, detection_result);
 
     cv::imwrite(path_save_img_with_detect_result.c_str(), img);
-}
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-
-    ::testing::AddGlobalTestEnvironment(new GlobalLoggerEnvironment);
-
-    return RUN_ALL_TESTS();
 }
