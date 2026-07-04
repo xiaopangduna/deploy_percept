@@ -11,7 +11,8 @@ tests/fixtures/
 │   ├── yolov5_detect_awnn/     model_outputs.npz（AWNN FP32，板端 dump）
 │   ├── yolov5_seg/             model_outputs.npz, mask.bin, bus.jpg
 │   ├── yolov8_detect_awnn/     model_outputs.npz（AWNN FP32，板端 dump）
-│   └── yolov8_seg/             model_outputs.npz, mask.bin, bus.jpg
+│   ├── yolov8_seg/             model_outputs.npz, mask.bin, bus.jpg
+│   └── mobilenetv2_classify_awnn/  model_outputs.npz（AWNN FP32，板端 dump）
 └── integration/awnn/           # AWNN 集成测 / demo / benchmark
     ├── yolov5_detect/          yolov5.nb, dog.jpg
     ├── yolov8_detect/          yolov8.nb, dog.jpg
@@ -25,7 +26,10 @@ tests/fixtures/
 ```bash
 yolov5_detect_awnn yolov5.nb dog.jpg out.jpg model_outputs.npz
 yolov8_detect_awnn yolov8.nb dog.jpg out.jpg model_outputs.npz
+mobilenetv2_classify_awnn mobilenetv2.nb cat.jpg model_outputs.npz
 ```
+
+`unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/mobilenetv2_classify/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
 
 ## 路径 API
 

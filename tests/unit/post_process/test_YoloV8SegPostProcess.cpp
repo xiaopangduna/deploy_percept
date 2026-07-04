@@ -1,25 +1,28 @@
 #include <gtest/gtest.h>
-#include <opencv2/imgcodecs.hpp>
-#include <iostream>
-#include <vector>
+
 #include <filesystem>
-#include <fstream>
+#include <memory>
+#include <vector>
+
+#include <opencv2/imgcodecs.hpp>
 
 #include "cnpy.h"
 
 #include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
-#include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/io.hpp"
+#include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
-#include "tests/test_common/utils.hpp"
+#include "tests/test_common/fixtures.hpp"
 #include "tests/test_common/paths.hpp"
+#include "tests/test_common/utils.hpp"
 
 namespace fs = std::filesystem;
 
-using namespace deploy_percept::post_process;
 using deploy_percept::Detection;
-using namespace deploy_percept::utils;
+using deploy_percept::post_process::YoloV8SegPostProcess;
+using deploy_percept::utils::loadUint8VectorFromBinFile;
 using percept::test::fixture_data;
+using percept::test::makeInt8PtrInputs;
 using percept::test::output_dir;
 
 class YoloV8SegPostProcessTest : public ::testing::Test
@@ -29,48 +32,35 @@ protected:
     {
         fs::create_directories(output_dir());
 
-        YoloV8SegPostProcess::Params params;
-        processor = std::make_unique<YoloV8SegPostProcess>(params);
+        processor = std::make_unique<YoloV8SegPostProcess>(YoloV8SegPostProcess::Params{});
 
         model_outputs_npz = cnpy::npz_load(
-            fixture_data("unit/post_process/yolov8_seg/model_outputs.npz"));
+            fixture_data("unit/post_process/yolov8_seg/model_outputs.npz").string());
 
         path_seg_result = fixture_data("unit/post_process/yolov8_seg/mask.bin");
-
-        img = cv::imread(fixture_data("unit/post_process/yolov8_seg/bus.jpg"));
-
-        path_save_img_with_detect_result = output_dir() / "yolov8_seg_result.jpg";
+        img = cv::imread(fixture_data("unit/post_process/yolov8_seg/bus.jpg").string());
     }
 
-    void TearDown() override
-    {
-    }
-
-    std::unique_ptr<deploy_percept::post_process::YoloV8SegPostProcess> processor;
+    std::unique_ptr<YoloV8SegPostProcess> processor;
     cnpy::npz_t model_outputs_npz;
     fs::path path_seg_result;
-
     cv::Mat img;
-    fs::path path_save_img_with_detect_result;
 };
 
-TEST_F(YoloV8SegPostProcessTest, run)
+TEST_F(YoloV8SegPostProcessTest, GoldenRun)
 {
-    std::vector<Detection> expected_results = {
+    const std::vector<Detection> expected_detections = {
         MakeDetectResult(5, 0.9113f, 87, 137, 553, 439),
         MakeDetectResult(0, 0.8998f, 108, 236, 227, 537),
         MakeDetectResult(0, 0.8693f, 211, 241, 283, 508),
         MakeDetectResult(0, 0.8655f, 477, 232, 559, 519),
         MakeDetectResult(0, 0.5403f, 79, 327, 125, 514),
-        MakeDetectResult(27, 0.2741f, 248, 284, 259, 310)};
+        MakeDetectResult(27, 0.2741f, 248, 284, 259, 310),
+    };
 
-    std::vector<uint8_t> expected_seg_mask = loadUint8VectorFromBinFile(path_seg_result);
+    const std::vector<uint8_t> expected_seg_mask = loadUint8VectorFromBinFile(path_seg_result);
 
-    std::vector<std::vector<int>> output_dims;
-    std::vector<float> output_scales;
-    std::vector<int32_t> output_zps;
-
-    output_dims = {
+    std::vector<std::vector<int>> output_dims = {
         {1, 64, 80, 80},
         {1, 80, 80, 80},
         {1, 1, 80, 80},
@@ -83,48 +73,33 @@ TEST_F(YoloV8SegPostProcessTest, run)
         {1, 80, 20, 20},
         {1, 1, 20, 20},
         {1, 32, 20, 20},
-        {1, 32, 160, 160}};
+        {1, 32, 160, 160},
+    };
 
-    output_scales = {
+    std::vector<float> output_scales = {
         0.115401f, 0.003514f, 0.003540f, 0.019863f,
         0.099555f, 0.003555f, 0.003680f, 0.022367f,
         0.074253f, 0.003813f, 0.003922f, 0.019919f,
-        0.032336f};
+        0.032336f,
+    };
 
-    output_zps = {
+    std::vector<int32_t> output_zps = {
         -61, -128, -128, 27,
         -15, -128, -128, 30,
         -55, -128, -128, 43,
-        -119};
+        -119,
+    };
 
-    auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(model_outputs_npz, "output_", 13); // 使用utils命名空间
-    std::vector<int8_t *> inputs = {
-        model_outputs[0].data(),
-        model_outputs[1].data(),
-        model_outputs[2].data(),
-        model_outputs[3].data(),
-        model_outputs[4].data(),
-        model_outputs[5].data(),
-        model_outputs[6].data(),
-        model_outputs[7].data(),
-        model_outputs[8].data(),
-        model_outputs[9].data(),
-        model_outputs[10].data(),
-        model_outputs[11].data(),
-        model_outputs[12].data()};
+    auto model_outputs = deploy_percept::utils::convertNpzToInt8VectorsByPrefix(
+        model_outputs_npz, "output_", 13);
+    const std::vector<int8_t *> inputs = makeInt8PtrInputs(model_outputs);
 
-    bool success = processor->run(inputs, 640, 640,
-                                  output_dims, output_scales, output_zps);
+    ASSERT_TRUE(processor->run(inputs, 640, 640, output_dims, output_scales, output_zps));
 
     const auto &result = processor->getResult();
+    expectDetectionsMatchGolden(expected_detections, result.detections);
+    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, result.label_mask, 0.03));
 
-    EXPECT_TRUE(isDetectionVectorEqualWithinTolerance(expected_results, result.detections));
-
-    const auto &actual_results = processor->getResult();
-
-    EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.label_mask, 0.03));
-
-    // deploy_percept::utils::drawDetectionResults(img, result);
-
-    cv::imwrite(path_save_img_with_detect_result, img);
+    deploy_percept::utils::drawDetectionResults(img, result);
+    cv::imwrite((output_dir() / "yolov8_seg_result.jpg").string(), img);
 }

@@ -2,7 +2,7 @@
  * Allwinner MobileNetV2 ImageNet 分类 demo（AwnnEngine + ClassificationPostProcessAwnn）
  *
  * 用法（路径相对当前工作目录，或使用绝对路径）：
- *   mobilenetv2_classify_awnn [model.nb] [input.jpg]
+ *   mobilenetv2_classify_awnn [model.nb] [input.jpg] [model_outputs.npz]
  *
  * 默认：./mobilenetv2.nb  ./cat.jpg
  * 性能对比见 benchmarks/awnn/bench_mobilenetv2_classify
@@ -20,6 +20,7 @@
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "deploy_percept/utils/fixture_path.hpp"
+#include "deploy_percept/utils/npy.hpp"
 
 namespace fs = std::filesystem;
 
@@ -27,7 +28,9 @@ using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::ClassificationPostProcessAwnn;
+using deploy_percept::utils::convertTensorViewsToNpz;
 using deploy_percept::utils::fixture_path;
+using deploy_percept::utils::save_npz;
 
 namespace
 {
@@ -77,6 +80,15 @@ int main(int argc, char **argv)
     const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
+    const char *npz_path = (argc > 3) ? argv[3] : nullptr;
+
+    std::printf("mobilenetv2_classify_awnn\n");
+    std::printf("  model : %s\n", model_path);
+    std::printf("  input : %s\n", input_path);
+    if (npz_path != nullptr)
+    {
+        std::printf("  npz   : %s\n", npz_path);
+    }
 
     if (!fs::is_regular_file(model_path))
     {
@@ -127,18 +139,44 @@ int main(int argc, char **argv)
     }
 
     EngineResultGuard engine_result_guard(engine);
-    if (engine.getResult().tensor_views.empty())
+    const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
+    if (tensor_views.empty())
     {
         std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
         return 1;
     }
 
+    std::error_code ec;
+
+    if (npz_path != nullptr)
+    {
+        try
+        {
+            const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
+            fs::create_directories(fs::path(npz_path).parent_path(), ec);
+            if (!save_npz(npz_path, model_outputs_npz))
+            {
+                std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
+                return 1;
+            }
+            std::printf("saved model outputs to %s\n", npz_path);
+        }
+        catch (const std::exception &ex)
+        {
+            std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
+            return 1;
+        }
+    }
+
     ClassificationPostProcessAwnn processor({});
-    if (!processor.run(engine_result_guard.getEngineResult().tensor_views))
+    if (!processor.run(tensor_views))
     {
         std::fprintf(stderr, "post process failed\n");
         return 1;
     }
+
+    const auto &result = processor.getResult();
+    std::printf("top1: class_id=%d score=%.4f\n", result.class_id, result.score);
 
     return 0;
 }

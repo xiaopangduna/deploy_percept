@@ -56,8 +56,19 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ```bash
 ./bin/mobilenetv2_classify_awnn \
   share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg 5
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg
 ```
+
+导出 unit 单测 fixture（板端，后处理 golden）：
+
+```bash
+./bin/mobilenetv2_classify_awnn \
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg \
+  /tmp/model_outputs.npz
+```
+
+拷回 PC 后置于 `tests/fixtures/unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz`。
 
 ## 预处理
 

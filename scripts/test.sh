@@ -17,6 +17,7 @@ PERCEPT_INSTALL_TESTS=(
     test_YoloV5DetectPostProcessRknn
     test_YoloV5SegPostProcess
     test_YoloV8SegPostProcess
+    test_ClassificationPostProcessAwnn
     test_YoloV5DetectPostProcessAwnn
     test_YoloV8DetectPostProcessAwnn
     test_yolov5_detect_awnn
