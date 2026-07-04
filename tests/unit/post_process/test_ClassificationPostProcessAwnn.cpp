@@ -33,7 +33,6 @@ TEST(ClassificationPostProcessAwnnTest, ArgmaxReturnsHighestClass)
     ASSERT_TRUE(processor.run({view}));
 
     const auto &result = processor.getResult();
-    ASSERT_TRUE(result.success);
     EXPECT_EQ(result.class_id, 42);
     EXPECT_FLOAT_EQ(result.score, 10.f);
 }
@@ -42,7 +41,6 @@ TEST(ClassificationPostProcessAwnnTest, RejectsEmptyInput)
 {
     ClassificationPostProcessAwnn processor({});
     EXPECT_FALSE(processor.run({}));
-    EXPECT_FALSE(processor.getResult().success);
 }
 
 TEST(ClassificationPostProcessAwnnTest, RejectsUndersizedOutput)

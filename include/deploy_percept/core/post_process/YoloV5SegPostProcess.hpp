@@ -1,19 +1,18 @@
 #pragma once
 
-#include <vector>
-#include <cstring>
-#include <string>
 #include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
-#include "deploy_percept/common/types.hpp"
+
+#include <cstdint>
+#include <vector>
 
 namespace deploy_percept
 {
     namespace post_process
     {
+        /** YOLOv5 实例分割后处理（RKNN int8，anchor 三头 + proto） */
         class YoloV5SegPostProcess : public YoloDetectPostProcess
         {
         public:
-            // 参数配置结构体
             struct Params
             {
                 float conf_threshold = 0.25f;
@@ -21,30 +20,22 @@ namespace deploy_percept
                 int obj_class_num = 80;
                 int obj_numb_max_size = 64;
 
-                // 分割相关参数
                 int proto_channel = 32;
                 int proto_height = 160;
-                int proto_weight = 160;
+                int proto_width = 160;
 
-                // Anchor参数
-                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
-                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
-                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
+                std::vector<int> anchor_stride8 = YoloV5CocoAnchors::kStride8;
+                std::vector<int> anchor_stride16 = YoloV5CocoAnchors::kStride16;
+                std::vector<int> anchor_stride32 = YoloV5CocoAnchors::kStride32;
 
-                // 模型结构参数
-                int prop_box_size = 5; // 边界框坐标(xywh) + 置信度
+                int prop_box_size = 5;
             };
 
-            // 结果结构体
-            struct Result
-            {
-                SegmentationResult group{};
-                bool success = false;
-            };
+            using Result = SegmentationResult;
 
-            // 使用参数结构体的构造函数
             explicit YoloV5SegPostProcess(const Params &params);
             ~YoloV5SegPostProcess() = default;
+
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }
 
@@ -63,23 +54,20 @@ namespace deploy_percept
             std::vector<uint8_t> seg_mask_;
             std::vector<uint8_t> all_mask_in_one_;
 
-            int decodeDetectionHead(const std::vector<int8_t *> &all_input, int input_id, int *anchor, int grid_h, int grid_w,
-                                    int stride,
-                                    std::vector<float> &boxes, std::vector<float> &segments,
-                                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
-                                    const std::vector<float> &output_scales,
-                                    const std::vector<int32_t> &output_zps);
-
-            // 新增：处理NMS后检测结果的函数
-            void collectDetectionsAfterNMS(
-                const std::vector<int> &indexArray,
-                const std::vector<float> &filterBoxes,
-                const std::vector<int> &classId,
-                const std::vector<float> &objProbs,
-                const std::vector<float> &filterSegments,
-                int validCount,
-                std::vector<float> &filterSegments_by_nms,
-                int &last_count);
+            int decodeDetectionHead(
+                const std::vector<int8_t *> &all_input,
+                int input_id,
+                int *anchor,
+                int grid_h,
+                int grid_w,
+                int stride,
+                std::vector<float> &boxes,
+                std::vector<float> &segments,
+                std::vector<float> &objProbs,
+                std::vector<int> &classId,
+                float threshold,
+                const std::vector<float> &output_scales,
+                const std::vector<int32_t> &output_zps);
         };
     } // namespace post_process
 } // namespace deploy_percept

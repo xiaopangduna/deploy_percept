@@ -23,29 +23,6 @@ namespace deploy_percept
                 const float *score{nullptr};
             };
 
-            float softmaxExpectation(const float *src, float *dst, int length)
-            {
-                float alpha = -FLT_MAX;
-                for (int c = 0; c < length; ++c)
-                {
-                    alpha = std::max(alpha, src[c]);
-                }
-
-                float denominator = 0.f;
-                float dis_sum = 0.f;
-                for (int i = 0; i < length; ++i)
-                {
-                    dst[i] = std::exp(src[i] - alpha);
-                    denominator += dst[i];
-                }
-                for (int i = 0; i < length; ++i)
-                {
-                    dst[i] /= denominator;
-                    dis_sum += static_cast<float>(i) * dst[i];
-                }
-                return dis_sum;
-            }
-
             bool resolveStrideTensors(
                 const std::vector<TensorView> &inputs,
                 int model_w,
@@ -119,13 +96,11 @@ namespace deploy_percept
         {
             if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
             {
-                result_.success = false;
                 return false;
             }
 
             if (inputs.size() != 6)
             {
-                result_.success = false;
                 return false;
             }
 
@@ -134,12 +109,10 @@ namespace deploy_percept
                 const TensorView &view = inputs[i];
                 if (view.data == nullptr)
                 {
-                    result_.success = false;
                     return false;
                 }
                 if (view.dtype != TensorDtype::FP32)
                 {
-                    result_.success = false;
                     return false;
                 }
             }
@@ -156,7 +129,6 @@ namespace deploy_percept
                     s16,
                     s32))
             {
-                result_.success = false;
                 return false;
             }
 
@@ -183,11 +155,11 @@ namespace deploy_percept
             const int model_w = params_.model_in_w;
             const int model_h = params_.model_in_h;
 
-            result_.group.detections.clear();
+            result_.detections.clear();
 
             for (int idx : picked)
             {
-                if (result_.group.detections.size() >= static_cast<std::size_t>(params_.obj_numb_max_size))
+                if (result_.detections.size() >= static_cast<std::size_t>(params_.obj_numb_max_size))
                 {
                     break;
                 }
@@ -224,11 +196,10 @@ namespace deploy_percept
                     continue;
                 }
 
-                result_.group.detections.push_back(det);
+                result_.detections.push_back(det);
             }
 
-            result_.success = !result_.group.detections.empty();
-            return result_.success;
+            return !result_.detections.empty();
         }
 
         void YoloV8DetectPostProcessAwnn::generateProposals(
@@ -247,7 +218,6 @@ namespace deploy_percept
             const int num_grid_size = num_grid_x * num_grid_y;
 
             const float deprob_threshold = YoloBasePostProcess::desigmoid(prob_threshold);
-            float dst[kRegMax]{};
 
             for (int y = 0; y < num_grid_y; ++y)
             {
@@ -285,10 +255,13 @@ namespace deploy_percept
                         pred_grid[i] = cur_pred_grid[i * num_grid_size];
                     }
 
-                    const float x0 = (x + 0.5f - softmaxExpectation(pred_grid, dst, kRegMax)) * stride;
-                    const float y0 = (y + 0.5f - softmaxExpectation(pred_grid + kRegMax, dst, kRegMax)) * stride;
-                    const float x1 = (x + 0.5f + softmaxExpectation(pred_grid + 2 * kRegMax, dst, kRegMax)) * stride;
-                    const float y1 = (y + 0.5f + softmaxExpectation(pred_grid + 3 * kRegMax, dst, kRegMax)) * stride;
+                    float box[4];
+                    YoloBasePostProcess::decodeDflBox(pred_grid, kRegMax, box);
+
+                    const float x0 = (x + 0.5f - box[0]) * stride;
+                    const float y0 = (y + 0.5f - box[1]) * stride;
+                    const float x1 = (x + 0.5f + box[2]) * stride;
+                    const float y1 = (y + 0.5f + box[3]) * stride;
 
                     Proposal obj{};
                     obj.x = x0;

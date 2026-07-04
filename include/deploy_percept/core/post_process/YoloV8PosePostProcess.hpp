@@ -1,16 +1,16 @@
 #pragma once
 
+#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
+
 #include <cstdint>
 #include <vector>
-
-#include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
-#include "deploy_percept/common/types.hpp"
 
 namespace deploy_percept
 {
 namespace post_process
 {
 
+/** YOLOv8 姿态估计后处理（RKNN，int8 检测头 + 关键点张量） */
 class YoloV8PosePostProcess : public YoloDetectPostProcess
 {
 public:
@@ -20,15 +20,11 @@ public:
         float nms_threshold = 0.4f;
         int obj_class_num = 1;
         int obj_numb_max_size = 128;
-        /** 与官方 yolov8_pose 固定网格总数一致（640×640 三尺度） */
         static constexpr int kKeypointAnchorLen = 8400;
+        static constexpr int kPoseBoxStride = 5;
     };
 
-    struct Result
-    {
-        PoseResult group{};
-        bool success = false;
-    };
+    using Result = PoseResult;
 
     explicit YoloV8PosePostProcess(const Params &params);
     ~YoloV8PosePostProcess() = default;
@@ -36,10 +32,6 @@ public:
     const Params &getParams() const { return params_; }
     const Result &getResult() const { return result_; }
 
-    /**
-     * @param outputs 各输出缓冲区指针；前 3 路为 int8 检测头，第 4 路为关键点（见 output_types）
-     * @param output_types 与 rknn_tensor_attr.type 一致，用于解析第 4 路（float16 / float32 / int8 等）
-     */
     bool run(const std::vector<void *> &outputs,
              int input_image_width,
              int input_image_height,
@@ -65,13 +57,6 @@ private:
                               float scale,
                               int obj_class_num);
 
-    static int nmsPose(int valid_count,
-                       std::vector<float> &output_locations,
-                       std::vector<int> &class_ids,
-                       std::vector<int> &order,
-                       int filter_id,
-                       float threshold);
-
     static float readKeypointValue(const void *buf,
                                    int kp_index,
                                    int keypoint_j,
@@ -81,16 +66,16 @@ private:
                                    float scale);
 
     void gatherKeypointsForDetection(PoseDetection &out,
-                                       const void *kpt_buf,
-                                       int32_t kpt_type,
-                                       int32_t kpt_zp,
-                                       float kpt_scale,
-                                       int keypoints_index,
-                                       int model_in_w,
-                                       int model_in_h,
-                                       float letter_scale,
-                                       float x_pad,
-                                       float y_pad);
+                                     const void *kpt_buf,
+                                     int32_t kpt_type,
+                                     int32_t kpt_zp,
+                                     float kpt_scale,
+                                     int keypoints_index,
+                                     int model_in_w,
+                                     int model_in_h,
+                                     float letter_scale,
+                                     float x_pad,
+                                     float y_pad);
 };
 
 } // namespace post_process

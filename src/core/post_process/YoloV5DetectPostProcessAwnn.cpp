@@ -23,7 +23,6 @@ namespace deploy_percept
             // ===============================
             if (params_.model_in_h <= 0 || params_.model_in_w <= 0)
             {
-                result_.success = false;
                 return false;
             }
 
@@ -32,7 +31,6 @@ namespace deploy_percept
             // ===============================
             if (inputs.size() != 3)
             {
-                result_.success = false;
                 return false;
             }
 
@@ -42,12 +40,10 @@ namespace deploy_percept
                 const TensorView &view = inputs[i];
                 if (view.data == nullptr)
                 {
-                    result_.success = false;
                     return false;
                 }
                 if (view.dtype != TensorDtype::FP32)
                 {
-                    result_.success = false;
                     return false;
                 }
                 head_ptrs[i] = static_cast<const float *>(view.data);
@@ -92,7 +88,6 @@ namespace deploy_percept
             const int candidate_count = valid_count0 + valid_count1 + valid_count2;
             if (candidate_count <= 0)
             {
-                result_.success = false;
                 return false;
             }
 

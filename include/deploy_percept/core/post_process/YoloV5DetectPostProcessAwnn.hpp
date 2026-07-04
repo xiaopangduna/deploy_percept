@@ -23,9 +23,9 @@ namespace deploy_percept
                 int obj_class_num = 80;
                 int obj_numb_max_size = 64;
 
-                std::vector<int> anchor_stride8 = {10, 13, 16, 30, 33, 23};
-                std::vector<int> anchor_stride16 = {30, 61, 62, 45, 59, 119};
-                std::vector<int> anchor_stride32 = {116, 90, 156, 198, 373, 326};
+                std::vector<int> anchor_stride8 = YoloV5CocoAnchors::kStride8;
+                std::vector<int> anchor_stride16 = YoloV5CocoAnchors::kStride16;
+                std::vector<int> anchor_stride32 = YoloV5CocoAnchors::kStride32;
 
                 /** 模型输入高宽（VIP 顺序 [W,H,C,N]） */
                 int model_in_h{0};
@@ -35,7 +35,7 @@ namespace deploy_percept
             using Result = YoloDetectPostProcess::Result;
 
             explicit YoloV5DetectPostProcessAwnn(const Params &params);
-            ~YoloV5DetectPostProcessAwnn() override = default;
+            ~YoloV5DetectPostProcessAwnn() = default;
 
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }

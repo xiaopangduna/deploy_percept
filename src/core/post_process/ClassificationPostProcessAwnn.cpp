@@ -51,7 +51,6 @@ namespace deploy_percept
 
             result_.class_id = best_id;
             result_.score = best_score;
-            result_.success = true;
             return true;
         }
 

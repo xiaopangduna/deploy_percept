@@ -1,7 +1,5 @@
 #include "deploy_percept/core/post_process/YoloV8SegPostProcess.hpp"
 #include <algorithm>
-#include <cmath>
-#include <malloc.h>
 
 namespace deploy_percept
 {
@@ -33,7 +31,7 @@ namespace deploy_percept
             std::vector<float> proto(
                 params_.proto_channel *
                 params_.proto_height *
-                params_.proto_weight);
+                params_.proto_width);
 
             const int8_t *input_proto = outputs[12];
             int32_t zp = output_zps[12];
@@ -51,7 +49,7 @@ namespace deploy_percept
             int grid_h0 = output_dims[0][2];
             int grid_w0 = output_dims[0][3];
             int stride0 = input_image_height / grid_h0;
-            validCount += decodeDetectionAndSegmentionHead(&outputs, 0,
+            validCount += decodeDetectionAndSegmentationHead(&outputs, 0,
                                                            grid_h0, grid_w0, stride0,
                                                            filterBoxes, filterSegments,
                                                            objProbs, classId,
@@ -62,7 +60,7 @@ namespace deploy_percept
             int grid_h1 = output_dims[4][2];
             int grid_w1 = output_dims[4][3];
             int stride1 = input_image_height / grid_h1;
-            validCount += decodeDetectionAndSegmentionHead(&outputs, 4,
+            validCount += decodeDetectionAndSegmentationHead(&outputs, 4,
                                                            grid_h1, grid_w1, stride1,
                                                            filterBoxes, filterSegments,
                                                            objProbs, classId,
@@ -73,7 +71,7 @@ namespace deploy_percept
             int grid_h2 = output_dims[8][2];
             int grid_w2 = output_dims[8][3];
             int stride2 = input_image_height / grid_h2;
-            validCount += decodeDetectionAndSegmentionHead(&outputs, 8,
+            validCount += decodeDetectionAndSegmentationHead(&outputs, 8,
                                                            grid_h2, grid_w2, stride2,
                                                            filterBoxes, filterSegments,
                                                            objProbs, classId,
@@ -97,130 +95,46 @@ namespace deploy_percept
                 params_.nms_threshold,
                 indexArray);
 
-            int last_count = 0;
+            result_.detections.clear();
+            result_.label_mask.clear();
 
-            // ===============================
-            // 0. reset state
-            // ===============================
-            result_.group.detections.clear();
-            result_.group.label_mask.clear();
-
-            for (int i = 0; i < validCount; ++i)
-            {
-                // 跳过被NMS标记为冗余的检测框，或超出最大检测数量限制的框
-                if (indexArray[i] == -1 || last_count >= params_.obj_numb_max_size)
-                {
-                    continue;
-                }
-
-                int n = indexArray[i]; // 获取原始检测框的索引
-
-                // 提取并计算边界框坐标
-                float x1 = filterBoxes[n * 4 + 0];      // 左上角x
-                float y1 = filterBoxes[n * 4 + 1];      // 左上角y
-                float x2 = x1 + filterBoxes[n * 4 + 2]; // 右下角x (x1 + width)
-                float y2 = y1 + filterBoxes[n * 4 + 3]; // 右下角y (y1 + height)
-
-                int id = classId[n];          // 保存真实的类别ID
-                float obj_conf = objProbs[n]; // 获取该检测框的置信度
-
-                // 收集该检测框对应的分割特征向量
-                for (int k = 0; k < params_.proto_channel; k++)
-                {
-                    filterSegments_by_nms.push_back(filterSegments[n * params_.proto_channel + k]);
-                }
-
-                // 填充检测结果结构体（与YOLOv5版本一致，不进行边界限制）
-                Detection det{};
-                det.box.left = static_cast<int>(clamp(x1, 0, input_image_width));
-                det.box.top = static_cast<int>(clamp(y1, 0, input_image_height));
-                det.box.right = static_cast<int>(clamp(x2, 0, input_image_width));
-                det.box.bottom = static_cast<int>(clamp(y2, 0, input_image_height));
-                det.score = obj_conf;
-                det.class_id = id;
-
-                result_.group.detections.push_back(det);
-
-                last_count++; // 增加有效检测计数
-            }
+            const int last_count = collectDetectionsWithSegments(
+                indexArray,
+                filterBoxes,
+                objProbs,
+                classId,
+                filterSegments,
+                validCount,
+                params_.obj_numb_max_size,
+                params_.proto_channel,
+                input_image_width,
+                input_image_height,
+                true,
+                result_,
+                filterSegments_by_nms);
 
             if (last_count <= 0)
             {
                 return true;
             }
 
-            // ===============================
-            // 4. boxes / class
-            // ===============================
-            int boxes_num = last_count;
-
-            std::vector<float> filterBoxes_by_nms(boxes_num * 4);
-            std::vector<int> cls_id(boxes_num);
-
-            for (int i = 0; i < boxes_num; ++i)
-            {
-                filterBoxes_by_nms[i * 4 + 0] = result_.group.detections[i].box.left;
-                filterBoxes_by_nms[i * 4 + 1] = result_.group.detections[i].box.top;
-                filterBoxes_by_nms[i * 4 + 2] = result_.group.detections[i].box.right;
-                filterBoxes_by_nms[i * 4 + 3] = result_.group.detections[i].box.bottom;
-                cls_id[i] = result_.group.detections[i].class_id;
-            }
-
-            // ===============================
-            // 5. segmentation
-            // ===============================
-            const size_t matmul_size =
-                boxes_num * params_.proto_height * params_.proto_weight;
-            matmul_out_.assign(matmul_size, 0);
-
-            YoloBasePostProcess::computeSegMask(
+            buildLabelMask(
+                result_.detections,
                 filterSegments_by_nms,
                 proto.data(),
-                matmul_out_.data(),
-                boxes_num,
                 params_.proto_channel,
-                params_.proto_height * params_.proto_weight);
-
-            const size_t seg_size =
-                boxes_num * input_image_height * input_image_width;
-            seg_mask_.assign(seg_size, 0);
-
-            YoloBasePostProcess::resizeSegMasks(
-                matmul_out_.data(),
-                params_.proto_weight,
                 params_.proto_height,
-                boxes_num,
-                seg_mask_.data(),
+                params_.proto_width,
                 input_image_width,
-                input_image_height);
-
-            const size_t mask_size =
-                input_image_height * input_image_width;
-            all_mask_in_one_.assign(mask_size, 0);
-
-            YoloBasePostProcess::mergeBoxMasks(
-                seg_mask_.data(),
-                all_mask_in_one_.data(),
-                filterBoxes_by_nms.data(),
-                boxes_num,
-                cls_id.data(),
                 input_image_height,
-                input_image_width);
-
-            // 在处理完所有检测后，分配并填充分割掩码
-            if (last_count > 0)
-            {
-                const size_t mask_size = input_image_height * input_image_width;
-
-                result_.group.label_mask.resize(mask_size, 0);
-                memcpy(result_.group.label_mask.data(),
-                       all_mask_in_one_.data(),
-                       mask_size);
-            }
+                result_.label_mask,
+                matmul_out_,
+                seg_mask_,
+                all_mask_in_one_);
 
             return true;
         }
-        int YoloV8SegPostProcess::decodeDetectionAndSegmentionHead(const std::vector<int8_t*>* all_input, int input_id, int grid_h, int grid_w,
+        int YoloV8SegPostProcess::decodeDetectionAndSegmentationHead(const std::vector<int8_t *> *all_input, int input_id, int grid_h, int grid_w,
                                                                    int stride,
                                                                    std::vector<float> &boxes, std::vector<float> &segments,
                                                                    std::vector<float> &objProbs, std::vector<int> &classId, float threshold,
@@ -301,7 +215,7 @@ namespace deploy_percept
                             before_dfl[k] = deqntAffineToF32(box_tensor[offset], box_zp, box_scale);
                             offset += grid_len;
                         }
-                        compute_dfl(before_dfl, dfl_len, box);
+                        decodeDflBox(before_dfl, dfl_len, box);
 
                         float x1, y1, x2, y2, w, h;
                         x1 = (-box[0] + j + 0.5) * stride;

@@ -72,7 +72,7 @@ TEST_F(YoloV5DetectPostProcessRknnTest, run)
 
     ASSERT_TRUE(processor->run(inputs, model_in_h, model_in_w, qnt_zps, qnt_scales));
 
-    auto &detection_result = processor->getResult().group;
+    auto &detection_result = processor->getResult();
 
     EXPECT_TRUE(isDetectionVectorEqualWithinTolerance(expected_results, detection_result.detections));
 

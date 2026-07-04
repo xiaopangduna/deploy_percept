@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <set>
 #include <vector>
 
 namespace deploy_percept {
@@ -104,7 +103,7 @@ int8_t YoloBasePostProcess::qntF32ToAffine(float f32, int32_t zp, float scale) {
 
 int YoloBasePostProcess::retainHighestScoringBoxesByNMS(int validCount, std::vector<float>& outputLocations, 
                          std::vector<int> classIds, std::vector<int>& order, 
-                         int filterId, float threshold) {
+                         int filterId, float threshold, int box_stride) {
     for (int i = 0; i < validCount; ++i) {
         int n = order[i];
         if (n == -1 || classIds[n] != filterId) {
@@ -115,15 +114,15 @@ int YoloBasePostProcess::retainHighestScoringBoxesByNMS(int validCount, std::vec
             if (m == -1 || classIds[m] != filterId) {
                 continue;
             }
-            float xmin0 = outputLocations[n * 4 + 0];
-            float ymin0 = outputLocations[n * 4 + 1];
-            float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
-            float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
+            float xmin0 = outputLocations[n * box_stride + 0];
+            float ymin0 = outputLocations[n * box_stride + 1];
+            float xmax0 = outputLocations[n * box_stride + 0] + outputLocations[n * box_stride + 2];
+            float ymax0 = outputLocations[n * box_stride + 1] + outputLocations[n * box_stride + 3];
 
-            float xmin1 = outputLocations[m * 4 + 0];
-            float ymin1 = outputLocations[m * 4 + 1];
-            float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
-            float ymax1 = outputLocations[m * 4 + 1] + outputLocations[m * 4 + 3];
+            float xmin1 = outputLocations[m * box_stride + 0];
+            float ymin1 = outputLocations[m * box_stride + 1];
+            float xmax1 = outputLocations[m * box_stride + 0] + outputLocations[m * box_stride + 2];
+            float ymax1 = outputLocations[m * box_stride + 1] + outputLocations[m * box_stride + 3];
 
             float iou = YoloBasePostProcess::CalculateOverlap(xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
 
@@ -139,32 +138,24 @@ float YoloBasePostProcess::deqntAffineToF32(int8_t qnt, int32_t zp, float scale)
     return ((float)qnt - (float)zp) * scale;
 }
 
-int YoloBasePostProcess::quickSortIndices(std::vector<float> &input, int left, int right, std::vector<int> &indices) {
-    float key;
-    int key_index;
-    int low = left;
-    int high = right;
-    if (left < right) {
-        key_index = indices[left];
-        key = input[left];
-        while (low < high) {
-            while (low < high && input[high] <= key) {
-                high--;
-            }
-            input[low] = input[high];
-            indices[low] = indices[high];
-            while (low < high && input[low] >= key) {
-                low++;
-            }
-            input[high] = input[low];
-            indices[high] = indices[low];
+void YoloBasePostProcess::decodeDflBox(const float *tensor, int dfl_len, float box[4])
+{
+    for (int b = 0; b < 4; ++b)
+    {
+        float exp_t[dfl_len];
+        float exp_sum = 0.f;
+        float acc_sum = 0.f;
+        for (int i = 0; i < dfl_len; ++i)
+        {
+            exp_t[i] = std::exp(tensor[i + b * dfl_len]);
+            exp_sum += exp_t[i];
         }
-        input[low] = key;
-        indices[low] = key_index;
-        quickSortIndices(input, left, low - 1, indices);
-        quickSortIndices(input, low + 1, right, indices);
+        for (int i = 0; i < dfl_len; ++i)
+        {
+            acc_sum += exp_t[i] / exp_sum * static_cast<float>(i);
+        }
+        box[b] = acc_sum;
     }
-    return low;
 }
 
 void YoloBasePostProcess::computeSegMask(std::vector<float> &A, float *B, uint8_t *C, int ROWS_A, int COLS_A, int COLS_B)
@@ -233,6 +224,87 @@ void YoloBasePostProcess::mergeBoxMasks(uint8_t *seg_mask, uint8_t *all_mask_in_
             }
         }
     }
+}
+
+void YoloBasePostProcess::buildLabelMask(
+    const std::vector<Detection> &detections,
+    const std::vector<float> &seg_coeffs,
+    float *proto,
+    int proto_channel,
+    int proto_height,
+    int proto_width,
+    int image_width,
+    int image_height,
+    std::vector<std::uint8_t> &label_mask,
+    std::vector<std::uint8_t> &matmul_out,
+    std::vector<std::uint8_t> &seg_mask,
+    std::vector<std::uint8_t> &all_mask_in_one)
+{
+    const int boxes_num = static_cast<int>(detections.size());
+    if (boxes_num <= 0 || proto == nullptr)
+    {
+        label_mask.clear();
+        return;
+    }
+
+    std::vector<float> filter_boxes_by_nms(static_cast<std::size_t>(boxes_num) * 4);
+    std::vector<int> cls_id(static_cast<std::size_t>(boxes_num));
+    for (int i = 0; i < boxes_num; ++i)
+    {
+        filter_boxes_by_nms[static_cast<std::size_t>(i) * 4 + 0] =
+            static_cast<float>(detections[static_cast<std::size_t>(i)].box.left);
+        filter_boxes_by_nms[static_cast<std::size_t>(i) * 4 + 1] =
+            static_cast<float>(detections[static_cast<std::size_t>(i)].box.top);
+        filter_boxes_by_nms[static_cast<std::size_t>(i) * 4 + 2] =
+            static_cast<float>(detections[static_cast<std::size_t>(i)].box.right);
+        filter_boxes_by_nms[static_cast<std::size_t>(i) * 4 + 3] =
+            static_cast<float>(detections[static_cast<std::size_t>(i)].box.bottom);
+        cls_id[static_cast<std::size_t>(i)] = detections[static_cast<std::size_t>(i)].class_id;
+    }
+
+    const size_t matmul_size =
+        static_cast<size_t>(boxes_num) * static_cast<size_t>(proto_height) *
+        static_cast<size_t>(proto_width);
+    matmul_out.assign(matmul_size, 0);
+
+    std::vector<float> seg_coeffs_mut = seg_coeffs;
+    computeSegMask(
+        seg_coeffs_mut,
+        proto,
+        matmul_out.data(),
+        boxes_num,
+        proto_channel,
+        proto_height * proto_width);
+
+    const size_t seg_size =
+        static_cast<size_t>(boxes_num) * static_cast<size_t>(image_height) *
+        static_cast<size_t>(image_width);
+    seg_mask.assign(seg_size, 0);
+
+    resizeSegMasks(
+        matmul_out.data(),
+        proto_width,
+        proto_height,
+        boxes_num,
+        seg_mask.data(),
+        image_width,
+        image_height);
+
+    const size_t mask_size =
+        static_cast<size_t>(image_height) * static_cast<size_t>(image_width);
+    all_mask_in_one.assign(mask_size, 0);
+
+    mergeBoxMasks(
+        seg_mask.data(),
+        all_mask_in_one.data(),
+        filter_boxes_by_nms.data(),
+        boxes_num,
+        cls_id.data(),
+        image_height,
+        image_width);
+
+    label_mask.resize(mask_size, 0);
+    std::memcpy(label_mask.data(), all_mask_in_one.data(), mask_size);
 }
 
 } // namespace post_process

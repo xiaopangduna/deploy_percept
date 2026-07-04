@@ -6,7 +6,7 @@ namespace post_process {
 
 class BasePostProcess {
 public:
-    // 当前为纯粹的无状态工具类，如需要可以添加其他通用工具函数
+    /** 后处理模块根类；YOLO 链与 Classification 叶子均继承自此。 */
 };
 
 } // namespace post_process

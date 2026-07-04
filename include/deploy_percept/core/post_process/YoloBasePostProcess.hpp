@@ -4,7 +4,6 @@
 #include "deploy_percept/common/types.hpp"
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace deploy_percept
@@ -16,8 +15,13 @@ namespace deploy_percept
         class YoloBasePostProcess : public BasePostProcess
         {
         public:
-            YoloBasePostProcess() = default;
-            virtual ~YoloBasePostProcess() = default;
+            /** YOLOv5 COCO 默认 anchor（stride 8/16/32 各 3 组 wh） */
+            struct YoloV5CocoAnchors
+            {
+                static inline const std::vector<int> kStride8{10, 13, 16, 30, 33, 23};
+                static inline const std::vector<int> kStride16{30, 61, 62, 45, 59, 119};
+                static inline const std::vector<int> kStride32{116, 90, 156, 198, 373, 326};
+            };
 
             static float sigmoid(float x);
             static float desigmoid(float x);
@@ -27,21 +31,18 @@ namespace deploy_percept
             static float deqntAffineToF32(int8_t qnt, int32_t zp, float scale);
             static int32_t clip(float val, float min, float max);
 
-            /** 按 scores 降序快速排序 indices（NMS 前使用） */
-            static int quickSortIndices(
-                std::vector<float> &input,
-                int left,
-                int right,
-                std::vector<int> &indices);
+            /** DFL 解码：tensor 为 4×dfl_len 分布，输出 box[4] 为距离偏移 */
+            static void decodeDflBox(const float *tensor, int dfl_len, float box[4]);
 
-            /** 对指定类别的候选框做 NMS；order 中 -1 表示被抑制 */
+            /** 对指定类别的候选框做 NMS；order 中 -1 表示被抑制；box_stride 为每框字段数（默认 4，Pose 为 5） */
             static int retainHighestScoringBoxesByNMS(
                 int validCount,
                 std::vector<float> &outputLocations,
                 std::vector<int> classIds,
                 std::vector<int> &order,
                 int filterId,
-                float threshold);
+                float threshold,
+                int box_stride = 4);
 
             static float CalculateOverlap(
                 float xmin0,
@@ -78,6 +79,24 @@ namespace deploy_percept
                 int *cls_id,
                 int height,
                 int width);
+
+            /**
+             * Seg 共用：由 NMS 后 detections + seg coeff + proto 合成 label_mask。
+             * workspace 向量由调用方持有并传入，避免重复分配。
+             */
+            static void buildLabelMask(
+                const std::vector<Detection> &detections,
+                const std::vector<float> &seg_coeffs,
+                float *proto,
+                int proto_channel,
+                int proto_height,
+                int proto_width,
+                int image_width,
+                int image_height,
+                std::vector<std::uint8_t> &label_mask,
+                std::vector<std::uint8_t> &matmul_out,
+                std::vector<std::uint8_t> &seg_mask,
+                std::vector<std::uint8_t> &all_mask_in_one);
         };
 
     } // namespace post_process

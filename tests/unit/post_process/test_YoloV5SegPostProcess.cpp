@@ -94,11 +94,11 @@ TEST_F(YoloV5SegPostProcessTest, run)
     bool success = processor->run(inputs, 640, 640,
                                   output_dims, output_scales, output_zps);
 
-    const auto &result = processor->getResult().group;
+    const auto &result = processor->getResult();
 
     EXPECT_TRUE(isDetectionVectorEqualWithinTolerance(expected_results, result.detections));
 
-    const auto &actual_results = processor->getResult().group;
+    const auto &actual_results = processor->getResult();
 
     EXPECT_TRUE(isUint8VectorEqualWithTolerance(expected_seg_mask, actual_results.label_mask, 0.03));
 

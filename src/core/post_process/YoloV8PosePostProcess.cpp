@@ -3,9 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <string>
-#include <numeric>
-#include <set>
 
 namespace deploy_percept
 {
@@ -14,16 +11,6 @@ namespace post_process
 
 namespace
 {
-
-float sigmoid(float x)
-{
-    return 1.f / (1.f + std::exp(-x));
-}
-
-float unsigmoid(float y)
-{
-    return -std::log((1.f / y) - 1.f);
-}
 
 void softmax(float *input, int size)
 {
@@ -118,7 +105,8 @@ int YoloV8PosePostProcess::decodeHeadInt8(const int8_t *input,
     const int input_loc_len = 64;
     const int tensor_len = input_loc_len + obj_class_num;
     int valid_count = 0;
-    const int8_t thres_i8 = YoloBasePostProcess::qntF32ToAffine(unsigmoid(conf_threshold), zp, scale);
+    const int8_t thres_i8 = YoloBasePostProcess::qntF32ToAffine(
+        YoloBasePostProcess::desigmoid(conf_threshold), zp, scale);
 
     for (int h = 0; h < grid_h; ++h)
     {
@@ -131,8 +119,8 @@ int YoloV8PosePostProcess::decodeHeadInt8(const int8_t *input,
                 {
                     continue;
                 }
-                const float box_conf_f32 =
-                    sigmoid(YoloBasePostProcess::deqntAffineToF32(input[idx], zp, scale));
+                const float box_conf_f32 = YoloBasePostProcess::sigmoid(
+                    YoloBasePostProcess::deqntAffineToF32(input[idx], zp, scale));
                 float loc[input_loc_len];
                 for (int i = 0; i < input_loc_len; ++i)
                 {
@@ -175,48 +163,6 @@ int YoloV8PosePostProcess::decodeHeadInt8(const int8_t *input,
         }
     }
     return valid_count;
-}
-
-int YoloV8PosePostProcess::nmsPose(int valid_count,
-                                   std::vector<float> &output_locations,
-                                   std::vector<int> &class_ids,
-                                   std::vector<int> &order,
-                                   int filter_id,
-                                   float threshold)
-{
-    for (int i = 0; i < valid_count; ++i)
-    {
-        int n = order[i];
-        if (n == -1 || class_ids[n] != filter_id)
-        {
-            continue;
-        }
-        for (int j = i + 1; j < valid_count; ++j)
-        {
-            int m = order[j];
-            if (m == -1 || class_ids[m] != filter_id)
-            {
-                continue;
-            }
-            const float xmin0 = output_locations[n * 5 + 0];
-            const float ymin0 = output_locations[n * 5 + 1];
-            const float xmax0 = output_locations[n * 5 + 0] + output_locations[n * 5 + 2];
-            const float ymax0 = output_locations[n * 5 + 1] + output_locations[n * 5 + 3];
-
-            const float xmin1 = output_locations[m * 5 + 0];
-            const float ymin1 = output_locations[m * 5 + 1];
-            const float xmax1 = output_locations[m * 5 + 0] + output_locations[m * 5 + 2];
-            const float ymax1 = output_locations[m * 5 + 1] + output_locations[m * 5 + 3];
-
-            const float iou = YoloBasePostProcess::CalculateOverlap(
-                xmin0, ymin0, xmax0, ymax0, xmin1, ymin1, xmax1, ymax1);
-            if (iou > threshold)
-            {
-                order[j] = -1;
-            }
-        }
-    }
-    return 0;
 }
 
 float YoloV8PosePostProcess::readKeypointValue(const void *buf,
@@ -288,8 +234,7 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
                                 std::vector<int32_t> &output_zps,
                                 const std::vector<int32_t> &output_types)
 {
-    result_.group.detections.clear();
-    result_.success = false;
+    result_.detections.clear();
 
     if (outputs.size() < 4 || output_dims.size() < 4 || output_scales.size() < 4 ||
         output_zps.size() < 4 || output_types.size() < 4)
@@ -332,17 +277,15 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
         return true;
     }
 
-    std::vector<int> order(valid_count);
-    std::iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&obj_probs](int a, int b) {
-        return obj_probs[a] > obj_probs[b];
-    });
-
-    std::set<int> class_set(class_ids.begin(), class_ids.end());
-    for (int c : class_set)
-    {
-        nmsPose(valid_count, filter_boxes, class_ids, order, c, params_.nms_threshold);
-    }
+    std::vector<int> order;
+    applyNmsToCandidates(
+        filter_boxes,
+        obj_probs,
+        class_ids,
+        valid_count,
+        params_.nms_threshold,
+        order,
+        Params::kPoseBoxStride);
 
     const void *kpt_buf = outputs[3];
     const int32_t kpt_type = output_types[3];
@@ -388,12 +331,11 @@ bool YoloV8PosePostProcess::run(const std::vector<void *> &outputs,
         det.box.right = YoloBasePostProcess::clamp(x1 + w, 0, model_in_w) / letter_scale;
         det.box.bottom = YoloBasePostProcess::clamp(y1 + h, 0, model_in_h) / letter_scale;
 
-        result_.group.detections.push_back(det);
+        result_.detections.push_back(det);
         last_count++;
     }
 
-    result_.success = (last_count > 0);
-    return true;
+    return last_count > 0;
 }
 
 } // namespace post_process

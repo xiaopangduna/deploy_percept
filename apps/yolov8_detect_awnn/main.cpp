@@ -148,7 +148,7 @@ int main(int argc, char **argv)
     }
 
     cv::Mat result_img = model_input.clone();
-    drawDetectionResults(result_img, processor.getResult().group);
+    drawDetectionResults(result_img, processor.getResult());
 
     std::error_code ec;
     fs::create_directories(fs::path(output_path).parent_path(), ec);
@@ -158,7 +158,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("detection num: %zu\n", processor.getResult().group.detections.size());
+    std::printf("detection num: %zu\n", processor.getResult().detections.size());
     std::printf("saved detect result to %s\n", output_path);
     return 0;
 }

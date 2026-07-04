@@ -23,7 +23,6 @@ namespace deploy_percept
         {
             if (inputs.size() != 3)
             {
-                result_.success = false;
                 return false;
             }
 
@@ -75,7 +74,6 @@ namespace deploy_percept
             const int valid_count = valid_count0 + valid_count1 + valid_count2;
             if (valid_count <= 0)
             {
-                result_.success = false;
                 return false;
             }
 
@@ -125,34 +123,32 @@ namespace deploy_percept
                             const int offset = (prop_box_size * a) * grid_len + i * grid_w + j;
                             int8_t *in_ptr = input + offset;
 
-                            float box_x = (deqntAffineToF32(*in_ptr, zp, scale)) * 2.0 - 0.5;
-                            float box_y = (deqntAffineToF32(in_ptr[grid_len], zp, scale)) * 2.0 - 0.5;
-                            float box_w = (deqntAffineToF32(in_ptr[2 * grid_len], zp, scale)) * 2.0;
-                            float box_h = (deqntAffineToF32(in_ptr[3 * grid_len], zp, scale)) * 2.0;
-
-                            box_x = (box_x + j) * static_cast<float>(stride);
-                            box_y = (box_y + i) * static_cast<float>(stride);
-
-                            box_w = box_w * box_w * static_cast<float>(anchor[a * 2]);
-                            box_h = box_h * box_h * static_cast<float>(anchor[a * 2 + 1]);
-
-                            box_x -= (box_w / 2.0);
-                            box_y -= (box_h / 2.0);
-
-                            int8_t max_class_probs = in_ptr[5 * grid_len];
                             int max_class_id = 0;
-                            for (int k = 1; k < params_.obj_class_num; ++k)
-                            {
-                                const int8_t prob = in_ptr[(5 + k) * grid_len];
-                                if (prob > max_class_probs)
-                                {
-                                    max_class_id = k;
-                                    max_class_probs = prob;
-                                }
-                            }
+                            int8_t max_class_probs = 0;
+                            findV5MaxClass(
+                                in_ptr, grid_len, params_.obj_class_num, max_class_id, max_class_probs);
 
                             if (max_class_probs > thres_i8)
                             {
+                                float box_x = 0.f;
+                                float box_y = 0.f;
+                                float box_w = 0.f;
+                                float box_h = 0.f;
+                                decodeV5AnchorBox(
+                                    in_ptr,
+                                    grid_len,
+                                    j,
+                                    i,
+                                    stride,
+                                    anchor[a * 2],
+                                    anchor[a * 2 + 1],
+                                    zp,
+                                    scale,
+                                    box_x,
+                                    box_y,
+                                    box_w,
+                                    box_h);
+
                                 obj_probs.push_back(
                                     deqntAffineToF32(max_class_probs, zp, scale) *
                                     deqntAffineToF32(box_confidence, zp, scale));

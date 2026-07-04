@@ -102,7 +102,6 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
     ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
     const auto &result = processor.getResult();
-    ASSERT_TRUE(result.success);
     EXPECT_EQ(result.class_id, kExpectedTop1ClassId);
 }
 

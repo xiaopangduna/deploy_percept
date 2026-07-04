@@ -115,7 +115,7 @@ int main()
         return 1;
     }
 
-    const PoseResult &pose_results = pose_processor.getResult().group;
+    const PoseResult &pose_results = pose_processor.getResult();
     printf("pose_results count=%zu\n", pose_results.detections.size());
     for (std::size_t i = 0; i < pose_results.detections.size() && i < 5; ++i)
     {

@@ -143,7 +143,7 @@ int main()
   rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
 
   cv::Mat result_img = orig_img.clone();
-  deploy_percept::utils::drawDetectionResults(result_img, processor.getResult().group);
+  deploy_percept::utils::drawDetectionResults(result_img, processor.getResult());
 
   imwrite(path_save_output_img, result_img);
   printf("save detect result to %s\n", path_save_output_img.c_str());

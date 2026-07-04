@@ -162,7 +162,7 @@ TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
     YoloV5DetectPostProcessAwnn processor(post_params);
     ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
-    expect_class_and_box_match(kExpectedDetections, processor.getResult().group.detections);
+    expect_class_and_box_match(kExpectedDetections, processor.getResult().detections);
 }
 
 int main(int argc, char **argv)

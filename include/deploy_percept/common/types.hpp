@@ -89,4 +89,14 @@ struct PoseResult
     std::vector<PoseDetection> detections;
 };
 
+// ---------------------------------------------------------------------------
+// 分类（Classification）
+// ---------------------------------------------------------------------------
+
+struct ClassificationResult
+{
+    int class_id = -1;
+    float score = 0.f;
+};
+
 } // namespace deploy_percept

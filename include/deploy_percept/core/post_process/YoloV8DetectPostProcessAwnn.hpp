@@ -32,7 +32,7 @@ namespace deploy_percept
             using Result = YoloDetectPostProcess::Result;
 
             explicit YoloV8DetectPostProcessAwnn(const Params &params);
-            ~YoloV8DetectPostProcessAwnn() override = default;
+            ~YoloV8DetectPostProcessAwnn() = default;
 
             const Params &getParams() const { return params_; }
             const Result &getResult() const { return result_; }

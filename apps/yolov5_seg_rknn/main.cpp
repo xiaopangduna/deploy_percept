@@ -155,7 +155,7 @@ int main()
 
     rknn_outputs_release(engine.ctx_, engine.model_io_num_.n_output, outputs);
 
-    auto seg_results = seg_processor.getResult().group;
+    auto seg_results = seg_processor.getResult();
 
     cv::Mat result_img = orig_img.clone();
     deploy_percept::utils::drawDetectionResults(result_img, seg_results);

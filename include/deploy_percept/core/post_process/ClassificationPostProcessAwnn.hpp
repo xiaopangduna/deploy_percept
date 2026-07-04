@@ -1,5 +1,6 @@
 #pragma once
 
+#include "deploy_percept/core/post_process/BasePostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
 
 #include <vector>
@@ -9,11 +10,8 @@ namespace deploy_percept
     namespace post_process
     {
 
-        /**
-         * ImageNet 分类后处理（AWNN FP32 单路 logits 输出）。
-         * 对 logits 做 argmax，输出 Top-1 class_id / score。
-         */
-        class ClassificationPostProcessAwnn
+        /** ImageNet 分类后处理（AWNN FP32 单路 logits，argmax Top-1） */
+        class ClassificationPostProcessAwnn : public BasePostProcess
         {
         public:
             struct Params
@@ -21,12 +19,7 @@ namespace deploy_percept
                 int num_classes = 1000;
             };
 
-            struct Result
-            {
-                bool success = false;
-                int class_id = -1;
-                float score = 0.f;
-            };
+            using Result = ClassificationResult;
 
             explicit ClassificationPostProcessAwnn(const Params &params);
             ~ClassificationPostProcessAwnn() = default;
