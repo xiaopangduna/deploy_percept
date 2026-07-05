@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include <opencv2/opencv.hpp>
 #include <string>
 
@@ -47,6 +50,34 @@ namespace deploy_percept
             const cv::Mat &input_image,
             int target_width,
             int target_height);
+
+        /** AWNN VIP 输入 buffer 线性布局 */
+        enum class VipInputPackLayout
+        {
+            Chw, ///< YOLOv5：[W,H,C,N] + NCHW pack
+            Hwc, ///< YOLOv8：[C,H,W,N] + RGB HWC 交错
+        };
+
+        /**
+         * YOLOv5 AWNN：resize + RGB NCHW pack 至 VIP input buffer（w 最快变）。
+         * @p input_buffer 复用：仅当容量不足时 resize。
+         */
+        bool yolov5_preprocess_awnn(
+            const cv::Mat &source_bgr,
+            int model_w,
+            int model_h,
+            int model_c,
+            std::vector<std::uint8_t> &input_buffer);
+
+        /**
+         * YOLOv8 AWNN：resize + RGB HWC pack 至 VIP input buffer。
+         * @p input_buffer 复用：仅当容量不足时 resize。
+         */
+        bool yolov8_preprocess_awnn(
+            const cv::Mat &source_bgr,
+            int model_w,
+            int model_h,
+            std::vector<std::uint8_t> &input_buffer);
 
     } // namespace pre_process
 } // namespace deploy_percept

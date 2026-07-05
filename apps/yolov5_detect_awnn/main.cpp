@@ -5,7 +5,7 @@
  *   yolov5_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
  * 默认：./yolov5.nb  ./dog.jpg  ./yolov5_detect_awnn_out.jpg
- * 性能对比见 benchmarks/awnn/bench_yolov5_post_process
+ * 性能对比见 benchmarks/awnn/bench_yolov5
  */
 #include <cstdio>
 #include <cstdint>

@@ -97,7 +97,7 @@ cp yolov5s-sim_uint8.nb /path/to/install/share/percept/fixtures/integration/awnn
 cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   -DENABLE_BENCHMARKS=ON
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --target yolov5_detect_awnn bench_yolov5_post_process
+  --target yolov5_detect_awnn bench_yolov5
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
@@ -142,7 +142,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 # 或 install prefix 本地直接跑 benchmark
 export PERCEPT_ROOT=$PWD/share/percept
 export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
-./share/percept/benchmarks/bench_yolov5_post_process 50
+./share/percept/benchmarks/bench_yolov5 50
 ```
 
 正确性回归见 `share/percept/tests/test_yolov5_detect_awnn`（integration test）。
