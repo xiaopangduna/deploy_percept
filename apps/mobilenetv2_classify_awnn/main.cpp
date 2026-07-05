@@ -120,7 +120,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // mobilenetv2.nb VIP input sizes: [C, H, W, N] = [3, 224, 224, 1]，buffer 为 RGB HWC
+    std::printf("%s", engine.dump_info().c_str());
+
+    // VIP input_sizes 顺序 [W,H,C,N]；demo 当前按 sizes[1]=H, sizes[2]=W 解析
     const auto &sizes = engine.getInfo().input_sizes.at(0);
     const int model_h = static_cast<int>(sizes[1]);
     const int model_w = static_cast<int>(sizes[2]);
@@ -168,7 +170,9 @@ int main(int argc, char **argv)
         }
     }
 
-    ClassificationPostProcessAwnn processor({});
+    ClassificationPostProcessAwnn processor({
+        .num_classes = static_cast<int>(engine.getInfo().output_sizes.at(0)[0]),
+    });
     if (!processor.run(tensor_views))
     {
         std::fprintf(stderr, "post process failed\n");

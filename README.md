@@ -160,6 +160,15 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 export SSHPASS='your_password'
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@192.168.0.103:~/deploy_percept --bench 100
+
+# 仅同步 install 到板子（不跑远程测试；需先 build + install）
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+rsync -avz --delete -e ssh \
+  install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
+  orangepi@192.168.0.103:~/deploy_percept/
+# 密码登录时把 -e ssh 换成：
+# rsync -avz --delete -e "sshpass -e ssh -o StrictHostKeyChecking=accept-new" ...
 ```
 
 **PC 依赖**：`ssh`、`rsync`；使用密码时需 `sshpass` 且设置环境变量 `SSHPASS`（勿提交仓库）。

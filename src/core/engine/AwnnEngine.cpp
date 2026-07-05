@@ -10,6 +10,7 @@ extern "C" {
 #include <cstdio>
 #include <cstring>
 #include <optional>
+#include <string>
 
 namespace deploy_percept
 {
@@ -169,6 +170,80 @@ namespace deploy_percept
                 }
             }
 
+            const char *dtypeToString(const TensorDtype dtype)
+            {
+                switch (dtype)
+                {
+                case TensorDtype::FP32:
+                    return "FP32";
+                case TensorDtype::INT8:
+                    return "INT8";
+                default:
+                    return "UNKNOWN";
+                }
+            }
+
+            void appendBufferDumpLine(
+                std::string &out,
+                const char *tag,
+                const std::size_t index,
+                const std::string *name,
+                const std::uint32_t num_dims,
+                const std::array<std::uint32_t, 6> &sizes,
+                const TensorDtype dtype,
+                const std::uint32_t byte_size)
+            {
+                const char *name_str =
+                    (name != nullptr && !name->empty()) ? name->c_str() : "?";
+                char line[512];
+                std::snprintf(
+                    line,
+                    sizeof(line),
+                    "  %s[%zu] %s: num_dims=%u sizes[W,H,C,N]=[%u,%u,%u,%u] dtype=%s bytes=%u\n",
+                    tag,
+                    index,
+                    name_str,
+                    num_dims,
+                    sizes[0],
+                    sizes[1],
+                    sizes[2],
+                    sizes[3],
+                    dtypeToString(dtype),
+                    byte_size);
+                out += line;
+            }
+
+            void appendBufferDumpLines(
+                std::string &out,
+                const char *tag,
+                const std::vector<std::array<std::uint32_t, 6>> &sizes_vec,
+                const std::vector<std::uint32_t> &num_dims_vec,
+                const std::vector<TensorDtype> &dtypes_vec,
+                const std::vector<std::uint32_t> &byte_sizes_vec,
+                const std::vector<std::string> &names_vec)
+            {
+                if (sizes_vec.empty())
+                {
+                    out += "  (no ";
+                    out += tag;
+                    out += "s)\n";
+                    return;
+                }
+
+                for (std::size_t i = 0; i < sizes_vec.size(); ++i)
+                {
+                    const std::uint32_t num_dims =
+                        (i < num_dims_vec.size()) ? num_dims_vec[i] : 0u;
+                    const TensorDtype dtype =
+                        (i < dtypes_vec.size()) ? dtypes_vec[i] : TensorDtype::FP32;
+                    const std::uint32_t byte_size =
+                        (i < byte_sizes_vec.size()) ? byte_sizes_vec[i] : 0u;
+                    const std::string *name = (i < names_vec.size()) ? &names_vec[i] : nullptr;
+                    appendBufferDumpLine(
+                        out, tag, i, name, num_dims, sizes_vec[i], dtype, byte_size);
+                }
+            }
+
         } // namespace
 
         int VipLiteRuntime::ref_count_ = 0;
@@ -272,6 +347,28 @@ namespace deploy_percept
         void AwnnEngine::releaseResult()
         {
             release_outputs();
+        }
+
+        std::string AwnnEngine::dump_info() const
+        {
+            std::string out = "AwnnEngine Info:\n";
+            appendBufferDumpLines(
+                out,
+                "input",
+                info_.input_sizes,
+                info_.input_num_dims,
+                info_.input_dtypes,
+                info_.input_byte_sizes,
+                info_.input_names);
+            appendBufferDumpLines(
+                out,
+                "output",
+                info_.output_sizes,
+                info_.output_num_dims,
+                info_.output_dtypes,
+                info_.output_byte_sizes,
+                info_.output_names);
+            return out;
         }
 
         bool AwnnEngine::createNetwork()

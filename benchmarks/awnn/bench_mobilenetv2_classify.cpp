@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -325,7 +326,7 @@ int main(int argc, char **argv)
     std::vector<BenchRowStats> results;
     results.reserve(std::size(kRows));
 
-    ClassificationPostProcessAwnn processor({});
+    std::optional<ClassificationPostProcessAwnn> processor;
 
     for (const BenchRow &row : kRows)
     {
@@ -354,9 +355,16 @@ int main(int argc, char **argv)
                 model_w);
         }
 
+        if (!processor.has_value())
+        {
+            processor.emplace(ClassificationPostProcessAwnn({
+                .num_classes = static_cast<int>(engine.getInfo().output_sizes.at(0)[0]),
+            }));
+        }
+
         std::printf("\n--- running [%s] ---\n", row.tag);
         results.push_back(
-            bench_one_row(engine, processor, input_path, model_w, model_h, row, loops));
+            bench_one_row(engine, *processor, input_path, model_w, model_h, row, loops));
     }
 
     print_report(model_path.c_str(), input_path.c_str(), loops, results);

@@ -31,7 +31,9 @@ protected:
             GTEST_SKIP() << "fixture not found (dump on board first): " << npz_path;
         }
 
-        processor = std::make_unique<ClassificationPostProcessAwnn>(ClassificationPostProcessAwnn::Params{});
+        processor = std::make_unique<ClassificationPostProcessAwnn>(ClassificationPostProcessAwnn::Params{
+            .num_classes = 1000, // mobilenetv2.nb output_sizes[0][0]（unit 无 Engine，与 fixture 一致）
+        });
         model_outputs_npz = cnpy::npz_load(npz_path.string());
     }
 

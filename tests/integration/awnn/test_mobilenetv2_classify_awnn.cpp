@@ -97,7 +97,9 @@ TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
     ASSERT_FALSE(engine.getResult().tensor_views.empty());
     ASSERT_GE(engine_result_guard.getEngineResult().tensor_views.size(), 1u);
 
-    ClassificationPostProcessAwnn processor({});
+    ClassificationPostProcessAwnn processor({
+        .num_classes = static_cast<int>(engine.getInfo().output_sizes.at(0)[0]),
+    });
     ASSERT_TRUE(processor.run(engine_result_guard.getEngineResult().tensor_views));
 
     const auto &result = processor.getResult();

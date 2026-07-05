@@ -124,6 +124,9 @@ namespace deploy_percept
             /** 构造是否成功（模型加载、IO 准备、vip_prepare_network） */
             bool is_valid() const { return valid_; }
 
+            /** 格式化 VIP IO 元信息，供日志/调试；不写入 stdout */
+            std::string dump_info() const;
+
             /**
              * 拷贝 host 输入 → vip_run_network → 填充 getResult().tensor_views。
              * is_copy_host==false：views 指向 mapped；is_copy_host==true：views 指向 host 缓存。
