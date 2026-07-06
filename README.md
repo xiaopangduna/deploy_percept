@@ -1,220 +1,160 @@
 # deploy_percept
 
-一个边缘AI推理框架，支持YOLO系列模型的目标检测和实例分割。
-
 ## 项目简介
 
-`deploy_percept` 是一个高性能边缘AI推理框架。该项目提供了一套完整的解决方案，支持YOLOv5、YOLOv8等主流模型的目标检测和实例分割任务。框架采用模块化设计，便于扩展和维护。
+边缘 AI 推理框架，提供 YOLO 系列目标检测 / 实例分割 / 姿态估计，以及分类模型的推理与后处理。采用模块化 CMake 工程，支持宿主机开发验证与交叉编译部署。
 
-## 功能特性
+### 平台与 CMake Preset
 
-- **多模型支持**：支持YOLOv5、YOLOv8等主流目标检测和分割模型
+| Preset | 用途 | NPU 引擎 |
+|--------|------|----------|
+| `x86_64-debug` | 宿主机开发、后处理单测 | — |
+| `aarch64-linux-gnu_orange_pi_4_pro_a733-release` | Orange Pi A733 交叉编译与板端部署 | AWNN |
+| `armv7l-SSC375-release` | Sigmastar 预留 | 未启用 |
 
-## 项目结构
+开发容器：`.devcontainer/ubuntu-22.04-allwinner/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
 
-```
-deploy_percept/
-├── CMakeLists.txt                 # 根CMakeLists.txt，配置整个项目
-├── README.md
-├── apps/                          # 示例应用
-│   ├── yolov5_detect_rknn/        # YOLOv5目标检测示例
-│   ├── yolov5_seg_rknn/           # YOLOv5实例分割示例
-│   └── yolov8_seg_rknn/           # YOLOv8实例分割示例
-├── cmake/                         # CMake 配置
-│   ├── toolchains/                # 交叉编译工具链
-│   └── modules/                   # Find*.cmake 第三方库查找模块
-├── examples/                      # 示例数据
-│   └── data/
-├── include/                       # 公共头文件
-│   └── deploy_percept/
-│       ├── engine/                # 推理引擎接口
-│       ├── post_process/          # 后处理算法
-│       ├── pre_process/           # 预处理算法
-│       ├── utils/                 # 工具函数
-│       └── deploy_percept.hpp     # 主要入口头文件
-├── scripts/                       # 构建与测试脚本
-│   ├── build.sh                   # 编译（cmake configure + build）
-│   ├── install.sh                 # 安装（cmake install → install/<platform>/）
-│   ├── test.sh                    # build + install + 验证 install 包（PC / 开发板）
-│   └── third_party_builders/      # 第三方库构建脚本
-├── src/                           # 源代码
-│   ├── engine/                    # 推理引擎实现
-│   ├── post_process/              # 后处理算法实现
-│   ├── pre_process/               # 预处理算法实现
-│   └── utils/                     # 工具函数实现
-├── tests/                         # 测试代码
-│   ├── fixtures/                  # 测试与 demo 共用数据（install → share/percept/fixtures/）
-│   ├── unit/                      # 单元测试
-│   ├── integration/               # 集成测试
-│   └── test_common/               # 测试通用组件
-└── third_party/                   # 第三方依赖（可能在.gitignore中）
-```
+## 构建与测试
 
-## 模块划分
+### 1. 工具链
 
-| 模块 | CMake target | 头文件入口 | 说明 |
-|------|--------------|------------|------|
-| **core** | `deploy_percept_core` | `deploy_percept.hpp` + `engine/`、`post_process/`、`types.hpp` | 推理与后处理，无 OpenCV |
-| **utils** | `deploy_percept_utils` | `deploy_percept_utils.hpp` + `utils/`、`pre_process/` | cnpy + OpenCV + spdlog 齐备才编译；RGA 源仍按平台可选 |
-| **app** | — | 按需细 include 或两个 umbrella | 通常链 `core` + `utils` |
-| **tests** | 分层门禁见下 | — | unit/integration 依赖 `deploy_percept_utils` |
+- **x86_64**：无需额外配置，使用宿主机或 devcontainer 自带编译器。
+- **aarch64-linux-gnu_orange_pi_4_pro_a733**：下载 `gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`，放置于 `/opt/toolchains/`
+  - 下载：https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
 
-测试分层（`ENABLE_TESTS=ON` 时在 `tests/CMakeLists.txt` 按层 gate，依赖不齐则 WARNING 跳过整层）：
+### 2. 第三方库
 
-| 层级 | 编译条件 | 内容 |
-|------|----------|------|
-| smoke | `GTest` | 标准库 / 可选 spdlog 链路 |
-| unit | `GTest` + `deploy_percept_utils` | post_process 单测 |
-| integration | `GTest` + `AWNN` + `deploy_percept_utils` | AWNN 流水线集成测 |
+构建产物安装至 `third_party/<platform>/`（`<platform>` 与 preset 对应 toolchain 中的平台 tag 一致）。
 
-头文件**物理目录统一**在 `include/deploy_percept/`。需要推理链 `deploy_percept_core`；需要 vis/pre/io 等再链 `deploy_percept_utils`（demo / 单测通常两者都链）。
-
-## 依赖项
-
-- **OpenCV / spdlog / cnpy**：齐备后编译 `deploy_percept_utils`（core 不依赖 OpenCV）
-- **CMake**：构建系统
-
-## 编译与测试
-
-### 脚本职责
-
-| 脚本 | 作用 |
-|------|------|
-| `scripts/build.sh` | 仅编译，产物在 `build/<preset>/` |
-| `scripts/install.sh` | 仅安装，打包到 `install/<platform>/`（需先 build） |
-| `scripts/test.sh` | build + install + 验证 install 包（PC 本地或开发板 rsync+SSH） |
-
-### 环境准备
-
-在 devcontainer 中打开项目。Orange Pi 4 Pro (A733) 交叉工具链：
+- **公开库**（cnpy、gtest、opencv、spdlog 等）：由 `scripts/third_party_builder.sh` 调度，各库的下载与编译脚本在 [`scripts/third_party_builders/`](scripts/third_party_builders/)（`builder_*.sh`），可直接构建。
+- **非公开 / 平台专属库**（如 AWNN、RKNN、RGA）：不在上述脚本内自动下载，需按 [`cmake/modules/`](cmake/modules/) 中对应 `Find*.cmake` 的说明手动准备（例如 AWNN 见 `FindAwnn.cmake`，VIPLite 放入 `third_party/<platform>/awnn/`）。
 
 ```bash
-# 工具链: gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu
-# 挂载至容器 /opt/toolchains
-# 参考: https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
+bash scripts/third_party_builder.sh --help
+bash scripts/third_party_builder.sh <platform> --libs <libs>
 ```
 
-安装第三方库：
-
 ```bash
-# 宿主机 x86_64
+# x86_64
 bash scripts/third_party_builder.sh x86_64 --libs all
 
-# Orange Pi A733 交叉编译
+# aarch64-linux-gnu_orange_pi_4_pro_a733
 bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,gtest,opencv,spdlog
 ```
 
-# 与平台相关的库需要参考 /cmake/modules/ 自行配置
-
-### 宿主机开发（x86_64）
+### 3. 构建
 
 ```bash
-bash scripts/test.sh --preset x86_64-debug
+bash scripts/build.sh --preset <preset>
 ```
-
-等价于依次执行 build、install，并在 `install/x86_64/` 上跑 `share/percept/tests/`。
-
-开发期 build tree GTest（不经过 test.sh）：
 
 ```bash
 bash scripts/build.sh --preset x86_64-debug
-cd build/x86_64-debug && ctest --output-on-failure
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
-### 交叉编译（Orange Pi 4 Pro A733）
+### 4. 安装
 
 ```bash
-bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/install.sh --preset <preset>
+```
+
+```bash
+bash scripts/install.sh --preset x86_64-debug
 bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
 
-也可直接使用 CMake preset：
+### 5. 测试
 
 ```bash
-cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
-cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
-cmake --install build/aarch64-linux-gnu_orange_pi_4_pro_a733-release
-```
-
-### 测试（install 包）
-
-`test.sh` 固定流程：**build → install → 跑 install 内测试**（与板端部署形态一致）。
-
-#### PC（本地 install）
-
-```bash
+# x86_64：本地
 bash scripts/test.sh --preset x86_64-debug
-bash scripts/test.sh --preset x86_64-debug --bench 50   # 含 benchmark
-```
 
-#### 开发板（build + install + rsync + SSH 远程测）
+# aarch64-linux-gnu_orange_pi_4_pro_a733：远程
 
-板子无需 cmake/ctest/源码，只需完整 install 目录。
+# 需先设置ssh密码
+export SSHPASS='your_password'
 
-```bash
-# 密钥登录（推荐：ssh-copy-id orangepi@192.168.0.103）
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@192.168.0.103:~/deploy_percept
 
-# 密码登录：当前 shell 导出 SSHPASS（需 sshpass，devcontainer 已安装）
-export SSHPASS='your_password'
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@192.168.0.103:~/deploy_percept --bench 100
-
-# 仅同步 install 到板子（不跑远程测试；需先 build + install）
-bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
-bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+# 同步
 rsync -avz --delete -e ssh \
   install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
   orangepi@192.168.0.103:~/deploy_percept/
-# 密码登录时把 -e ssh 换成：
-# rsync -avz --delete -e "sshpass -e ssh -o StrictHostKeyChecking=accept-new" ...
 ```
 
-**PC 依赖**：`ssh`、`rsync`；使用密码时需 `sshpass` 且设置环境变量 `SSHPASS`（勿提交仓库）。
+## 架构说明
 
-**板子依赖**：`bin/`、`lib/`、`share/percept/` 等 install 内容，以及系统基础库（`libc`、`libstdc++`）。
-
-路径可使用 `~/deploy_percept` 或绝对路径 `/home/orangepi/deploy_percept`。
-
-**预期结果**（已安装项均 `[  PASSED  ]`；未安装或平台不适用则 skip）：
-
-- `share/percept/tests/smoke_tests`
-- `share/percept/tests/test_YoloV5DetectPostProcessRknn`
-- `share/percept/tests/test_YoloV5SegPostProcessRknn`（mask 比对允许约 3% 像素容差，板子上可能打印 `Vectors are not equal` 仍可通过）
-- `share/percept/tests/test_YoloV8SegPostProcessRknn`
-- `share/percept/tests/test_yolov5_detect_awnn`（仅 AWNN/aarch64 install 包）
-
-构建 install 包时需 `ENABLE_TESTS=ON`（默认）且 `INSTALL_TESTS=ON`（默认）。量产包可 `-DINSTALL_TESTS=OFF`，仅保留 `bin/` demo。
-
-### install 目录结构
+### 目录结构
 
 ```
-install/<platform>/
-├── bin/                         # demo 可执行文件（如 yolov5_detect_awnn）
-├── lib/                         # libdeploy_percept.a、VIPLite 等
-├── include/deploy_percept/      # 头文件
-├── share/percept/
-│   ├── fixtures/                # 测试与 demo 共用 fixture 数据
-│   └── tests/                   # 测试可执行文件（INSTALL_TESTS=ON）
-└── var/percept/output/          # 测试输出（运行时自动创建）
+deploy_percept/
+├── CMakeLists.txt
+├── CMakePresets.json              # configure / build preset
+├── README.md
+├── apps/                          # 见示例应用
+├── benchmarks/                    # 性能 benchmark（AWNN，ENABLE_BENCHMARKS）
+├── cmake/
+│   ├── FindThirdParty.cmake       # 第三方库查找唯一入口
+│   ├── PerceptInstall.cmake
+│   ├── modules/                   # Find*.cmake
+│   └── toolchains/
+├── include/deploy_percept/
+│   ├── common/                    # types 等公共契约
+│   ├── core/                      # engine、post_process、deploy_percept.hpp
+│   ├── data/                      # COCO / ImageNet 标签
+│   └── utils/                     # 预处理、可视化、io、fixture_path
+├── scripts/
+│   ├── build.sh                   # 构建脚本
+│   ├── install.sh                 # 安装脚本
+│   ├── test.sh                    # 测试脚本
+│   ├── third_party_builder.sh     # 多个第三方库安装调度脚本
+│   └── third_party_builders/      # 单个第三方库安装调度脚本
+├── src/
+│   ├── common/
+│   ├── core/                      # deploy_percept_core
+│   └── utils/                     # deploy_percept_utils
+├── tests/
+│   ├── fixtures/                  # install → share/percept/fixtures/
+│   ├── smoke/
+│   ├── unit/post_process/
+│   ├── integration/awnn/
+│   └── test_common/
+└── third_party/                   # 第三方预编译产物
 ```
 
+### 库模块
 
-## 使用示例
+| 模块 | CMake target | 头文件入口 | 说明 |
+|------|--------------|------------|------|
+| **common** | `deploy_percept_common` | `common/types.hpp` | 类型与公共契约，INTERFACE |
+| **core** | `deploy_percept_core` | `core/deploy_percept.hpp` + `engine/`、`post_process/` | 推理与后处理，不依赖 OpenCV |
+| **utils** | `deploy_percept_utils` | `utils/deploy_percept_utils.hpp` | cnpy + OpenCV + spdlog 齐备才编译；RGA 按平台可选 |
+| **apps** | — | 按需 include | 通常链 `core` + `utils` |
+| **tests** | 分层门禁见下 | — | unit / integration 依赖 `deploy_percept_utils` |
 
-项目提供了几个使用示例：
-### rknn
-1. **yolov5_detect_rknn**：YOLOv5目标检测示例
-2. **yolov5_seg_rknn**：YOLOv5实例分割示例
-3. **yolov8_seg_rknn**：YOLOv8实例分割示例
+需要推理链 `deploy_percept_core`；需要 vis / pre_process / io 等再链 `deploy_percept_utils`（demo / 单测通常两者都链）。
 
-## 性能优化
+### 依赖项
 
-- 使用RKNN硬件加速推理
-- 优化内存分配和数据传输
-- 采用高效的后处理算法
+- **OpenCV / spdlog / cnpy**：齐备后编译 `deploy_percept_utils`（core 不依赖 OpenCV）
+- **GTest**：测试
+- **AWNN / VIPLite**：A733 平台 NPU 运行时（需手动放入 `third_party/.../awnn/viplite-tina`，见 [示例应用](#示例应用) 各 app README）
 
-## 许可证
+第三方库查找：`FindThirdParty.cmake` 为唯一入口。
 
-本项目采用 MIT 许可证，请参阅 LICENSE 文件获取更多信息。
+## 示例应用
+
+示例位于 [`apps/`](apps/)，按芯片与任务索引；模型准备与运行步骤见各应用文档。
+
+| 芯片 | 任务 | 应用 | 文档 |
+|------|------|------|------|
+| A733 | 目标检测 | `yolov5_detect_awnn` | [README](apps/yolov5_detect_awnn/README.md) |
+| A733 | 目标检测 | `yolov8_detect_awnn` | [README](apps/yolov8_detect_awnn/README.md) |
+| A733 | 图像分类 | `mobilenetv2_classify_awnn` | [README](apps/mobilenetv2_classify_awnn/README.md) |
+| RK3588 | 目标检测 | `yolov5_detect_rknn` | — |
+| RK3588 | 实例分割 | `yolov5_seg_rknn` | — |
+| RK3588 | 实例分割 | `yolov8_seg_rknn` | [README](apps/yolov8_seg_rknn/README.md) |
+| RK3588 | 姿态估计 | `yolov8_pose_rknn` | — |
+

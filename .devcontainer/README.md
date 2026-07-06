@@ -26,27 +26,24 @@
 
 - 基础镜像：Ubuntu 22.04（orangepi-build 官方推荐宿主机版本）
 - 运行用户：`vscode`（非 root；`updateRemoteUserUID` 与 WSL 宿主机 UID 对齐，避免 bind mount 出现 `nobody` 权限问题）
-- 挂载：`tmp/toolchains` → 容器内 `/opt/toolchains`
-- 预期工具链：`gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`（A733 内核 / 应用交叉编译）
+- 工作区：`deploy_percept` 作为独立仓库打开时，**不要**设置 `workspaceMount` / `workspaceFolder`（`devcontainer.json` 中默认已注释）
+- 工具链：宿主机 `tmp/toolchains/` → 容器 `/opt/toolchains/`
+- 预期工具链：`gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`（A733 交叉编译）
 
-### Git 工作流
+### 工作区挂载
 
-- **WSL 里 pull/push/commit**：推荐；无需在容器内挂载 SSH，沿用 WSL 的 `~/.ssh` 或 HTTPS 凭据即可。
-- **容器里 pull/push/commit（SSH 远程）**：需在 `devcontainer.json` 额外挂载宿主机 `~/.ssh`，或配置 SSH agent 转发。
-- **容器里 pull/push/commit（HTTPS）**：无需挂载 SSH，使用 credential helper / PAT 即可。
+| 场景 | 做法 |
+|------|------|
+| **独立仓库**（默认） | 在 Cursor 打开 `deploy_percept` 根目录；`devcontainer.json` 里 `workspaceMount` / `workspaceFolder` **保持注释** |
+| **嵌在 monorepo** | 取消注释上述两行，按实际上级路径修改 `source`、`target`、`workspaceFolder` |
 
-工具链准备示例：
+工具链准备（解压或链接到项目内 `tmp/toolchains/`）：
 
 ```bash
-# 方式 1：orangepi-build 首次构建自动下载后，链接到 tmp/toolchains
-ln -sfn "$(pwd)/tmp/orangepi-build/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu" \
+mkdir -p tmp/toolchains
+# 手动解压官方包，或链接已有工具链：
+ln -sfn /path/to/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu \
   tmp/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu
-
-# 方式 2：手动解压官方包到 tmp/toolchains/
 ```
 
-## 新增容器
-
-1. 复制 `ubuntu-22.04-allwinner/` 为模板
-2. 修改 `Dockerfile`、`devcontainer.json` 中的 `name`、挂载与依赖
-3. 通过 `Open Container Configuration File` 选择新配置
+下载参考：https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/

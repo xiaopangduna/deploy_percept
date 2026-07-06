@@ -1,6 +1,6 @@
 {
     "name": "ubuntu-22.04-allwinner",
-    "remoteUser": "vscode",
+    "remoteUser": "vscode", //远程用户，避免容器内用户与宿主机用户不一致
     "updateRemoteUserUID": true,
     "build": {
         "dockerfile": "Dockerfile",
@@ -16,18 +16,22 @@
         }
     },
     "mounts": [
-        "source=/opt/toolchains,target=/opt/toolchains,type=bind",
-        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+        "source=/opt/toolchains,target=/opt/toolchains,type=bind", //工具链挂载
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached" //SSH挂载，git操作
     ],
+
+    // 挂载 deploy_percept 上两级目录（deep_learning）；须以 deploy_percept 为工作区根打开
+    "workspaceMount": "source=${localWorkspaceFolder}/../..,target=/workspace/deep_learning,type=bind",
+    "workspaceFolder": "/workspace/deep_learning/src/deploy_percept",
     "runArgs": [
-        "--env=DISPLAY=${env:DISPLAY}",
-        "--env=NO_AT_BRIDGE=1",
-        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
-        "--network=host"
+        "--env=DISPLAY=${env:DISPLAY}", //显示环境变量，图形界面操作
+        "--env=NO_AT_BRIDGE=1", //避免桥接，图形界面操作
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw", //X11挂载，图形界面操作
+        "--network=host" //网络host，方便使用宿主机网络
     ],
     "containerEnv": {
-        "DISPLAY": "${localEnv:DISPLAY}",
-        "NO_AT_BRIDGE": "1"
+        "DISPLAY": "${localEnv:DISPLAY}", //显示环境变量，图形界面操作
+        "NO_AT_BRIDGE": "1" //避免桥接，图形界面操作
     },
     "postCreateCommand": "bash .devcontainer/ubuntu-22.04-allwinner/post-create.sh",
     "postStartCommand": "bash .devcontainer/ubuntu-22.04-allwinner/post-start.sh",

@@ -81,6 +81,7 @@ if [ -z "$PLATFORM" ]; then
     exit 1
 fi
 
+
 # 检查平台：x86_64 跳过（RKNPU 主要用于 ARM 平台）
 if [ "$PLATFORM" = "x86_64" ]; then
     echo "[RKNPU构建器] 平台为 x86_64，跳过 RKNPU 库的安装（RKNPU 主要用于 ARM 平台）"

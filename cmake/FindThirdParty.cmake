@@ -27,13 +27,13 @@ endif()
 # if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_rk3588")
 #     include(FindRknn)
 #     include(FindRgaCustom)
+#     include(FindRgaCustom)
 # endif()
 
 # 与平台无关：cnpy / OpenCV / spdlog / GTest / RGA 统一 Find（非致命）
 include(FindCnpyCustom)
 include(FindSpdlogCustom)
 include(FindOpenCVCustom)
-include(FindRgaCustom)
 include(FindGTestCustom)
 
 # TODO: yaml-cpp（RKNN app 启用后再 include(FindYamlCppCustom)）

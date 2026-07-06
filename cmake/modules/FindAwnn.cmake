@@ -4,8 +4,8 @@
 #   ${THIRD_PARTY_PLATFORM_DIR}/awnn/npuruntime
 #
 # 下载来源（由维护者填写，Find 模块不自动下载）：
-# set(AWNN_NPU_RUNTIME_PACKAGE_URL "https://open.allwinnertech.com/#/otherDir/aiToolList")
-# set(AWNN_NPU_RUNTIME_PACKAGE_VERSION "v1.0.0-20260423")
+# https://open.allwinnertech.com/#/otherDir/aiToolList
+
 #
 # 提供：AWNN_FOUND、AWNN::VIPLite（头文件 + libNBGlinker.so + libVIPhal.so）
 # install 打包上述 .so 至 ${CMAKE_INSTALL_LIBDIR}
