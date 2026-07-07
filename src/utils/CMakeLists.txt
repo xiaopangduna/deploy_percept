@@ -34,3 +34,8 @@ if(RGA_FOUND)
     target_include_directories(deploy_percept_utils PUBLIC ${LIBRGA_INCLUDES})
     target_link_libraries(deploy_percept_utils PUBLIC ${LIBRGA})
 endif()
+
+include(GNUInstallDirs)
+
+install(TARGETS deploy_percept_utils
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})

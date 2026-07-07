@@ -36,11 +36,12 @@ namespace deploy_percept
 
                 if (exe_dir.filename() == "tests" || exe_dir.filename() == "benchmarks")
                 {
-                    const fs::path percept_dir = exe_dir.parent_path();
-                    if (percept_dir.filename() == "percept")
+                    const fs::path parent = exe_dir.parent_path();
+                    if (parent.filename() == "percept")
                     {
-                        return percept_dir.parent_path().parent_path();
+                        return parent.parent_path().parent_path();
                     }
+                    return parent;
                 }
 
                 if (exe_dir.filename() == "bin")

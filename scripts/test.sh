@@ -9,8 +9,8 @@ BOARD=""
 RUN_BENCH=0
 BENCH_LOOPS=50
 
-PERCEPT_TESTS_REL="share/percept/tests"
-PERCEPT_BENCHMARKS_REL="share/percept/benchmarks"
+PERCEPT_TESTS_REL="tests"
+PERCEPT_BENCHMARKS_REL="benchmarks"
 
 PERCEPT_INSTALL_TESTS=(
     test_smoke
@@ -40,7 +40,7 @@ show_help() {
     echo "用法: bash $0 --preset <name> [选项]"
     echo ""
     echo "流程:"
-    echo "  PC 模式:     build → install（清理旧 tests/benchmarks）→ 本地 share/percept/tests/"
+    echo "  PC 模式:     build → install（清理旧 tests/benchmarks）→ 本地 tests/"
     echo "  开发板模式:  build → install → rsync --delete → SSH 远程跑同一套测试"
     echo ""
     echo "选项:"

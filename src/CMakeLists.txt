@@ -2,3 +2,8 @@
 add_subdirectory(common)
 add_subdirectory(core)
 add_subdirectory(utils)
+
+include(GNUInstallDirs)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/deploy_percept
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

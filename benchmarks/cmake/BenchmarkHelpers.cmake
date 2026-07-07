@@ -1,8 +1,9 @@
-# 性能 benchmark 可执行文件 install 相对路径（相对 CMAKE_INSTALL_PREFIX）
-set(PERCEPT_BENCHMARKS_INSTALL_DIR "share/percept/benchmarks")
+include(GNUInstallDirs)
 
-# install prefix/lib 相对 share/percept/benchmarks/<exe>
-set(PERCEPT_BENCHMARKS_INSTALL_RPATH "$ORIGIN/../../../lib")
+# 相对 CMAKE_INSTALL_PREFIX（与 bin/、include/ 同级）
+set(PERCEPT_BENCHMARKS_INSTALL_DIR "benchmarks")
+# prefix/benchmarks/<exe> → prefix/lib
+set(PERCEPT_BENCHMARKS_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
 
 function(percept_install_benchmark)
     if(NOT INSTALL_BENCHMARKS)

@@ -1,8 +1,9 @@
-# 测试可执行文件 install 相对路径（相对 CMAKE_INSTALL_PREFIX）
-set(PERCEPT_TESTS_INSTALL_DIR "share/percept/tests")
+include(GNUInstallDirs)
 
-# install prefix/lib 相对 share/percept/tests/<exe>
-set(PERCEPT_TESTS_INSTALL_RPATH "$ORIGIN/../../../lib")
+# 相对 CMAKE_INSTALL_PREFIX（与 bin/、include/ 同级）
+set(PERCEPT_TESTS_INSTALL_DIR "tests")
+# prefix/tests/<exe> → prefix/lib
+set(PERCEPT_TESTS_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
 
 function(percept_install_test)
     if(NOT INSTALL_TESTS)

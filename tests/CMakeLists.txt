@@ -15,13 +15,14 @@ target_link_libraries(test_common PUBLIC
     deploy_percept_utils
     GTest::gtest)
 
-if(INSTALL_TESTS)
-    install(
-        DIRECTORY "${CMAKE_SOURCE_DIR}/tests/fixtures/"
-        DESTINATION share/percept/fixtures
-        USE_SOURCE_PERMISSIONS)
-endif()
-
 add_subdirectory(smoke)
 add_subdirectory(unit)
 add_subdirectory(integration)
+
+if(INSTALL_TESTS)
+    include(GNUInstallDirs)
+    install(
+        DIRECTORY "${CMAKE_SOURCE_DIR}/tests/fixtures/"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/percept/fixtures"
+        USE_SOURCE_PERMISSIONS)
+endif()

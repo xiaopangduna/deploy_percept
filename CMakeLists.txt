@@ -4,9 +4,9 @@ cmake_minimum_required(VERSION 3.10)
 project(deploy_percept VERSION 0.1.0 LANGUAGES CXX C)
 
 option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
-option(INSTALL_TESTS "Install test executables to share/percept/tests (requires ENABLE_TESTS)" ON)
+option(INSTALL_TESTS "Install test executables to tests/ (requires ENABLE_TESTS)" ON)
 option(ENABLE_BENCHMARKS "Build performance benchmarks" OFF)
-option(INSTALL_BENCHMARKS "Install benchmarks to share/percept/benchmarks (requires ENABLE_BENCHMARKS)" ON)
+option(INSTALL_BENCHMARKS "Install benchmarks to benchmarks/ (requires ENABLE_BENCHMARKS)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -85,5 +85,4 @@ else()
     endif()
 endif()
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PerceptInstall.cmake)
 message(STATUS "==============================================================================")

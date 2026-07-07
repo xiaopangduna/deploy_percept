@@ -101,7 +101,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@<ip>:~/deploy_percept
 ```
 
-对应 `share/percept/tests/test_mobilenetv2_classify_awnn`。Top-5 class_id 真值：`{281, 282, 285, 287, 478}`。
+对应 `tests/test_mobilenetv2_classify_awnn`。Top-5 class_id 真值：`{281, 282, 285, 287, 478}`。
 
 ## 性能 benchmark
 
@@ -113,5 +113,5 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 # 或 install prefix 本地直接跑
 export PERCEPT_ROOT=$PWD/share/percept
 export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
-./share/percept/benchmarks/bench_mobilenetv2_classify 50
+./benchmarks/bench_mobilenetv2_classify 50
 ```

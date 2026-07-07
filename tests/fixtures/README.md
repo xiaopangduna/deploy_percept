@@ -48,4 +48,4 @@ deploy_percept::utils::fixture_path("integration/awnn/yolov5_detect/yolov5.nb");
 | `ctest`（build tree） | 项目根 | `tests/fixtures/...` |
 | install / `test.sh` | `share/percept` | `share/percept/fixtures/...` |
 
-未设置 `PERCEPT_ROOT` 时，会从可执行文件路径向上查找 `share/percept` 或项目根。
+未设置 `PERCEPT_ROOT` 时，会从可执行文件路径向上查找 install prefix，再定位 `share/percept/fixtures/`（测试在 `tests/`，benchmark 在 `benchmarks/`）。

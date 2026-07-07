@@ -102,7 +102,7 @@ configure_platform() {
 
     if [ -z "${BUILD_JOBS}" ]; then
         local nproc
-        nproc=$(nproc 2>/dev/null || echo 4)
+        nproc=$(nproc 2>/dev/null || echo 8)
         if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
             BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
         else

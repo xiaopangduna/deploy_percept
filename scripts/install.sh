@@ -56,18 +56,22 @@ INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCac
 
 clean_stale_install_artifacts() {
     if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
-        local tests_dir="${INSTALL_DIR}/share/percept/tests"
-        if [[ -d "${tests_dir}" ]]; then
-            echo "清理旧测试可执行文件: ${tests_dir}/"
-            find "${tests_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
-        fi
+        local tests_dir
+        for tests_dir in "${INSTALL_DIR}/tests" "${INSTALL_DIR}/share/percept/tests"; do
+            if [[ -d "${tests_dir}" ]]; then
+                echo "清理旧测试可执行文件: ${tests_dir}/"
+                find "${tests_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+            fi
+        done
     fi
     if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
-        local bench_dir="${INSTALL_DIR}/share/percept/benchmarks"
-        if [[ -d "${bench_dir}" ]]; then
-            echo "清理旧 benchmark 可执行文件: ${bench_dir}/"
-            find "${bench_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
-        fi
+        local bench_dir
+        for bench_dir in "${INSTALL_DIR}/benchmarks" "${INSTALL_DIR}/share/percept/benchmarks"; do
+            if [[ -d "${bench_dir}" ]]; then
+                echo "清理旧 benchmark 可执行文件: ${bench_dir}/"
+                find "${bench_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+            fi
+        done
     fi
 }
 
@@ -85,12 +89,12 @@ echo "  lib/                      库（libdeploy_percept_core.a、libdeploy_per
 echo "  include/deploy_percept/"
 echo "  share/percept/fixtures/   测试与 demo 共用 fixture 数据"
 if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
-    echo "  share/percept/tests/      测试可执行文件"
+    echo "  tests/                    测试可执行文件"
 else
-    echo "  (INSTALL_TESTS=OFF，未安装 share/percept/tests/)"
+    echo "  (INSTALL_TESTS=OFF，未安装 tests/)"
 fi
 if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
-    echo "  share/percept/benchmarks/ benchmark 可执行文件"
+    echo "  benchmarks/               benchmark 可执行文件"
 else
     echo "  (INSTALL_BENCHMARKS=OFF 或 ENABLE_BENCHMARKS=OFF，未安装 benchmarks/)"
 fi

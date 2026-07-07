@@ -8,8 +8,11 @@ target_link_libraries(yolov8_detect_awnn PRIVATE
     deploy_percept_core
     deploy_percept_utils)
 
-install(TARGETS yolov8_detect_awnn RUNTIME DESTINATION bin)
+include(GNUInstallDirs)
 
 set_target_properties(yolov8_detect_awnn PROPERTIES
     BUILD_RPATH "${AWNN_VIPLITE_LIB_DIR}"
-    INSTALL_RPATH "$ORIGIN/../lib")
+    INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+
+install(TARGETS yolov8_detect_awnn
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

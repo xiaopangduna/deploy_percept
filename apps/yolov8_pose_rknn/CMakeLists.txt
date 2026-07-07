@@ -6,6 +6,7 @@ add_executable(yolov8_pose_rknn main.cpp)
 
 target_link_libraries(yolov8_pose_rknn PRIVATE deploy_percept_core deploy_percept_utils)
 
+include(GNUInstallDirs)
+
 install(TARGETS yolov8_pose_rknn
-    RUNTIME DESTINATION bin
-)
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

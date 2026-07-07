@@ -41,3 +41,8 @@ if(AWNN_FOUND)
     target_link_libraries(deploy_percept_core PUBLIC AWNN::VIPLite pthread)
     target_compile_definitions(deploy_percept_core PUBLIC AWNN_FOUND=1)
 endif()
+
+include(GNUInstallDirs)
+
+install(TARGETS deploy_percept_core
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})

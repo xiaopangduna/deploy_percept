@@ -70,7 +70,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@<ip>:~/deploy_percept
 ```
 
-对应 `share/percept/tests/test_yolov8_detect_awnn`（integration test）。
+对应 `tests/test_yolov8_detect_awnn`（integration test）。
 
 **性能 benchmark（install 后，与测试同一脚本）：**
 
@@ -82,7 +82,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 # 或 install prefix 本地直接跑 benchmark
 export PERCEPT_ROOT=$PWD/share/percept
 export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
-./share/percept/benchmarks/bench_yolov8 50
+./benchmarks/bench_yolov8 50
 ```
 
 ## 预处理

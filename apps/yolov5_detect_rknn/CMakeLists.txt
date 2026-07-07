@@ -6,7 +6,7 @@ add_executable(yolov5_detect_rknn main.cpp)
 
 target_link_libraries(yolov5_detect_rknn PRIVATE deploy_percept_core deploy_percept_utils)
 
-# 安装可执行文件
+include(GNUInstallDirs)
+
 install(TARGETS yolov5_detect_rknn
-    RUNTIME DESTINATION bin
-)
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
