@@ -51,12 +51,17 @@ PLATFORM=""
 PROJECT_ROOT=""
 INSTALL_DIR=""
 TOOLCHAIN_FILE=""
+LINK_TYPE=""
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         --platform)
             PLATFORM="$2"
+            shift 2
+            ;;
+        --link-type)
+            LINK_TYPE="$2"
             shift 2
             ;;
         --build-mode|--project-root|--install-dir|--toolchain-file|--jobs)
@@ -80,6 +85,9 @@ if [ -z "$PLATFORM" ]; then
     show_help
     exit 1
 fi
+
+LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
+EFFECTIVE_LINK_TYPE=$(resolve_effective_link_type rknpu "${LINK_TYPE}")
 
 
 # 检查平台：x86_64 跳过（RKNPU 主要用于 ARM 平台）

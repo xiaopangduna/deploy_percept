@@ -30,10 +30,12 @@ endif()
 #     include(FindRgaCustom)
 # endif()
 
-# 与平台无关：cnpy / OpenCV / spdlog / GTest / RGA 统一 Find（非致命）
+# 与平台无关：第三方 Find（非致命）
+# cnpy 依赖 ZLIB::ZLIB，须先 include FindZlibCustom
+include(FindZlibCustom)
 include(FindCnpyCustom)
-include(FindSpdlogCustom)
 include(FindOpenCVCustom)
+include(FindSpdlogCustom)
 include(FindGTestCustom)
 
 # TODO: yaml-cpp（RKNN app 启用后再 include(FindYamlCppCustom)）

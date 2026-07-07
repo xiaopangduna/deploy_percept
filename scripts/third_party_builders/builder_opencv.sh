@@ -25,6 +25,8 @@ BUILD_JOBS=""
 USE_TOOLCHAIN_CC=1
 OPENCV_VERSION="4.5.4"
 CROSS_COMPILE_PREFIX=""
+LINK_TYPE=""
+EFFECTIVE_LINK_TYPE=""
 
 log() { echo "[OpenCV构建器] $*"; }
 
@@ -64,6 +66,7 @@ parse_args() {
             --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
             --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
             --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
+            --link-type)      LINK_TYPE="$2"; shift 2 ;;
             --jobs)           BUILD_JOBS="$2"; shift 2 ;;
             --help)           show_help; exit 0 ;;
             *)
@@ -202,16 +205,32 @@ prepare_opencv_source() {
 }
 
 build_opencv_cmake_args() {
+    local shared_flag
+    shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
+
     OPENCV_CMAKE_ARGS=(
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/opencv"
         -DOPENCV_DOWNLOAD_PATH="${OPENCV_CACHE_DIR}"
         -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
-        -DBUILD_SHARED_LIBS=OFF
+        -DBUILD_SHARED_LIBS="${shared_flag}"
         -DBUILD_PNG=ON
         -DPNG_LIBRARY=""
         -DPNG_PNG_INCLUDE_DIR=""
     )
+
+    local zlib_root="${INSTALL_DIR}/${PLATFORM}/zlib"
+    local zlib_lib
+    if zlib_lib=$(find_zlib_library_path "${zlib_root}" "${EFFECTIVE_LINK_TYPE}") && [[ -f "${zlib_root}/include/zlib.h" ]]; then
+        OPENCV_CMAKE_ARGS+=(
+            -DBUILD_ZLIB=OFF
+            -DZLIB_INCLUDE_DIR="${zlib_root}/include"
+            -DZLIB_LIBRARY="${zlib_lib}"
+        )
+        log "ZLIB: ${zlib_lib}（install 后将改写 OpenCVModules.cmake 为相对路径）"
+    else
+        log "警告: 未找到 ${zlib_root}，请先构建 zlib；否则 OpenCV 可能链接到错误路径"
+    fi
 
     if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
         OPENCV_CMAKE_ARGS+=(
@@ -236,7 +255,10 @@ build_opencv_cmake_args() {
 }
 
 configure_build_install() {
+    local install_prefix="${INSTALL_DIR}/${PLATFORM}/opencv"
     local build_dir="build_${PLATFORM}"
+
+    clean_third_party_install_prefix "${install_prefix}"
     rm -rf "${build_dir}"
     mkdir -p "${build_dir}"
     cd "${build_dir}"
@@ -253,31 +275,53 @@ configure_build_install() {
 
     log "安装 OpenCV..."
     make install
+
+    local modules_file="${INSTALL_DIR}/${PLATFORM}/opencv/lib/cmake/opencv4/OpenCVModules.cmake"
+    local export_modules_file="${PWD}/CMakeFiles/Export/lib/cmake/opencv4/OpenCVModules.cmake"
+
+    # install 后的 OpenCVModules.cmake 若曾被错误 sed 破坏，从本次构建 Export 树恢复再改写
+    if [[ -f "${export_modules_file}" ]]; then
+        cp "${export_modules_file}" "${modules_file}"
+    fi
+
+    relocate_opencv_zlib_paths "${modules_file}" "${EFFECTIVE_LINK_TYPE}"
+
+    if ! grep -q 'LINK_ONLY:libwebp' "${modules_file}"; then
+        log "错误: OpenCVModules.cmake 缺少 imgcodecs 第三方依赖（libwebp 等），请检查 relocate_opencv_zlib_paths"
+        return 1
+    fi
+
+    log "已改写 OpenCVModules.cmake 中 zlib 为相对路径（${EFFECTIVE_LINK_TYPE}）"
 }
 
 verify_installation() {
     local install_prefix="${INSTALL_DIR}/${PLATFORM}/opencv"
     local lib_dir=""
+    local mod_ext="a"
 
-    if [ -f "${install_prefix}/lib/libopencv_core.a" ] || \
-       [ -f "${install_prefix}/lib/libopencv_core.so" ]; then
-        lib_dir="${install_prefix}/lib"
-    elif [ -f "${install_prefix}/lib64/libopencv_core.a" ] || \
-         [ -f "${install_prefix}/lib64/libopencv_core.so" ]; then
-        lib_dir="${install_prefix}/lib64"
+    if [[ "${EFFECTIVE_LINK_TYPE}" == shared ]]; then
+        mod_ext="so"
+    fi
+
+    if verify_installed_library "${install_prefix}" "${EFFECTIVE_LINK_TYPE}" libopencv_core; then
+        if [ -d "${install_prefix}/lib" ]; then
+            lib_dir="${install_prefix}/lib"
+        elif [ -d "${install_prefix}/lib64" ]; then
+            lib_dir="${install_prefix}/lib64"
+        fi
     else
-        log "⚠ 未找到 libopencv_core，请检查: ${install_prefix}"
+        log "⚠ 未找到 libopencv_core (${EFFECTIVE_LINK_TYPE})，请检查: ${install_prefix}"
         return 1
     fi
 
-    log "✓ OpenCV 已安装到 ${install_prefix}"
+    log "✓ OpenCV (${EFFECTIVE_LINK_TYPE}) 已安装到 ${install_prefix}"
 
     if [ "${PLATFORM}" = "armv7l-SSC375" ]; then
         local mod missing=0
         IFS=',' read -ra modules <<< "${SSC375_OPENCV_MODULES}"
         for mod in "${modules[@]}"; do
-            if [ ! -f "${lib_dir}/libopencv_${mod}.a" ]; then
-                log "✗ 缺少模块库: libopencv_${mod}.a"
+            if [ ! -f "${lib_dir}/libopencv_${mod}.${mod_ext}" ]; then
+                log "✗ 缺少模块库: libopencv_${mod}.${mod_ext}"
                 missing=1
             fi
         done
@@ -301,11 +345,14 @@ main() {
         exit 1
     fi
 
+    LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
+    EFFECTIVE_LINK_TYPE=$(resolve_effective_link_type opencv "${LINK_TYPE}")
+
     configure_platform
     setup_paths
     setup_toolchain_env
 
-    log "平台: ${PLATFORM}  版本: ${OPENCV_VERSION}  线程: ${BUILD_JOBS}"
+    log "平台: ${PLATFORM}  链接: ${EFFECTIVE_LINK_TYPE}  版本: ${OPENCV_VERSION}  线程: ${BUILD_JOBS}"
     log "安装路径: ${INSTALL_DIR}/${PLATFORM}/opencv"
     log "工具链: ${TOOLCHAIN_FILE}"
 

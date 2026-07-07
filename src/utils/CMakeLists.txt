@@ -10,6 +10,7 @@ set(UTILS_SOURCES
     io.cpp
     vis_draw.cpp
     npy.cpp
+    install_paths.cpp
     fixture_path.cpp
     pre_process/image_pre_process.cpp
 )

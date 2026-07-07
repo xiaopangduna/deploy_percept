@@ -21,6 +21,8 @@ TOOLCHAIN_PREFIX=""
 BUILD_JOBS=""
 USE_TOOLCHAIN_CC=1
 CROSS_COMPILE_PREFIX=""
+LINK_TYPE=""
+EFFECTIVE_LINK_TYPE=""
 
 log() { echo "[spdlog构建器] $*"; }
 
@@ -58,6 +60,7 @@ parse_args() {
             --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
             --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
             --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
+            --link-type)      LINK_TYPE="$2"; shift 2 ;;
             --jobs)           BUILD_JOBS="$2"; shift 2 ;;
             --help)           show_help; exit 0 ;;
             *)
@@ -189,11 +192,14 @@ prepare_spdlog_source() {
 }
 
 build_spdlog_cmake_args() {
+    local shared_flag
+    shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
+
     SPDLOG_CMAKE_ARGS=(
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/spdlog"
         -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
-        -DSPDLOG_BUILD_SHARED=OFF
+        -DSPDLOG_BUILD_SHARED="${shared_flag}"
         -DSPDLOG_BUILD_EXAMPLE=OFF
         -DSPDLOG_BUILD_BENCH=OFF
     )
@@ -206,7 +212,10 @@ build_spdlog_cmake_args() {
 }
 
 configure_build_install() {
+    local install_prefix="${INSTALL_DIR}/${PLATFORM}/spdlog"
     local build_dir="build_${PLATFORM}"
+
+    clean_third_party_install_prefix "${install_prefix}"
     rm -rf "${build_dir}"
     mkdir -p "${build_dir}"
     cd "${build_dir}"
@@ -224,19 +233,9 @@ configure_build_install() {
 
 verify_installation() {
     local install_prefix="${INSTALL_DIR}/${PLATFORM}/spdlog"
-    local lib_dir=""
 
-    if [ -f "${install_prefix}/lib/libspdlog.a" ] || \
-       [ -f "${install_prefix}/lib/libspdlog.so" ]; then
-        lib_dir="${install_prefix}/lib"
-    elif [ -f "${install_prefix}/lib64/libspdlog.a" ] || \
-         [ -f "${install_prefix}/lib64/libspdlog.so" ]; then
-        lib_dir="${install_prefix}/lib64"
-    fi
-
-    if [ -n "${lib_dir}" ]; then
-        log "✓ spdlog 已安装到 ${install_prefix}"
-        log "  库文件: ${lib_dir}/libspdlog.a"
+    if verify_installed_library "${install_prefix}" "${EFFECTIVE_LINK_TYPE}" libspdlog; then
+        log "✓ spdlog (${EFFECTIVE_LINK_TYPE}) 已安装到 ${install_prefix}"
         if [ -f "${install_prefix}/lib/cmake/spdlog/spdlogConfig.cmake" ]; then
             log "  CMake 配置: ${install_prefix}/lib/cmake/spdlog/spdlogConfig.cmake"
         fi
@@ -248,7 +247,7 @@ verify_installation() {
         return 0
     fi
 
-    log "⚠ 未找到 libspdlog 或头文件，请检查: ${install_prefix}"
+    log "⚠ 未找到 libspdlog (${EFFECTIVE_LINK_TYPE}) 或头文件，请检查: ${install_prefix}"
     find "${install_prefix}" -type f \( -name "*.a" -o -name "*.so" -o -name "spdlog.h" \) 2>/dev/null | head -10 || true
     return 1
 }
@@ -265,11 +264,14 @@ main() {
         exit 1
     fi
 
+    LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
+    EFFECTIVE_LINK_TYPE=$(resolve_effective_link_type spdlog "${LINK_TYPE}")
+
     configure_platform
     setup_paths
     setup_toolchain_env
 
-    log "平台: ${PLATFORM}  版本: ${SPDLOG_VERSION}  线程: ${BUILD_JOBS}"
+    log "平台: ${PLATFORM}  链接: ${EFFECTIVE_LINK_TYPE}  版本: ${SPDLOG_VERSION}  线程: ${BUILD_JOBS}"
     if [ -n "${CROSS_COMPILE_PREFIX}" ]; then
         log "交叉编译前缀: ${CROSS_COMPILE_PREFIX}"
     fi

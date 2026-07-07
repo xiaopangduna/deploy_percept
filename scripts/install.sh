@@ -56,23 +56,17 @@ INSTALL_BENCHMARKS_FLAG="$(grep -E '^INSTALL_BENCHMARKS:' "${BUILD_DIR}/CMakeCac
 
 clean_stale_install_artifacts() {
     if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
-        local tests_dir
-        for tests_dir in "${INSTALL_DIR}/tests" "${INSTALL_DIR}/share/percept/tests"; do
-            if [[ -d "${tests_dir}" ]]; then
-                echo "清理旧测试可执行文件: ${tests_dir}/"
-                find "${tests_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
-            fi
-        done
+        if [[ -d "${INSTALL_DIR}/tests" ]]; then
+            echo "清理旧测试可执行文件: ${INSTALL_DIR}/tests/"
+            find "${INSTALL_DIR}/tests" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+        fi
         rm -f "${INSTALL_DIR}/scripts/run-install-tests"
     fi
     if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
-        local bench_dir
-        for bench_dir in "${INSTALL_DIR}/benchmarks" "${INSTALL_DIR}/share/percept/benchmarks"; do
-            if [[ -d "${bench_dir}" ]]; then
-                echo "清理旧 benchmark 可执行文件: ${bench_dir}/"
-                find "${bench_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
-            fi
-        done
+        if [[ -d "${INSTALL_DIR}/benchmarks" ]]; then
+            echo "清理旧 benchmark 可执行文件: ${INSTALL_DIR}/benchmarks/"
+            find "${INSTALL_DIR}/benchmarks" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
+        fi
     fi
 }
 

@@ -38,9 +38,6 @@ function(add_percept_awnn_benchmark)
     if(NOT TARGET deploy_percept_utils)
         message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): deploy_percept_utils not built")
     endif()
-    if(NOT TARGET deploy_percept_utils)
-        message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): deploy_percept_utils not built")
-    endif()
 
     add_executable(${PARSED_NAME} ${PARSED_SOURCES})
 

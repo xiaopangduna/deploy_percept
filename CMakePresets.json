@@ -14,7 +14,7 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
-        "ENABLE_BENCHMARKS": "OFF",
+        "ENABLE_BENCHMARKS": "ON",
         "INSTALL_BENCHMARKS": "ON"
       }
     },
@@ -30,7 +30,7 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
-        "ENABLE_BENCHMARKS": "OFF",
+        "ENABLE_BENCHMARKS": "ON",
         "INSTALL_BENCHMARKS": "ON"
       },
       "environment": {

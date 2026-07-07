@@ -17,34 +17,43 @@ show_help() {
     echo "  $0 --help"
     echo ""
     echo "必需参数:"
-    echo "  <platform>                 目标平台 (aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375)"
+    echo "  <platform>                 目标平台，与 cmake/toolchains/<platform>-toolchain.cmake 同名"
     echo "  --libs <libraries>         逗号分隔的库列表，或使用 'all' 构建所有库"
+    echo "  --link static|shared       链接类型（默认 static）"
+    echo ""
+    echo "平台（cmake/toolchains/ 下文件名去掉 -toolchain.cmake）:"
+    echo "  x86_64"
+    echo "  aarch64-linux-gnu_orange_pi_4_pro_a733"
+    echo "  armv7l-SSC375"
     echo ""
     echo "支持的库:"
+    echo "  zlib       - zlib 压缩库（OpenCV/cnpy 依赖，建议先构建）"
     echo "  cnpy       - C++ NumPy 文件读写库"
     echo "  gtest      - Google Test 测试框架 (v1.14.0)"
     echo "  opencv     - OpenCV 计算机视觉库 (4.5.4)"
     echo "  rga        - Rockchip 2D 图形加速库"
-    echo "  rknpu      - Rockchip NPU 库 (仅 aarch64 平台)"
+    echo "  rknpu      - Rockchip NPU 库（预留，RK3588）"
     echo "  spdlog     - 快速C++日志库 (v1.14.1)"
     echo "  yaml-cpp   - yaml文件"
     echo ""
     echo "示例:"
-    echo "  bash scripts/third_party_builder.sh aarch64 --libs all"
+    echo "  bash scripts/third_party_builder.sh x86_64 --libs all"
     echo "  bash scripts/third_party_builder.sh x86_64 --libs gtest,opencv"
-    echo "  bash scripts/third_party_builder.sh aarch64 --libs cnpy,gtest,opencv,rga,rknpu,spdlog,yaml-cpp"
+    echo "  bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,zlib,gtest,opencv,spdlog"
     echo ""
     echo "注意:"
-    echo "  1. 必须在项目根目录下运行，或者通过--project-root指定项目根目录"
+    echo "  1. 必须在项目根目录下运行，或者通过各 builder 的 --project-root 指定"
     echo "  2. 构建过程中会下载源代码到 tmp/modules 目录，请确保有足够的磁盘空间"
-    echo "  3. 构建的库将安装到third_party/<库名>/<平台>/目录"
-    echo "  4. 具体每个库的平台支持由各个库的构建器脚本决定"
+    echo "  3. 构建产物安装到 third_party/<platform>/<lib>/"
+    echo "  4. 构建前会清除该库的旧 install 目录；zlib/cnpy 会同时保留 .a/.so，由 CMake ZLIB_LINK_TYPE/CNPY_LINK_TYPE 选择"
+    echo "  5. OpenCV 需先构建 zlib；rga/rknpu 仅 shared，请求 static 时会警告"
     echo ""
 }
 
 # 初始化变量
 LIBS_TO_BUILD=""
 PLATFORM=""
+LINK_TYPE=""
 
 # 检查是否有 --help 或 -h 参数
 for arg in "$@"; do
@@ -71,6 +80,14 @@ while [[ $# -gt 0 ]]; do
             LIBS_TO_BUILD="$2"
             shift 2
             ;;
+        --link)
+            if [ -z "$2" ] ; then
+                echo "错误: --link 参数需要一个值 (static 或 shared)"
+                exit 1
+            fi
+            LINK_TYPE="$2"
+            shift 2
+            ;;
         *)
             echo "错误: 未知参数: $1"
             echo "请使用 $0 --help 查看完整用法"
@@ -95,7 +112,21 @@ fi
 # 获取项目根目录
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 PROJECT_ROOT=$(realpath "$SCRIPT_DIR/..")
+# shellcheck source=third_party_builders/common.sh
+source "${SCRIPT_DIR}/third_party_builders/common.sh"
+LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
 echo "项目根目录: $PROJECT_ROOT"
+
+TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
+if [[ ! -f "${TOOLCHAIN_FILE}" ]]; then
+    echo "错误: 不支持的平台 '${PLATFORM}'"
+    echo "请使用 cmake/toolchains/ 下的名称（不含 -toolchain.cmake 后缀），例如:"
+    for f in "${PROJECT_ROOT}/cmake/toolchains/"*-toolchain.cmake; do
+        [[ -f "$f" ]] || continue
+        echo "  $(basename "$f" -toolchain.cmake)"
+    done
+    exit 1
+fi
 
 # 自动推断构建模式
 HOST_ARCH=$(uname -m)
@@ -131,24 +162,6 @@ if [ ! -d "$THIRD_PARTY_BUILDERS_DIR" ]; then
     exit 1
 fi
 
-# 根据平台设置工具链文件（可选，构建器脚本可能会忽略）
-case "${PLATFORM}" in
-    aarch64)
-        TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/toolchains/aarch64-toolchain.cmake
-        ;;
-    aarch64-linux-gnu_orange_pi_4_pro_a733|armv7l-SSC375)
-        TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake
-        ;;
-    x86_64)
-        TOOLCHAIN_FILE=${PROJECT_ROOT}/cmake/toolchains/x86_64-toolchain.cmake
-        ;;
-    *)
-        echo "错误: 不支持的平台 '${PLATFORM}'"
-        echo "支持的平台: aarch64, aarch64-linux-gnu_orange_pi_4_pro_a733, x86_64, armv7l-SSC375"
-        echo "请使用 $0 --help 查看完整用法"
-        exit 1
-        ;;
-esac
 
 # 处理 "all" 参数
 if [ "$LIBS_TO_BUILD" = "all" ]; then
@@ -190,6 +203,7 @@ echo "第三方库构建系统"
 echo "================================================================"
 echo "BUILD_MODE: $BUILD_MODE"
 echo "PLATFORM: $PLATFORM"
+echo "LINK_TYPE: $LINK_TYPE"
 echo "LIBS_TO_BUILD: $LIBS_TO_BUILD"
 echo "THIRD_PARTY_BUILDERS_DIR: $THIRD_PARTY_BUILDERS_DIR"
 echo "INSTALL_DIR: $INSTALL_DIR"
@@ -231,6 +245,7 @@ for lib in "${LIBS_ARRAY[@]}"; do
     if ! bash "$build_script" \
         --build-mode "$BUILD_MODE" \
         --platform "$PLATFORM" \
+        --link-type "$LINK_TYPE" \
         --project-root "$PROJECT_ROOT" \
         --install-dir "$INSTALL_DIR" \
         --toolchain-file "$TOOLCHAIN_FILE"

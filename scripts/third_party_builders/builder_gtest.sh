@@ -21,6 +21,8 @@ TOOLCHAIN_PREFIX=""
 BUILD_JOBS=""
 USE_TOOLCHAIN_CC=1
 CROSS_COMPILE_PREFIX=""
+LINK_TYPE=""
+EFFECTIVE_LINK_TYPE=""
 
 log() { echo "[GTest构建器] $*"; }
 
@@ -55,6 +57,7 @@ parse_args() {
             --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
             --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
             --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
+            --link-type)      LINK_TYPE="$2"; shift 2 ;;
             --jobs)           BUILD_JOBS="$2"; shift 2 ;;
             --help)           show_help; exit 0 ;;
             *)
@@ -178,16 +181,22 @@ prepare_gtest_source() {
 }
 
 configure_build_install() {
+    local install_prefix="${INSTALL_DIR}/${PLATFORM}/gtest"
     local build_dir="${TMP_MODULES_DIR}/googletest/build_${PLATFORM}"
+    local shared_flag
+
+    clean_third_party_install_prefix "${install_prefix}"
     rm -rf "${build_dir}"
     mkdir -p "${build_dir}"
     cd "${build_dir}"
 
-    log "配置 CMake..."
+    shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
+    log "配置 CMake (${EFFECTIVE_LINK_TYPE})..."
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/gtest" \
-        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
+        -DCMAKE_INSTALL_PREFIX="${install_prefix}" \
+        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+        -DBUILD_SHARED_LIBS="${shared_flag}"
 
     log "编译 GTest (-j${BUILD_JOBS})..."
     cmake --build . -j"${BUILD_JOBS}"
@@ -198,13 +207,12 @@ configure_build_install() {
 
 verify_installation() {
     local install_prefix="${INSTALL_DIR}/${PLATFORM}/gtest"
-    if [ -f "${install_prefix}/lib/libgtest.a" ] || \
-       [ -f "${install_prefix}/lib64/libgtest.a" ]; then
-        log "✓ GTest 已安装到 ${install_prefix}"
+    if verify_installed_library "${install_prefix}" "${EFFECTIVE_LINK_TYPE}" libgtest; then
+        log "✓ GTest (${EFFECTIVE_LINK_TYPE}) 已安装到 ${install_prefix}"
         return 0
     fi
 
-    log "⚠ 未找到 libgtest.a，请检查: ${install_prefix}"
+    log "⚠ 未找到 libgtest (${EFFECTIVE_LINK_TYPE})，请检查: ${install_prefix}"
     return 1
 }
 
@@ -220,11 +228,14 @@ main() {
         exit 1
     fi
 
+    LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
+    EFFECTIVE_LINK_TYPE=$(resolve_effective_link_type gtest "${LINK_TYPE}")
+
     configure_platform
     setup_paths
     setup_toolchain_env
 
-    log "平台: ${PLATFORM}  版本: ${GTEST_VERSION}  线程: ${BUILD_JOBS}"
+    log "平台: ${PLATFORM}  链接: ${EFFECTIVE_LINK_TYPE}  版本: ${GTEST_VERSION}  线程: ${BUILD_JOBS}"
     log "安装路径: ${INSTALL_DIR}/${PLATFORM}/gtest"
     log "工具链: ${TOOLCHAIN_FILE}"
 
