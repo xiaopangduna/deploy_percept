@@ -63,6 +63,7 @@ clean_stale_install_artifacts() {
                 find "${tests_dir}" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
             fi
         done
+        rm -f "${INSTALL_DIR}/scripts/run-install-tests"
     fi
     if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
         local bench_dir
@@ -90,8 +91,9 @@ echo "  include/deploy_percept/"
 echo "  share/percept/fixtures/   测试与 demo 共用 fixture 数据"
 if [[ "${INSTALL_TESTS_FLAG}" == "ON" ]]; then
     echo "  tests/                    测试可执行文件"
+    echo "  scripts/run_install_tests.sh  install 包测试 runner"
 else
-    echo "  (INSTALL_TESTS=OFF，未安装 tests/)"
+    echo "  (INSTALL_TESTS=OFF，未安装 tests/ 与 run_install_tests.sh)"
 fi
 if [[ "${INSTALL_BENCHMARKS_FLAG}" == "ON" ]]; then
     echo "  benchmarks/               benchmark 可执行文件"

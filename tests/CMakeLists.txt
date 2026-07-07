@@ -25,4 +25,7 @@ if(INSTALL_TESTS)
         DIRECTORY "${CMAKE_SOURCE_DIR}/tests/fixtures/"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/percept/fixtures"
         USE_SOURCE_PERMISSIONS)
+    install(
+        PROGRAMS "${CMAKE_SOURCE_DIR}/scripts/run_install_tests.sh"
+        DESTINATION scripts)
 endif()

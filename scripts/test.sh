@@ -9,28 +9,6 @@ BOARD=""
 RUN_BENCH=0
 BENCH_LOOPS=50
 
-PERCEPT_TESTS_REL="tests"
-PERCEPT_BENCHMARKS_REL="benchmarks"
-
-PERCEPT_INSTALL_TESTS=(
-    test_smoke
-    test_YoloV5DetectPostProcessRknn
-    test_YoloV5SegPostProcessRknn
-    test_YoloV8SegPostProcessRknn
-    test_ClassificationPostProcessAwnn
-    test_YoloV5DetectPostProcessAwnn
-    test_YoloV8DetectPostProcessAwnn
-    test_yolov5_detect_awnn
-    test_yolov8_detect_awnn
-    test_mobilenetv2_classify_awnn
-)
-
-PERCEPT_INSTALL_BENCHMARKS=(
-    bench_yolov5
-    bench_yolov8
-    bench_mobilenetv2_classify
-)
-
 SSH_WRAP=()
 RSYNC_RSH=""
 
@@ -40,13 +18,13 @@ show_help() {
     echo "用法: bash $0 --preset <name> [选项]"
     echo ""
     echo "流程:"
-    echo "  PC 模式:     build → install（清理旧 tests/benchmarks）→ 本地 tests/"
-    echo "  开发板模式:  build → install → rsync --delete → SSH 远程跑同一套测试"
+    echo "  PC 模式:     build → install → scripts/run_install_tests.sh"
+    echo "  开发板模式:  build → install → rsync → SSH 远程 run_install_tests.sh"
     echo ""
     echo "选项:"
     echo "  --preset <name>          CMake preset（默认: x86_64-debug）"
     echo "  --board <user@host:path> 开发板 install 根目录（启用板端模式）"
-    echo "  --bench [loops]          测试完成后再跑 benchmark（默认 loops=50）"
+    echo "  --bench [loops]          传给 run_install_tests.sh（默认 loops=50）"
     echo "  --help                   显示帮助"
     echo ""
     echo "SSH 认证:"
@@ -61,6 +39,7 @@ show_help() {
     echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \\"
     echo "    --board orangepi@192.168.1.10:~/deploy_percept --bench 100"
     echo ""
+    echo "install 包内直接跑: ./scripts/run_install_tests.sh [--bench [loops]]"
     echo "开发期 build tree GTest: cd build/<preset> && ctest --output-on-failure"
 }
 
@@ -116,6 +95,13 @@ resolve_install_dir() {
     echo "${prefix}"
 }
 
+runner_args() {
+    RUNNER_ARGS=()
+    if [[ "${RUN_BENCH}" -eq 1 ]]; then
+        RUNNER_ARGS=(--bench "${BENCH_LOOPS}")
+    fi
+}
+
 parse_board_spec() {
     local board_spec="$1"
     if [[ ! "${board_spec}" =~ ^([^@]+@[^:]+):(.+)$ ]]; then
@@ -126,109 +112,16 @@ parse_board_spec() {
     REMOTE_DIR_INPUT="${BASH_REMATCH[2]}"
 }
 
-setup_install_tree_env() {
+run_install_tests_local() {
     local install_dir="$1"
-    export PERCEPT_ROOT="${install_dir}/share/percept"
-    export PERCEPT_OUTPUT_DIR="${install_dir}/var/percept/output"
-    export LD_LIBRARY_PATH="${install_dir}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-    mkdir -p "${PERCEPT_OUTPUT_DIR}"
-}
-
-run_install_tree_tests() {
-    local install_dir="$1"
-    local tests_dir="${install_dir}/${PERCEPT_TESTS_REL}"
-
-    echo "=== install tree tests ==="
-    echo "prefix:    ${install_dir}"
-    echo "tests dir: ${tests_dir}"
-
-    if [[ -d "${tests_dir}" ]]; then
-        local f base t found
-        for f in "${tests_dir}"/*; do
-            [[ -f "${f}" ]] || continue
-            base="$(basename "${f}")"
-            found=0
-            for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
-                if [[ "${t}" == "${base}" ]]; then
-                    found=1
-                    break
-                fi
-            done
-            if [[ "${found}" -eq 0 ]]; then
-                echo "警告: 忽略未登记的旧测试可执行文件: ${base}（请重新 install）"
-            fi
-        done
-    fi
-
-    local fail=0
-    local t
-    for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
-        if [[ ! -x "${tests_dir}/${t}" ]]; then
-            echo "skip (not installed): ${t}"
-            continue
-        fi
-        echo "=== ${t} ==="
-        "${tests_dir}/${t}" || fail=1
-    done
-    return "${fail}"
-}
-
-run_install_tree_benchmarks() {
-    local install_dir="$1"
-    local loops="$2"
-    local bench_dir="${install_dir}/${PERCEPT_BENCHMARKS_REL}"
-
-    if [[ ! -d "${bench_dir}" ]]; then
-        echo "错误: 未找到 benchmark 目录: ${bench_dir}" >&2
-        echo "提示: ENABLE_BENCHMARKS=ON、INSTALL_BENCHMARKS=ON 且已 install" >&2
-        return 1
-    fi
-
-    echo ""
-    echo "=== install tree benchmarks (loops=${loops}) ==="
-    echo "prefix:     ${install_dir}"
-    echo "bench dir:  ${bench_dir}"
-
-    local fail=0
-    local b
-    for b in "${PERCEPT_INSTALL_BENCHMARKS[@]}"; do
-        if [[ ! -x "${bench_dir}/${b}" ]]; then
-            echo "skip (not installed): ${b}"
-            continue
-        fi
-        echo "=== ${b} ${loops} ==="
-        "${bench_dir}/${b}" "${loops}" || fail=1
-    done
-    return "${fail}"
-}
-
-run_install_tree_suite() {
-    local install_dir="$1"
-    local loops="$2"
-
-    if [[ ! -d "${install_dir}/share/percept" ]]; then
-        echo "错误: 无效的 install 目录（缺少 share/percept/）: ${install_dir}" >&2
+    local runner="${install_dir}/scripts/run_install_tests.sh"
+    if [[ ! -x "${runner}" ]]; then
+        echo "错误: 未找到 runner: ${runner}" >&2
+        echo "提示: INSTALL_TESTS=ON 且已 install" >&2
         exit 1
     fi
-    install_dir="$(cd "${install_dir}" && pwd)"
-
-    local tests_dir="${install_dir}/${PERCEPT_TESTS_REL}"
-    if [[ ! -d "${tests_dir}" ]]; then
-        echo "错误: 未找到测试目录: ${tests_dir}" >&2
-        echo "提示: ENABLE_TESTS=ON、INSTALL_TESTS=ON" >&2
-        exit 1
-    fi
-
-    setup_install_tree_env "${install_dir}"
-
-    local fail=0
-    run_install_tree_tests "${install_dir}" || fail=1
-
-    if [[ "${RUN_BENCH}" -eq 1 ]]; then
-        run_install_tree_benchmarks "${install_dir}" "${loops}" || fail=1
-    fi
-
-    return "${fail}"
+    runner_args
+    "${runner}" "${RUNNER_ARGS[@]}"
 }
 
 run_rsync_to_board() {
@@ -244,10 +137,9 @@ run_rsync_to_board() {
     rsync -avz --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
 }
 
-run_install_tree_suite_remote() {
+run_install_tests_remote() {
     local ssh_host="$1"
     local remote_dir_input="$2"
-    local loops="$3"
 
     local remote_dir
     remote_dir="$("${SSH_WRAP[@]}" "${ssh_host}" "cd ${remote_dir_input} && pwd")" || {
@@ -255,65 +147,32 @@ run_install_tree_suite_remote() {
         exit 1
     }
 
-    local tests_dir="${remote_dir}/${PERCEPT_TESTS_REL}"
-    local bench_dir="${remote_dir}/${PERCEPT_BENCHMARKS_REL}"
+    runner_args
 
     echo ""
-    echo "=== install tree tests (remote) ==="
-    echo "host:      ${ssh_host}"
-    echo "prefix:    ${remote_dir}"
-    echo "tests dir: ${tests_dir}"
-    if [[ "${RUN_BENCH}" -eq 1 ]]; then
-        echo "bench dir: ${bench_dir} (loops=${loops})"
-    fi
+    echo "=== run_install_tests.sh (remote) ==="
+    echo "host: ${ssh_host}"
+    echo "dir:  ${remote_dir_input} → ${remote_dir}"
 
-    local tests_shell=""
-    local t
-    for t in "${PERCEPT_INSTALL_TESTS[@]}"; do
-        tests_shell+="if [[ -x \"${tests_dir}/${t}\" ]]; then echo '=== ${t} ==='; \"${tests_dir}/${t}\" || FAIL=1; else echo 'skip (not installed): ${t}'; fi;"
+    local remote_runner="${remote_dir}/scripts/run_install_tests.sh"
+    local remote_cmd
+    remote_cmd="$(printf '%q' "${remote_runner}")"
+    local arg
+    for arg in "${RUNNER_ARGS[@]}"; do
+        remote_cmd+=" $(printf '%q' "${arg}")"
     done
 
-    local bench_shell=""
-    if [[ "${RUN_BENCH}" -eq 1 ]]; then
-        bench_shell="
-echo ''
-echo '=== install tree benchmarks (remote, loops=${loops}) ==='
-if [[ ! -d \"${bench_dir}\" ]]; then
-  echo \"错误: 未找到 benchmark 目录: ${bench_dir}\" >&2
-  FAIL=1
-fi
-"
-        local b
-        for b in "${PERCEPT_INSTALL_BENCHMARKS[@]}"; do
-            bench_shell+="if [[ -x \"${bench_dir}/${b}\" ]]; then echo '=== ${b} ${loops} ==='; \"${bench_dir}/${b}\" ${loops} || FAIL=1; else echo 'skip (not installed): ${b}'; fi;"
-        done
-    fi
-
-    "${SSH_WRAP[@]}" "${ssh_host}" "set -euo pipefail
-FAIL=0
-export PERCEPT_ROOT=\"${remote_dir}/share/percept\"
-export PERCEPT_OUTPUT_DIR=\"${remote_dir}/var/percept/output\"
-export LD_LIBRARY_PATH=\"${remote_dir}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}\"
-mkdir -p \"\${PERCEPT_OUTPUT_DIR}\"
-if [[ ! -d \"${tests_dir}\" ]]; then
-  echo \"错误: 未找到测试目录: ${tests_dir}\" >&2
-  echo \"提示: INSTALL_TESTS=ON 且已 install + rsync\" >&2
-  exit 1
-fi
-${tests_shell}
-${bench_shell}
-exit \${FAIL}"
+    "${SSH_WRAP[@]}" "${ssh_host}" "bash -lc $(printf '%q' "${remote_cmd}")"
 }
 
 run_board_suite() {
     local board_spec="$1"
     local install_dir="$2"
-    local loops="$3"
 
     parse_board_spec "${board_spec}"
     setup_ssh_transport
     run_rsync_to_board "${install_dir}" "${SSH_HOST}" "${REMOTE_DIR_INPUT}"
-    run_install_tree_suite_remote "${SSH_HOST}" "${REMOTE_DIR_INPUT}" "${loops}"
+    run_install_tests_remote "${SSH_HOST}" "${REMOTE_DIR_INPUT}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -356,9 +215,9 @@ run_install
 INSTALL_DIR="$(resolve_install_dir)"
 
 if [[ -n "${BOARD}" ]]; then
-    run_board_suite "${BOARD}" "${INSTALL_DIR}" "${BENCH_LOOPS}"
+    run_board_suite "${BOARD}" "${INSTALL_DIR}"
     exit $?
 fi
 
-run_install_tree_suite "${INSTALL_DIR}" "${BENCH_LOOPS}"
+run_install_tests_local "${INSTALL_DIR}"
 exit $?
