@@ -33,192 +33,46 @@ yaml-cpp 构建器脚本
   bash $0 [选项]
 
 必需选项:
-  --platform <平台>          目标平台 (aarch64, x86_64, armv7l-SSC375, aarch64-linux-gnu_orange_pi_4_pro_a733)
+  --platform <平台>          与 cmake/toolchains/<platform>-toolchain.cmake 同名
 
 可选选项:
   --project-root <路径>      项目根目录 (默认: 当前目录)
   --install-dir <路径>       安装目录 (默认: \$PROJECT_ROOT/third_party)
   --toolchain-file <文件>    CMake 工具链 (默认: \$PROJECT_ROOT/cmake/toolchains/\$PLATFORM-toolchain.cmake)
-  --jobs <N>                 并行编译线程数 (默认: 平台相关)
+  --link-type static|shared  链接类型（默认 static）
+  --jobs <N>                 并行编译线程数 (默认: min(nproc, 8))
   --help                     显示此帮助信息
 
-版本:
-  全平台                     ${YAML_CPP_VERSION}
+yaml-cpp 版本: ${YAML_CPP_VERSION}
 
 示例:
   bash scripts/third_party_builders/builder_yaml-cpp.sh --platform x86_64
-  bash scripts/third_party_builders/builder_yaml-cpp.sh --platform armv7l-SSC375 --jobs 4
+  bash scripts/third_party_builders/builder_yaml-cpp.sh --platform aarch64-linux-gnu_orange_pi_4_pro_a733
 EOF
-}
-
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --build-mode)   shift 2 ;;
-            --platform)       PLATFORM="$2"; shift 2 ;;
-            --project-root)   PROJECT_ROOT="$2"; shift 2 ;;
-            --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
-            --toolchain-file) TOOLCHAIN_FILE="$2"; shift 2 ;;
-            --link-type)      LINK_TYPE="$2"; shift 2 ;;
-            --jobs)           BUILD_JOBS="$2"; shift 2 ;;
-            --help)           show_help; exit 0 ;;
-            *)
-                echo "错误: 未知参数: $1"
-                show_help
-                exit 1
-                ;;
-        esac
-    done
-}
-
-configure_platform() {
-    case "${PLATFORM}" in
-        aarch64)
-            CROSS_COMPILE_PREFIX="aarch64-linux-gnu"
-            ;;
-        x86_64)
-            USE_TOOLCHAIN_CC=0
-            ;;
-        armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
-            USE_TOOLCHAIN_CC=0
-            ;;
-        *)
-            echo "错误: 不支持的平台 '${PLATFORM}'"
-            echo "支持的平台: aarch64, x86_64, armv7l-SSC375, aarch64-linux-gnu_orange_pi_4_pro_a733"
-            exit 1
-            ;;
-    esac
-
-    if [ -z "${BUILD_JOBS}" ]; then
-        local nproc
-        nproc=$(nproc 2>/dev/null || echo 4)
-        if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
-            BUILD_JOBS=$(( nproc > 4 ? 4 : nproc ))
-        else
-            BUILD_JOBS=$(( nproc > 8 ? 8 : nproc ))
-        fi
-    fi
-}
-
-setup_paths() {
-    PROJECT_ROOT=${PROJECT_ROOT:-$(pwd)}
-    if [ ! -d "${PROJECT_ROOT}" ]; then
-        echo "错误: 项目根目录不存在: ${PROJECT_ROOT}"
-        exit 1
-    fi
-
-    INSTALL_DIR=${INSTALL_DIR:-${PROJECT_ROOT}/third_party}
-    if [ -z "${TOOLCHAIN_FILE}" ]; then
-        TOOLCHAIN_FILE="${PROJECT_ROOT}/cmake/toolchains/${PLATFORM}-toolchain.cmake"
-    fi
-
-    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
-        log "警告: 工具链文件不存在: ${TOOLCHAIN_FILE}"
-    fi
-
-    init_modules_tmp
-}
-
-# 从 cmake/toolchains/<platform>-toolchain.cmake 解析 TOOLCHAIN_ROOT / TOOLCHAIN_PREFIX
-read_toolchain_vars() {
-    local key value line
-    if [ ! -f "${TOOLCHAIN_FILE}" ]; then
-        log "错误: 工具链文件不存在: ${TOOLCHAIN_FILE}"
-        return 1
-    fi
-
-    for key in TOOLCHAIN_ROOT TOOLCHAIN_PREFIX; do
-        line=$(grep -E "^set\\(${key} " "${TOOLCHAIN_FILE}" | head -1)
-        if [ -z "${line}" ]; then
-            log "错误: ${TOOLCHAIN_FILE} 中未找到 set(${key} ...)"
-            return 1
-        fi
-        value=$(sed -E 's/^set\([^ ]+ "([^"]+)".*/\1/' <<< "${line}")
-        if [ -z "${value}" ] || [ "${value}" = "${line}" ]; then
-            log "错误: 无法解析 ${key}（${TOOLCHAIN_FILE}）"
-            return 1
-        fi
-        printf -v "${key}" '%s' "${value}"
-    done
-}
-
-setup_toolchain_env() {
-    if [[ "${PLATFORM}" == armv7l-SSC375 || "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 ]]; then
-        read_toolchain_vars || exit 1
-        CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
-        export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
-    fi
-
-    if [ "${USE_TOOLCHAIN_CC}" = "1" ]; then
-        export CC="${CROSS_COMPILE_PREFIX}-gcc"
-        export CXX="${CROSS_COMPILE_PREFIX}-g++"
-    fi
-
-    if [ -z "${CROSS_COMPILE_PREFIX}" ]; then
-        return 0
-    fi
-
-    if ! command -v "${CROSS_COMPILE_PREFIX}-g++" &>/dev/null; then
-        log "警告: 未找到 ${CROSS_COMPILE_PREFIX}-g++"
-        case "${PLATFORM}" in
-            aarch64)
-                log "  请安装: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu"
-                ;;
-            armv7l-SSC375|aarch64-linux-gnu_orange_pi_4_pro_a733)
-                log "  请挂载工具链: ${TOOLCHAIN_ROOT}"
-                ;;
-        esac
-    fi
-}
-
-prepare_yaml_cpp_source() {
-    setup_git_safe_directories
-
-    cd "${TMP_MODULES_DIR}"
-    if [ ! -d "yaml-cpp" ]; then
-        log "克隆 yaml-cpp 源码..."
-        git clone "${YAML_CPP_GIT_URL}"
-    else
-        log "yaml-cpp 目录已存在，跳过克隆"
-    fi
-
-    cd yaml-cpp
-    log "切换到版本 ${YAML_CPP_VERSION}..."
-    git checkout "${YAML_CPP_VERSION}"
-}
-
-build_yaml_cpp_cmake_args() {
-    local shared_flag
-    shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
-
-    YAML_CPP_CMAKE_ARGS=(
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}/${PLATFORM}/yaml-cpp"
-        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
-        -DYAML_CPP_BUILD_TESTS=OFF
-        -DYAML_CPP_BUILD_TOOLS=OFF
-        -DYAML_BUILD_SHARED_LIBS="${shared_flag}"
-    )
 }
 
 configure_build_install() {
     local install_prefix="${INSTALL_DIR}/${PLATFORM}/yaml-cpp"
-    local build_dir="build_${PLATFORM}"
+    local build_dir="${TMP_MODULES_DIR}/yaml-cpp/build_${PLATFORM}"
+    local shared_flag
 
-    clean_third_party_install_prefix "${install_prefix}"
-    rm -rf "${build_dir}"
-    mkdir -p "${build_dir}"
-    cd "${build_dir}"
+    prepare_third_party_build_dir "${install_prefix}" "${build_dir}"
 
-    build_yaml_cpp_cmake_args
-    log "配置 CMake..."
-    cmake .. "${YAML_CPP_CMAKE_ARGS[@]}"
+    shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
+    log "配置 CMake (${EFFECTIVE_LINK_TYPE})..."
+    cmake "${TMP_MODULES_DIR}/yaml-cpp" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${install_prefix}" \
+        -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+        -DYAML_CPP_BUILD_TESTS=OFF \
+        -DYAML_CPP_BUILD_TOOLS=OFF \
+        -DYAML_BUILD_SHARED_LIBS="${shared_flag}"
 
     log "编译 yaml-cpp (-j${BUILD_JOBS})..."
-    make -j"${BUILD_JOBS}"
+    cmake --build . -j"${BUILD_JOBS}"
 
     log "安装 yaml-cpp..."
-    make install
+    cmake --install .
 }
 
 verify_installation() {
@@ -238,7 +92,6 @@ verify_installation() {
     fi
 
     log "⚠ 未找到 libyaml-cpp (${EFFECTIVE_LINK_TYPE}) 或头文件，请检查: ${install_prefix}"
-    find "${install_prefix}" -type f \( -name "*.a" -o -name "*.so" -o -name "yaml.h" \) 2>/dev/null | head -10 || true
     return 1
 }
 
@@ -246,29 +99,21 @@ main() {
     local start_time
     start_time=$(date +%s)
 
-    parse_args "$@"
-
-    if [ -z "${PLATFORM}" ]; then
-        echo "错误: 必须指定平台 (--platform)"
-        show_help
-        exit 1
-    fi
+    parse_third_party_builder_args "$@"
+    require_third_party_platform_arg
 
     LINK_TYPE=$(validate_link_type "${LINK_TYPE}")
     EFFECTIVE_LINK_TYPE=$(resolve_effective_link_type yaml-cpp "${LINK_TYPE}")
 
-    configure_platform
-    setup_paths
-    setup_toolchain_env
+    configure_third_party_platform
+    setup_third_party_paths
+    setup_third_party_toolchain_env cmake
 
     log "平台: ${PLATFORM}  链接: ${EFFECTIVE_LINK_TYPE}  版本: ${YAML_CPP_VERSION}  线程: ${BUILD_JOBS}"
-    if [ -n "${CROSS_COMPILE_PREFIX}" ]; then
-        log "交叉编译前缀: ${CROSS_COMPILE_PREFIX}"
-    fi
     log "安装路径: ${INSTALL_DIR}/${PLATFORM}/yaml-cpp"
     log "工具链: ${TOOLCHAIN_FILE}"
 
-    prepare_yaml_cpp_source
+    prepare_third_party_git_source_at_ref yaml-cpp "${YAML_CPP_GIT_URL}" "${YAML_CPP_VERSION}" yaml-cpp
     configure_build_install
     verify_installation
 

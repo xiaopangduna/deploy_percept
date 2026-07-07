@@ -184,6 +184,19 @@ prepare_third_party_git_source() {
     fi
 }
 
+# 克隆（或复用）源码并 checkout 到指定 ref（tag/branch/commit）
+prepare_third_party_git_source_at_ref() {
+    local repo_dir="$1"
+    local git_url="$2"
+    local git_ref="$3"
+    local display_name="${4:-${repo_dir}}"
+
+    prepare_third_party_git_source "${repo_dir}" "${git_url}" "${display_name}"
+    cd "${TMP_MODULES_DIR}/${repo_dir}"
+    _builder_log "切换到版本 ${git_ref}..."
+    git checkout "${git_ref}"
+}
+
 prepare_third_party_build_dir() {
     local install_prefix="$1"
     local build_dir="$2"
@@ -353,25 +366,17 @@ scrub_opposite_library_artifacts() {
     done
 }
 
-# OpenCV install 会把 ZLIB 绝对路径写入 OpenCVModules.cmake，工程目录迁移后链接失败。
-# 安装后改写为相对 OpenCV prefix 的路径。
-# 注意：只替换 zlib 路径片段，勿匹配整段引号内的 INTERFACE_LINK_LIBRARIES。
-relocate_opencv_zlib_paths() {
+# OpenCV install 可能把 ZLIB 绝对路径写入 OpenCVModules.cmake；不修改官方产物，仅警告。
+warn_opencv_zlib_absolute_paths() {
     local modules_file="$1"
-    local link_type="${2:-static}"
-    local rel_zlib
 
     if [[ ! -f "${modules_file}" ]]; then
         return 0
     fi
 
-    if [[ "${link_type}" == shared ]]; then
-        rel_zlib='${_IMPORT_PREFIX}/../zlib/lib/libz.so'
-    else
-        rel_zlib='${_IMPORT_PREFIX}/../zlib/lib/libz.a'
+    if grep -qE '(^|[;"[:space:]])/[^";[:space:]]+/zlib/lib/libz\.(a|so)' "${modules_file}"; then
+        _builder_log "警告: OpenCVModules.cmake 中含有 zlib 绝对路径"
+        _builder_log "  工程目录迁移后 find_package(OpenCV) 可能链接失败，请在目标路径重新构建 OpenCV"
+        _builder_log "  文件: ${modules_file}"
     fi
-
-    sed -i -E \
-        "s#/[^;\"[:space:]]+/zlib/lib/libz\\.(a|so)#${rel_zlib}#g" \
-        "${modules_file}"
 }
