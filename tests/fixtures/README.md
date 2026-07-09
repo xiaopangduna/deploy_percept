@@ -34,12 +34,12 @@ mobilenetv2_classify_awnn mobilenetv2.nb cat.jpg model_outputs.npz
 ## 路径 API
 
 ```cpp
-#include "deploy_percept/utils/fixture_path.hpp"
+#include "test_common/paths.hpp"
 
-deploy_percept::utils::fixture_path("integration/awnn/yolov5_detect/yolov5.nb");
+percept::test::fixture_data("integration/awnn/yolov5_detect/yolov5.nb");
 ```
 
-测试内可用 `percept::test::fixture_data("unit/post_process/yolov5_detect/model_outputs.npz")`。
+测试内可用 `percept::test::fixture_data(...)`；benchmark 同样通过 `test_common/paths.hpp` 解析 fixtures。
 
 ## 解析规则
 
@@ -48,4 +48,4 @@ deploy_percept::utils::fixture_path("integration/awnn/yolov5_detect/yolov5.nb");
 | `ctest`（build tree） | 项目根 | `tests/fixtures/...` |
 | install / `test.sh` | `share/percept` | `share/percept/fixtures/...` |
 
-未设置 `PERCEPT_ROOT` 时，会从可执行文件路径向上查找 install prefix，再定位 `share/percept/fixtures/`（测试在 `tests/`，benchmark 在 `benchmarks/`）。
+未设置 `PERCEPT_ROOT` 时，会从可执行文件路径向上查找 install prefix，再定位 `share/percept/fixtures/`（测试在 `tests/`，benchmark 在 install 的 `benchmarks/`）。

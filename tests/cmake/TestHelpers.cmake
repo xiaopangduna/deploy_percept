@@ -59,10 +59,10 @@ function(add_percept_test)
 
     if(PARSED_USE_CUSTOM_MAIN)
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest test_common ${PARSED_LINK_LIBS})
+            GTest::gtest test_common_gtest ${PARSED_LINK_LIBS})
     else()
         target_link_libraries(${PARSED_NAME} PRIVATE
-            GTest::gtest_main test_common ${PARSED_LINK_LIBS})
+            GTest::gtest_main test_common_gtest ${PARSED_LINK_LIBS})
     endif()
 
     if(PARSED_AWNN)

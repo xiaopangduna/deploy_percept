@@ -111,8 +111,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov5_detect_awnn
 ```
 
-无参运行时通过 `fixture_path()` 解析默认模型与输入（见 `tests/fixtures/integration/awnn/yolov5_detect/`）。也可显式传参或使用 `PERCEPT_ROOT` 指向 install 的 `share/percept`。
-也可显式设置：`export PERCEPT_ROOT=$PWD/share/percept`
+无参运行时默认使用当前工作目录下的 `./yolov5.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
 
 **必须**保证 VIPLite 动态库来自 install 的 `lib/`（与构建版本一致）：
 

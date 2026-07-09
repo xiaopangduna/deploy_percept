@@ -133,7 +133,6 @@ deploy_percept/
 ├── CMakePresets.json              # configure / build preset
 ├── README.md
 ├── apps/                          # 示例应用
-├── benchmarks/                    # 性能 benchmark（AWNN，ENABLE_BENCHMARKS）
 ├── cmake/
 │   ├── FindThirdParty.cmake       # 第三方库查找唯一入口
 │   ├── modules/                   # Find*.cmake
@@ -142,7 +141,7 @@ deploy_percept/
 │   ├── common/                    # types 等公共契约
 │   ├── core/                      # engine、post_process、deploy_percept.hpp
 │   ├── data/                      # COCO / ImageNet 标签
-│   └── utils/                     # 预处理、可视化、io、fixture_path
+│   └── utils/                     # 预处理、可视化、io
 ├── scripts/
 │   ├── build.sh                   # 构建
 │   ├── install.sh                 # 安装
@@ -156,6 +155,8 @@ deploy_percept/
 │   └── utils/                     # deploy_percept_utils
 ├── tests/
 │   ├── fixtures/                  # install → share/percept/fixtures/
+│   ├── test_common/               # 路径解析、fixture 工具（tests + benchmarks 共用）
+│   ├── benchmarks/                # 性能 benchmark（AWNN，ENABLE_BENCHMARKS）
 │   ├── smoke/
 │   ├── unit/post_process/
 │   ├── integration/awnn/

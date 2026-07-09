@@ -1,14 +1,14 @@
 /**
- * MobileNetV2 AWNN 全流程 benchmark（自包含，无共享 bench 框架）
+ * YOLOv5 AWNN 全流程 benchmark（自包含，无共享 bench 框架）
  *
  * 用法:
- *   bench_mobilenetv2_classify [loops] [model.nb] [input.jpg]
+ *   bench_yolov5 [loops] [model.nb] [input.jpg]
  */
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
-#include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
-#include "deploy_percept/utils/fixture_path.hpp"
+#include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/utils/pre_process/image_pre_process.hpp"
+#include "test_common/paths.hpp"
 
 #include <array>
 #include <chrono>
@@ -16,7 +16,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,15 +28,16 @@ namespace {
 using deploy_percept::engine::AwnnEngine;
 using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
-using deploy_percept::post_process::ClassificationPostProcessAwnn;
-using deploy_percept::pre_process::yolov8_preprocess_awnn;
+using deploy_percept::post_process::YoloV5DetectPostProcessAwnn;
+using deploy_percept::pre_process::yolov5_preprocess_awnn;
+using percept::test::fixture_data;
 
 constexpr int kWarmup = 5;
 constexpr int kDefaultLoops = 50;
-constexpr const char *kFixtureCase = "mobilenetv2_classify";
-constexpr const char *kDefaultModel = "mobilenetv2.nb";
-constexpr const char *kDefaultInput = "cat.jpg";
-constexpr const char *kPostProcessorClass = "ClassificationPostProcessAwnn";
+constexpr const char *kFixtureCase = "yolov5_detect";
+constexpr const char *kDefaultModel = "yolov5.nb";
+constexpr const char *kDefaultInput = "dog.jpg";
+constexpr const char *kPostProcessorClass = "YoloV5DetectPostProcessAwnn";
 
 struct BenchRow
 {
@@ -45,6 +45,7 @@ struct BenchRow
     bool is_copy_host;
 };
 
+/** 测试清单：每行对应报告一行 */
 constexpr BenchRow kRows[] = {
     {"mapped", false},
     {"host", true},
@@ -59,9 +60,9 @@ struct BenchRowStats
     double pipeline_ms{0};
 };
 
-std::string fixture_path(const char *relative)
+std::string default_awnn_fixture(const char *relative)
 {
-    return deploy_percept::utils::fixture_path(
+    return fixture_data(
                std::string("integration/awnn/") + kFixtureCase + "/" + relative)
         .string();
 }
@@ -78,36 +79,38 @@ std::string resolve_path(const char *path, const fs::path &base)
     return ec ? p.string() : canonical.string();
 }
 
-void parse_model_input_dims_chwn(
+void parse_model_input_dims_whcn(
     const std::array<std::uint32_t, 6> &sizes,
     int &model_w,
     int &model_h,
     int &model_c)
 {
-    model_c = static_cast<int>(sizes[0]);
+    model_w = static_cast<int>(sizes[0]);
     model_h = static_cast<int>(sizes[1]);
-    model_w = static_cast<int>(sizes[2]);
+    model_c = static_cast<int>(sizes[2]);
 }
 
 bool run_preprocess(
     const cv::Mat &cached_bgr,
     const int model_w,
     const int model_h,
+    const int model_c,
     std::vector<std::uint8_t> &input_buffer)
 {
     if (cached_bgr.empty())
     {
         return false;
     }
-    return yolov8_preprocess_awnn(cached_bgr, model_w, model_h, input_buffer);
+    return yolov5_preprocess_awnn(cached_bgr, model_w, model_h, model_c, input_buffer);
 }
 
 BenchRowStats bench_one_row(
     AwnnEngine &engine,
-    ClassificationPostProcessAwnn &processor,
+    YoloV5DetectPostProcessAwnn &processor,
     const std::string &input_path,
     const int model_w,
     const int model_h,
+    const int model_c,
     const BenchRow &row,
     const int loops)
 {
@@ -122,7 +125,8 @@ BenchRowStats bench_one_row(
     }
 
     const std::size_t input_byte_size =
-        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3U;
+        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) *
+        static_cast<std::size_t>(model_c);
 
     std::vector<std::uint8_t> input_buffer(input_byte_size);
 
@@ -134,7 +138,7 @@ BenchRowStats bench_one_row(
     for (int i = 0; i < total; ++i)
     {
         const auto pre_t0 = std::chrono::steady_clock::now();
-        if (!run_preprocess(cached_bgr, model_w, model_h, input_buffer))
+        if (!run_preprocess(cached_bgr, model_w, model_h, model_c, input_buffer))
         {
             std::fprintf(stderr, "preprocess failed for tag=%s\n", row.tag);
             return stats;
@@ -195,7 +199,7 @@ void print_report(
     const int loops,
     const std::vector<BenchRowStats> &rows)
 {
-    std::printf("\n=== mobilenetv2_classify_awnn full pipeline ===\n");
+    std::printf("\n=== yolov5_detect_awnn full pipeline ===\n");
     std::printf(
         "model=%s  input=%s  warmup=%d  loops=%d\n",
         model_path,
@@ -280,8 +284,8 @@ int main(int argc, char **argv)
         ++argi;
     }
 
-    const std::string default_model = fixture_path(kDefaultModel);
-    const std::string default_input = fixture_path(kDefaultInput);
+    const std::string default_model = default_awnn_fixture(kDefaultModel);
+    const std::string default_input = default_awnn_fixture(kDefaultInput);
     const char *model_arg = (argi < argc) ? argv[argi] : default_model.c_str();
     const char *input_arg = (argi + 1 < argc) ? argv[argi + 1] : default_input.c_str();
 
@@ -306,7 +310,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("bench_mobilenetv2_classify\n");
+    std::printf("bench_yolov5\n");
     std::printf("  model  : %s\n", model_path.c_str());
     std::printf("  input  : %s\n", input_path.c_str());
     std::printf("  warmup : %d  loops: %d\n", kWarmup, loops);
@@ -326,7 +330,8 @@ int main(int argc, char **argv)
     std::vector<BenchRowStats> results;
     results.reserve(std::size(kRows));
 
-    std::optional<ClassificationPostProcessAwnn> processor;
+    YoloV5DetectPostProcessAwnn processor({});
+    bool processor_ready = false;
 
     for (const BenchRow &row : kRows)
     {
@@ -344,27 +349,25 @@ int main(int argc, char **argv)
         int model_w = 0;
         int model_h = 0;
         int model_c = 0;
-        parse_model_input_dims_chwn(engine.getInfo().input_sizes.at(0), model_w, model_h, model_c);
+        parse_model_input_dims_whcn(engine.getInfo().input_sizes.at(0), model_w, model_h, model_c);
 
-        if (results.empty())
+        if (!processor_ready)
         {
+            YoloV5DetectPostProcessAwnn::Params post_params;
+            post_params.model_in_w = model_w;
+            post_params.model_in_h = model_h;
+            processor = YoloV5DetectPostProcessAwnn(post_params);
+            processor_ready = true;
             std::printf(
-                "  model input VIP sizes: C=%d H=%d W=%d\n",
-                model_c,
+                "  model input VIP sizes: W=%d H=%d C=%d\n",
+                model_w,
                 model_h,
-                model_w);
-        }
-
-        if (!processor.has_value())
-        {
-            processor.emplace(ClassificationPostProcessAwnn({
-                .num_classes = static_cast<int>(engine.getInfo().output_sizes.at(0)[0]),
-            }));
+                model_c);
         }
 
         std::printf("\n--- running [%s] ---\n", row.tag);
         results.push_back(
-            bench_one_row(engine, *processor, input_path, model_w, model_h, row, loops));
+            bench_one_row(engine, processor, input_path, model_w, model_h, model_c, row, loops));
     }
 
     print_report(model_path.c_str(), input_path.c_str(), loops, results);

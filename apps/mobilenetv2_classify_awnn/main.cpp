@@ -5,7 +5,7 @@
  *   mobilenetv2_classify_awnn [model.nb] [input.jpg] [model_outputs.npz]
  *
  * 默认：./mobilenetv2.nb  ./cat.jpg
- * 性能对比见 benchmarks/awnn/bench_mobilenetv2_classify
+ * 性能对比见 tests/benchmarks/awnn/bench_mobilenetv2_classify
  */
 #include <cstdio>
 #include <cstdlib>
@@ -19,7 +19,6 @@
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
-#include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/npy.hpp"
 
 namespace fs = std::filesystem;
@@ -29,25 +28,13 @@ using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::ClassificationPostProcessAwnn;
 using deploy_percept::utils::convertTensorViewsToNpz;
-using deploy_percept::utils::fixture_path;
 using deploy_percept::utils::save_npz;
 
 namespace
 {
 
-const fs::path &default_model_path()
-{
-    static const fs::path path =
-        fixture_path("integration/awnn/mobilenetv2_classify/mobilenetv2.nb");
-    return path;
-}
-
-const fs::path &default_input_path()
-{
-    static const fs::path path =
-        fixture_path("integration/awnn/mobilenetv2_classify/cat.jpg");
-    return path;
-}
+constexpr const char *kDefaultModel = "mobilenetv2.nb";
+constexpr const char *kDefaultInput = "cat.jpg";
 
 bool prepare_model_input(
     const std::string &input_path,
@@ -76,8 +63,8 @@ bool prepare_model_input(
 
 int main(int argc, char **argv)
 {
-    const std::string model_path_str = (argc > 1) ? argv[1] : default_model_path().string();
-    const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
+    const std::string model_path_str = (argc > 1) ? argv[1] : kDefaultModel;
+    const std::string input_path_str = (argc > 2) ? argv[2] : kDefaultInput;
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
     const char *npz_path = (argc > 3) ? argv[3] : nullptr;

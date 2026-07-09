@@ -61,7 +61,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov8_detect_awnn
 ```
 
-无参运行时通过 `fixture_path()` 解析默认模型与输入。也可显式传参或设置 `PERCEPT_ROOT=$PWD/share/percept`。
+无参运行时默认使用当前工作目录下的 `./yolov8.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
 
 **正确性回归（板端）：**
 

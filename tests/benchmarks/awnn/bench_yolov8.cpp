@@ -7,8 +7,8 @@
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
-#include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/pre_process/image_pre_process.hpp"
+#include "test_common/paths.hpp"
 
 #include <array>
 #include <chrono>
@@ -30,6 +30,7 @@ using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::VipLiteRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 using deploy_percept::pre_process::yolov8_preprocess_awnn;
+using percept::test::fixture_data;
 
 constexpr int kWarmup = 5;
 constexpr int kDefaultLoops = 50;
@@ -58,9 +59,9 @@ struct BenchRowStats
     double pipeline_ms{0};
 };
 
-std::string fixture_path(const char *relative)
+std::string default_awnn_fixture(const char *relative)
 {
-    return deploy_percept::utils::fixture_path(
+    return fixture_data(
                std::string("integration/awnn/") + kFixtureCase + "/" + relative)
         .string();
 }
@@ -279,8 +280,8 @@ int main(int argc, char **argv)
         ++argi;
     }
 
-    const std::string default_model = fixture_path(kDefaultModel);
-    const std::string default_input = fixture_path(kDefaultInput);
+    const std::string default_model = default_awnn_fixture(kDefaultModel);
+    const std::string default_input = default_awnn_fixture(kDefaultInput);
     const char *model_arg = (argi < argc) ? argv[argi] : default_model.c_str();
     const char *input_arg = (argi + 1 < argc) ? argv[argi + 1] : default_input.c_str();
 

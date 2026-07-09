@@ -67,6 +67,10 @@ clean_stale_install_artifacts() {
             echo "清理旧 benchmark 可执行文件: ${INSTALL_DIR}/benchmarks/"
             find "${INSTALL_DIR}/benchmarks" -mindepth 1 -maxdepth 1 -type f -exec rm -f {} +
         fi
+        if [[ -d "${INSTALL_DIR}/tests/benchmarks" ]]; then
+            echo "清理旧版 benchmark 目录: ${INSTALL_DIR}/tests/benchmarks/"
+            rm -rf "${INSTALL_DIR}/tests/benchmarks"
+        fi
     fi
 }
 

@@ -5,7 +5,7 @@
  *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
  * 默认：./yolov8.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
- * 性能对比见 benchmarks/awnn/bench_yolov8
+ * 性能对比见 tests/benchmarks/awnn/bench_yolov8
  */
 #include <cstdio>
 #include <cstdint>
@@ -17,7 +17,6 @@
 
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
-#include "deploy_percept/utils/fixture_path.hpp"
 #include "deploy_percept/utils/npy.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
 #include "deploy_percept/data/class_labels.hpp"
@@ -30,25 +29,14 @@ using deploy_percept::post_process::YoloV8DetectPostProcessAwnn;
 using deploy_percept::data::kCoco80Labels;
 using deploy_percept::utils::drawDetectionResults;
 using deploy_percept::utils::convertTensorViewsToNpz;
-using deploy_percept::utils::fixture_path;
 using deploy_percept::utils::save_npz;
 
 namespace
 {
 
+constexpr const char *kDefaultModel = "yolov8.nb";
+constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov8_detect_awnn_out.jpg";
-
-const fs::path &default_model_path()
-{
-    static const fs::path path = fixture_path("integration/awnn/yolov8_detect/yolov8.nb");
-    return path;
-}
-
-const fs::path &default_input_path()
-{
-    static const fs::path path = fixture_path("integration/awnn/yolov8_detect/dog.jpg");
-    return path;
-}
 
 bool prepare_model_input(
     const std::string &input_path,
@@ -77,8 +65,8 @@ bool prepare_model_input(
 
 int main(int argc, char **argv)
 {
-    const std::string model_path_str = (argc > 1) ? argv[1] : default_model_path().string();
-    const std::string input_path_str = (argc > 2) ? argv[2] : default_input_path().string();
+    const std::string model_path_str = (argc > 1) ? argv[1] : kDefaultModel;
+    const std::string input_path_str = (argc > 2) ? argv[2] : kDefaultInput;
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
     const char *output_path = (argc > 3) ? argv[3] : kDefaultOutput;

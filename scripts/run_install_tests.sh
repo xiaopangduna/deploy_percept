@@ -111,7 +111,7 @@ run_executables_in_dir() {
 run_benchmarks() {
     if [[ ! -d "${BENCHMARKS_DIR}" ]]; then
         echo "错误: 未找到 benchmark 目录: ${BENCHMARKS_DIR}" >&2
-        echo "提示: ENABLE_BENCHMARKS=ON、INSTALL_BENCHMARKS=ON 且已 install" >&2
+        echo "提示: ENABLE_BENCHMARKS=ON、INSTALL_BENCHMARKS=ON 且已 install 到 benchmarks/" >&2
         return 1
     fi
 

@@ -1,6 +1,6 @@
 include(GNUInstallDirs)
 
-# 相对 CMAKE_INSTALL_PREFIX（与 bin/、include/ 同级）
+# 源码在 tests/benchmarks/；install 后与 bin/、lib/、tests/ 同级
 set(PERCEPT_BENCHMARKS_INSTALL_DIR "benchmarks")
 # prefix/benchmarks/<exe> → prefix/lib
 set(PERCEPT_BENCHMARKS_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
@@ -35,6 +35,9 @@ function(add_percept_awnn_benchmark)
     if(NOT AWNN_FOUND)
         message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): AWNN not found")
     endif()
+    if(NOT TARGET test_common)
+        message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): test_common not built")
+    endif()
     if(NOT TARGET deploy_percept_utils)
         message(FATAL_ERROR "add_percept_awnn_benchmark(${PARSED_NAME}): deploy_percept_utils not built")
     endif()
@@ -43,9 +46,11 @@ function(add_percept_awnn_benchmark)
 
     target_include_directories(${PARSED_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/tests
         ${CMAKE_SOURCE_DIR})
 
     target_link_libraries(${PARSED_NAME} PRIVATE
+        test_common
         deploy_percept_core
         deploy_percept_utils
         AWNN::VIPLite
