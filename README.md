@@ -27,8 +27,10 @@
 构建产物安装至 `third_party/<platform>/`（`<platform>` 与 preset 对应 toolchain 中的平台 tag 一致）。
 
 - **公开库**（zlib、cnpy、gtest、opencv、spdlog 等）：由 `scripts/third_party_builder.sh` 调度，各库的下载与编译脚本在 [`scripts/third_party_builders/`](scripts/third_party_builders/)（`builder_*.sh`），可直接构建。
-- **`--link static|shared`**：控制构建产物为静态库或动态库，**默认 static**。构建前会清除该库在 `third_party/<platform>/<lib>/` 下的旧安装，避免 `.a`/`.so` 并存（**zlib、cnpy 例外**：上游默认同时安装静/动态库；主工程分别通过 CMake 选项 `ZLIB_LINK_TYPE`、`CNPY_LINK_TYPE` 选择链哪一个，**默认均为 STATIC**）。
-- **混链**：third_party 只决定各库安装形态；与 AWNN 等 `.so` 或其它库的静/动组合，由主工程 CMake 自行配置。
+- **`--link static|shared`**：控制 gtest、opencv、spdlog、yaml-cpp 等为静态或动态库，**默认 static**（**zlib、cnpy 例外**：上游同时安装 `.a`/`.so`，不受 `--link` 影响）。
+- **install 运行时库**：
+  - **zlib / cnpy**：由 CMake 选项 `ZLIB_LINK_TYPE`、`CNPY_LINK_TYPE` 选择链哪种；设为 `SHARED` 时 `cmake --install` 安装对应 `.so` 到 `install/<platform>/lib/`。
+  - **gtest / opencv / spdlog / yaml-cpp**：由 `find_package` 判定（`SHARED IMPORTED` 或 `OpenCV_SHARED`）；third_party 用 `--link shared` 构建后，`cmake --install` 自动安装所需 `.so`，无需额外 CMake 参数。
 - **非公开 / 平台专属库**（如 AWNN、RKNN、RGA）：不在上述脚本内自动下载，需按 [`cmake/modules/`](cmake/modules/) 中对应 `Find*.cmake` 的说明手动准备（例如 AWNN 见 `FindAwnn.cmake`，将 `awnpu_model_zoo` 的 `common/npuruntime` 整包置于 `third_party/<platform>/awnn/npuruntime`）。rga/rknpu 仅提供 shared，请求 `--link static` 时会警告并仍安装 `.so`。
 
 ```bash
@@ -74,7 +76,7 @@ install 包布局（`install/<platform>/`）：
 ```
 install/<platform>/
 ├── bin/                          # demo 可执行文件
-├── lib/                          # 静态库、VIPLite .so
+├── lib/                          # 自研库、VIPLite .so；shared 第三方 .so（find_package 或 ZLIB/CNPY_LINK_TYPE=SHARED）
 ├── include/deploy_percept/       # 对外头文件
 ├── tests/                        # 测试可执行文件（INSTALL_TESTS）
 ├── benchmarks/                   # benchmark（ENABLE/INSTALL_BENCHMARKS）

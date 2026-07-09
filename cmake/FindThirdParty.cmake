@@ -37,7 +37,6 @@ include(FindCnpyCustom)
 include(FindOpenCVCustom)
 include(FindSpdlogCustom)
 include(FindGTestCustom)
-
-# TODO: yaml-cpp（RKNN app 启用后再 include(FindYamlCppCustom)）
+include(FindYamlCppCustom)
 
 message(STATUS "已完成第三方库配置")

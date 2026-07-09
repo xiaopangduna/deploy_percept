@@ -5,7 +5,8 @@
 
 set(CNPY_FOUND FALSE)
 
-set(CNPY_LINK_TYPE "STATIC" CACHE STRING "cnpy library link type: STATIC or SHARED")
+# set(CNPY_LINK_TYPE "STATIC" CACHE STRING "cnpy library link type: STATIC or SHARED")
+set(CNPY_LINK_TYPE "SHARED" CACHE STRING "cnpy library link type: STATIC or SHARED")
 set_property(CACHE CNPY_LINK_TYPE PROPERTY STRINGS STATIC SHARED)
 
 set(CNPY_PATH "${THIRD_PARTY_PLATFORM_DIR}/cnpy")
@@ -50,6 +51,11 @@ endif()
 set(CNPY_FOUND TRUE)
 set(CNPY_INCLUDE_DIRS "${CNPY_INCLUDE_DIR}")
 set(CNPY_LIBRARIES cnpy::cnpy)
+
+if(CNPY_LINK_TYPE STREQUAL "SHARED")
+    include(${CMAKE_CURRENT_LIST_DIR}/PerceptThirdPartyInstall.cmake)
+    percept_install_shared_lib_family("${CNPY_LIBRARY}")
+endif()
 
 message(STATUS "==============================================================================")
 message(STATUS "cnpy found successfully")

@@ -5,7 +5,8 @@
 
 set(ZLIB_FOUND FALSE)
 
-set(ZLIB_LINK_TYPE "STATIC" CACHE STRING "zlib library link type: STATIC or SHARED")
+# set(ZLIB_LINK_TYPE "STATIC" CACHE STRING "zlib library link type: STATIC or SHARED")
+set(ZLIB_LINK_TYPE "SHARED" CACHE STRING "zlib library link type: STATIC or SHARED")
 set_property(CACHE ZLIB_LINK_TYPE PROPERTY STRINGS STATIC SHARED)
 
 set(ZLIB_ROOT "${THIRD_PARTY_PLATFORM_DIR}/zlib")
@@ -42,6 +43,11 @@ if(NOT TARGET ZLIB::ZLIB)
         IMPORTED_LOCATION "${ZLIB_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIR}"
     )
+endif()
+
+if(ZLIB_LINK_TYPE STREQUAL "SHARED")
+    include(${CMAKE_CURRENT_LIST_DIR}/PerceptThirdPartyInstall.cmake)
+    percept_install_shared_lib_family("${ZLIB_LIBRARY}")
 endif()
 
 message(STATUS "==============================================================================")

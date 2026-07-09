@@ -56,8 +56,6 @@ EOF
 
 build_opencv_cmake_args() {
     local shared_flag
-    local zlib_root="${INSTALL_DIR}/${PLATFORM}/zlib"
-    local zlib_lib
 
     shared_flag=$(cmake_bool_from_link_type "${EFFECTIVE_LINK_TYPE}")
 
@@ -67,27 +65,16 @@ build_opencv_cmake_args() {
         -DOPENCV_DOWNLOAD_PATH="${OPENCV_CACHE_DIR}"
         -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
         -DBUILD_SHARED_LIBS="${shared_flag}"
+        -DBUILD_ZLIB=ON
         -DBUILD_PNG=ON
         -DPNG_LIBRARY=""
         -DPNG_PNG_INCLUDE_DIR=""
     )
-
-    if zlib_lib=$(find_zlib_library_path "${zlib_root}" "${EFFECTIVE_LINK_TYPE}") && [[ -f "${zlib_root}/include/zlib.h" ]]; then
-        OPENCV_CMAKE_ARGS+=(
-            -DBUILD_ZLIB=OFF
-            -DZLIB_INCLUDE_DIR="${zlib_root}/include"
-            -DZLIB_LIBRARY="${zlib_lib}"
-        )
-        log "ZLIB: ${zlib_lib}"
-    else
-        log "警告: 未找到 ${zlib_root}，请先构建 zlib；否则 OpenCV 可能链接到错误路径"
-    fi
 }
 
 configure_build_install() {
     local install_prefix="${INSTALL_DIR}/${PLATFORM}/opencv"
     local build_dir="${TMP_MODULES_DIR}/opencv/build_${PLATFORM}"
-    local modules_file="${install_prefix}/lib/cmake/opencv4/OpenCVModules.cmake"
 
     prepare_third_party_build_dir "${install_prefix}" "${build_dir}"
 
@@ -103,8 +90,6 @@ configure_build_install() {
 
     log "安装 OpenCV..."
     cmake --install .
-
-    warn_opencv_zlib_absolute_paths "${modules_file}"
 }
 
 verify_installation() {

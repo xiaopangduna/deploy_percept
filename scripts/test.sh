@@ -134,7 +134,7 @@ run_rsync_to_board() {
     echo "source:  ${install_dir}/"
     echo "target:  ${ssh_host}:${remote_dir_input}/"
 
-    rsync -avz --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
+    rsync -avzc --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
 }
 
 run_install_tests_remote() {

@@ -27,7 +27,7 @@ show_help() {
     echo "  armv7l-SSC375"
     echo ""
     echo "支持的库:"
-    echo "  zlib       - zlib 压缩库（OpenCV/cnpy 依赖，建议先构建）"
+    echo "  zlib       - zlib 压缩库（cnpy 依赖，建议先构建）"
     echo "  cnpy       - C++ NumPy 文件读写库"
     echo "  gtest      - Google Test 测试框架 (v1.14.0)"
     echo "  opencv     - OpenCV 计算机视觉库 (4.5.4)"
@@ -46,7 +46,7 @@ show_help() {
     echo "  2. 构建过程中会下载源代码到 tmp/modules 目录，请确保有足够的磁盘空间"
     echo "  3. 构建产物安装到 third_party/<platform>/<lib>/"
     echo "  4. 构建前会清除该库的旧 install 目录；zlib/cnpy 会同时保留 .a/.so，由 CMake ZLIB_LINK_TYPE/CNPY_LINK_TYPE 选择"
-    echo "  5. OpenCV 需先构建 zlib；rga/rknpu 仅 shared，请求 static 时会警告"
+    echo "  5. rga/rknpu 仅 shared，请求 static 时会警告"
     echo ""
 }
 
