@@ -95,8 +95,11 @@ jobs:
       - name: Build CI image
         run: |
           set -euo pipefail
+          # 与 runner 同 uid/gid，避免 workspace 产物变成 root 属主；镜像内已有 passwd 用户 ci
           docker build \
             -t "${CI_IMAGE}" \
+            --build-arg USER_UID="$(id -u)" \
+            --build-arg USER_GID="$(id -g)" \
             -f .devcontainer/ubuntu-22.04-allwinner/Dockerfile \
             .
 
@@ -117,15 +120,14 @@ jobs:
             TEST_ARGS+=(--profile "${PROFILE_SEC}")
           fi
 
-          # 与 runner 同 uid，避免 workspace 下 build/install 变成 root 属主
           docker run --rm \
             --network=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
+            --user ci \
             -v /opt/toolchains:/opt/toolchains:ro \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -v "${THIRD_PARTY_HOST_CACHE}:/workspace/third_party:ro" \
             -e SSHPASS \
+            -e HOME=/home/ci \
             -w /workspace \
             "${CI_IMAGE}" \
             bash scripts/test.sh "${TEST_ARGS[@]}"

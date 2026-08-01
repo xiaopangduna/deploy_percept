@@ -40,3 +40,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 工具链挂载点（宿主机 tmp/toolchains -> /opt/toolchains）
 RUN mkdir -p /opt/toolchains
+
+# CI 用普通用户（ssh/rsync 需要 /etc/passwd 条目）。默认 1100，避免与
+# devcontainer 的 vscode(1000) 冲突；CI 构建时传入 runner uid/gid：
+#   --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g)
+ARG USERNAME=ci
+ARG USER_UID=1100
+ARG USER_GID=1100
+RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
+ && useradd --uid "${USER_UID}" --gid "${USER_GID}" -m -s /bin/bash "${USERNAME}"
