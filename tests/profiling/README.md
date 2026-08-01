@@ -70,3 +70,18 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 ```
 
 当前内置目标：`mobilenetv2_classify_awnn`（bin 中不存在则 skip）。
+
+## 日志与回传
+
+`test_runner` 写入 install 树：
+
+```text
+var/percept/logs/
+  meta.txt
+  test.log       # 全部正确性测试（段分隔）
+  bench.log      # 全部 latency bench
+  profile.log    # monitor + app 文本
+  profile.csv    # monitor 时间序列（含 npu_load）
+```
+
+`--board` 模式结束后，`test.sh` 拉到源码树 `ci-artifacts/board-logs/`；Board CI 上传 artifact `board-logs-<sha>`。

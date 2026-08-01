@@ -108,6 +108,10 @@ run_on_board() {
     setup_ssh_transport
     build_runner_args
 
+    local artifacts_dir="${PROJECT_ROOT}/ci-artifacts/board-logs"
+    mkdir -p "${artifacts_dir}"
+    rm -rf "${artifacts_dir:?}/"*
+
     echo "=== rsync → ${ssh_host}:${remote_dir}/ ==="
     rsync -avzc --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir}/"
 
@@ -126,7 +130,32 @@ run_on_board() {
     done
 
     echo "=== test_runner (remote) ==="
-    "${SSH_WRAP[@]}" "${ssh_host}" "bash -lc $(printf '%q' "${remote_cmd}")"
+    local remote_rc=0
+    set +e
+    "${SSH_WRAP[@]}" "${ssh_host}" "bash -lc $(printf '%q' "${remote_cmd}")" \
+        2>&1 | tee "${artifacts_dir}/test_runner_console.log"
+    remote_rc=${PIPESTATUS[0]}
+    set -e
+
+    echo "=== pull board logs → ${artifacts_dir}/ ==="
+    mkdir -p "${artifacts_dir}/logs"
+    if rsync -avz -e "${RSYNC_RSH}" \
+        "${ssh_host}:${remote_abs}/var/percept/logs/" \
+        "${artifacts_dir}/logs/"; then
+        echo "pulled: ${remote_abs}/var/percept/logs/"
+    else
+        echo "警告: 未能拉取板端 var/percept/logs/" >&2
+    fi
+
+    {
+        echo "board_spec=${board_spec}"
+        echo "remote_abs=${remote_abs}"
+        echo "remote_rc=${remote_rc}"
+        echo "pulled_at=$(date -Iseconds)"
+    } >"${artifacts_dir}/pull_meta.txt"
+
+    echo "artifacts: ${artifacts_dir}"
+    return "${remote_rc}"
 }
 
 while [[ $# -gt 0 ]]; do

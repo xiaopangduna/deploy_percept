@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve board target
         id: board
@@ -117,8 +117,11 @@ jobs:
             TEST_ARGS+=(--profile "${PROFILE_SEC}")
           fi
 
+          # 与 runner 同 uid，避免 workspace 下 build/install 变成 root 属主
           docker run --rm \
             --network=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
             -v /opt/toolchains:/opt/toolchains:ro \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -v "${THIRD_PARTY_HOST_CACHE}:/workspace/third_party:ro" \
@@ -126,3 +129,12 @@ jobs:
             -w /workspace \
             "${CI_IMAGE}" \
             bash scripts/test.sh "${TEST_ARGS[@]}"
+
+      - name: Upload board logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: board-logs-${{ github.sha }}
+          path: ci-artifacts/board-logs/
+          if-no-files-found: warn
+          retention-days: 30

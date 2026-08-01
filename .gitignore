@@ -5,6 +5,7 @@ install/
 tmp/
 logs/
 runs/
+ci-artifacts/
 
 
 compile_commands.json

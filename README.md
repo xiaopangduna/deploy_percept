@@ -117,6 +117,8 @@ cd ~/deploy_percept
 
 NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:path`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
 
+板端跑完后会把日志拉到 `ci-artifacts/board-logs/`（`test_runner_console.log` + `logs/{test,bench,profile}.log` + `profile.csv`）。Board CI 上传 artifact `board-logs-<sha>`，便于对比不同 commit。
+
 手动同步 install 包：
 
 ```bash
