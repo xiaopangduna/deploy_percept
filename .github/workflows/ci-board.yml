@@ -1,0 +1,117 @@
+# 板端 CI：self-hosted runner 上用开发同款容器交叉编译，再 SSH 上板跑测。
+#
+# 仓库 Secrets / Variables（Settings → Secrets and variables → Actions）：
+#   Secret  SSHPASS      板端 SSH 密码
+#   Var     BOARD_SPEC   例如 orangepi@192.168.1.101:~/deploy_percept
+#
+# Runner 宿主机一次性准备：
+#   1) Docker 可用（当前用户可 docker run，无需 sudo）
+#   2) 工具链：/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu
+#   3) 预置 third_party（含 AWNN），默认路径：
+#        ~/ci-cache/deploy_percept/third_party/aarch64-linux-gnu_orange_pi_4_pro_a733/...
+#      可从已跑通的开发树拷贝：
+#        mkdir -p ~/ci-cache/deploy_percept
+#        cp -a /path/to/deploy_percept/third_party ~/ci-cache/deploy_percept/
+#
+# 触发：Actions → "Board test (Orange Pi A733)" → Run workflow
+
+name: Board test (Orange Pi A733)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bench_loops:
+        description: "Benchmark loops；填 0 表示不跑 bench"
+        required: false
+        default: "50"
+      board_spec:
+        description: "覆盖 BOARD_SPEC（留空则用仓库 Variable）"
+        required: false
+        default: ""
+
+concurrency:
+  group: board-test-orangepi
+  cancel-in-progress: false
+
+jobs:
+  board-test:
+    runs-on: [self-hosted, Linux, X64, orange_pi_pro_4]
+    timeout-minutes: 180
+
+    env:
+      CI_IMAGE: deploy_percept-ci:ubuntu-22.04-allwinner
+      PRESET: aarch64-linux-gnu_orange_pi_4_pro_a733-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve board target
+        id: board
+        env:
+          INPUT_BOARD: ${{ inputs.board_spec }}
+          VAR_BOARD: ${{ vars.BOARD_SPEC }}
+          SSHPASS: ${{ secrets.SSHPASS }}
+        run: |
+          set -euo pipefail
+          BOARD_SPEC="${INPUT_BOARD:-}"
+          if [[ -z "${BOARD_SPEC}" ]]; then
+            BOARD_SPEC="${VAR_BOARD:-}"
+          fi
+          if [[ -z "${BOARD_SPEC}" ]]; then
+            echo "错误: 未设置板端地址。请配置 Variable BOARD_SPEC，或在手动触发时填写 board_spec。" >&2
+            exit 1
+          fi
+          if [[ -z "${SSHPASS:-}" ]]; then
+            echo "错误: 未设置 Secret SSHPASS。" >&2
+            exit 1
+          fi
+          echo "board_spec=${BOARD_SPEC}" >> "${GITHUB_OUTPUT}"
+          echo "Using BOARD_SPEC=${BOARD_SPEC}"
+
+      - name: Check host prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo "错误: 宿主机未安装 docker"; exit 1; }
+          docker info >/dev/null || { echo "错误: 当前用户无法访问 docker（检查权限/daemon）"; exit 1; }
+          TOOLCHAIN="/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu"
+          [[ -d "${TOOLCHAIN}" ]] || { echo "错误: 缺少工具链目录: ${TOOLCHAIN}"; exit 1; }
+
+          CACHE="${HOME}/ci-cache/deploy_percept/third_party"
+          if [[ ! -d "${CACHE}/aarch64-linux-gnu_orange_pi_4_pro_a733" ]]; then
+            echo "错误: 缺少预置 third_party: ${CACHE}/aarch64-linux-gnu_orange_pi_4_pro_a733" >&2
+            echo "请在 runner 宿主机准备该目录（含 awnn/opencv 等），再重跑。" >&2
+            exit 1
+          fi
+          echo "THIRD_PARTY_HOST_CACHE=${CACHE}" >> "${GITHUB_ENV}"
+
+      - name: Build CI image
+        run: |
+          set -euo pipefail
+          docker build \
+            -t "${CI_IMAGE}" \
+            -f .devcontainer/ubuntu-22.04-allwinner/Dockerfile \
+            .
+
+      - name: Board test in container
+        env:
+          SSHPASS: ${{ secrets.SSHPASS }}
+          BOARD_SPEC: ${{ steps.board.outputs.board_spec }}
+          BENCH_LOOPS: ${{ inputs.bench_loops }}
+        run: |
+          set -euo pipefail
+
+          TEST_ARGS=(--preset "${PRESET}" --board "${BOARD_SPEC}")
+          if [[ "${BENCH_LOOPS}" != "0" ]]; then
+            TEST_ARGS+=(--bench "${BENCH_LOOPS}")
+          fi
+
+          docker run --rm \
+            --network=host \
+            -v /opt/toolchains:/opt/toolchains:ro \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v "${THIRD_PARTY_HOST_CACHE}:/workspace/third_party:ro" \
+            -e SSHPASS \
+            -w /workspace \
+            "${CI_IMAGE}" \
+            bash scripts/test.sh "${TEST_ARGS[@]}"
