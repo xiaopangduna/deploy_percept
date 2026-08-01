@@ -80,7 +80,7 @@ install/<platform>/
 ├── include/deploy_percept/       # 对外头文件
 ├── tests/                        # 测试可执行文件（INSTALL_TESTS）
 ├── benchmarks/                   # benchmark（ENABLE/INSTALL_BENCHMARKS）
-├── scripts/run_install_tests.sh  # install 包测试 runner
+├── scripts/test_runner.sh        # install 包测试 runner
 └── share/percept/fixtures/       # 测试与 demo 共用数据
 ```
 
@@ -95,7 +95,7 @@ bash scripts/test.sh --preset x86_64-debug
 **开发板**（build → install → rsync → 远程跑测）：
 
 ```bash
-export SSHPASS='your_password'   # 或配置 ssh-copy-id 密钥
+export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@192.168.0.103:~/deploy_percept
@@ -109,8 +109,8 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 ```bash
 cd ~/deploy_percept
-./scripts/run_install_tests.sh              # 扫描 tests/ 下全部可执行文件
-./scripts/run_install_tests.sh --bench 50   # tests + benchmarks
+./scripts/test_runner.sh              # 扫描 tests/ 下全部可执行文件
+./scripts/test_runner.sh --bench 50   # tests + benchmarks
 ```
 
 手动同步 install 包：
@@ -145,7 +145,7 @@ deploy_percept/
 ├── scripts/
 │   ├── build.sh                   # 构建（可选 --install）
 │   ├── test.sh                    # build + install + 验证 install 包
-│   ├── run_install_tests.sh       # install 包内测试 runner（随包安装）
+│   ├── test_runner.sh             # install 包内测试 runner（随包安装）
 │   ├── third_party_builder.sh
 │   └── third_party_builders/
 ├── src/

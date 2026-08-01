@@ -13,7 +13,7 @@ BENCHMARKS_DIR="${INSTALL_PREFIX}/benchmarks"
 show_help() {
     echo "deploy_percept install 包测试 runner"
     echo ""
-    echo "用法: ${INSTALL_PREFIX}/scripts/run_install_tests.sh [选项]"
+    echo "用法: ${INSTALL_PREFIX}/scripts/test_runner.sh [选项]"
     echo ""
     echo "默认: 扫描并运行 tests/ 下全部可执行文件"
     echo ""

@@ -13,34 +13,27 @@ SSH_WRAP=()
 RSYNC_RSH=""
 
 show_help() {
-    echo "deploy_percept 测试脚本（build + install + 验证 install 包）"
+    echo "deploy_percept 测试脚本（编排：build+install → test_runner）"
     echo ""
-    echo "用法: bash $0 --preset <name> [选项]"
+    echo "用法: bash $0 [选项]"
     echo ""
-    echo "流程:"
-    echo "  PC 模式:     build → install → scripts/run_install_tests.sh"
-    echo "  开发板模式:  build → install → rsync → SSH 远程 run_install_tests.sh"
+    echo "默认 host: 本地 install + test_runner"
+    echo "--board:   rsync 后远程 test_runner"
     echo ""
     echo "选项:"
     echo "  --preset <name>          CMake preset（默认: x86_64-debug）"
-    echo "  --board <user@host:path> 开发板 install 根目录（启用板端模式）"
-    echo "  --bench [loops]          传给 run_install_tests.sh（默认 loops=50）"
+    echo "  --board <user@host:path> 板端模式（user@host:远程 install 根目录）"
+    echo "  --bench [loops]          传给 test_runner（默认 loops=50）"
     echo "  --help                   显示帮助"
     echo ""
-    echo "SSH 认证:"
-    echo "  推荐: ssh-copy-id 配置密钥，无需额外环境变量"
-    echo "  密码: export SSHPASS='...'  （需安装 sshpass；仅当前 shell，勿提交仓库）"
+    echo "板端 SSH: 仅支持密码登录"
+    echo "  export SSHPASS='...'   # 需安装 sshpass；仅当前 shell，勿提交仓库"
     echo ""
     echo "示例:"
     echo "  bash $0 --preset x86_64-debug"
-    echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \\"
-    echo "    --board orangepi@192.168.1.10:~/deploy_percept"
     echo "  export SSHPASS='orangepi'"
     echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \\"
     echo "    --board orangepi@192.168.1.10:~/deploy_percept --bench 100"
-    echo ""
-    echo "install 包内直接跑: ./scripts/run_install_tests.sh [--bench [loops]]"
-    echo "开发期 build tree GTest: cd build/<preset> && ctest --output-on-failure"
 }
 
 is_unsigned_loops() {
@@ -48,28 +41,17 @@ is_unsigned_loops() {
 }
 
 setup_ssh_transport() {
-    if [[ -n "${SSHPASS:-}" ]]; then
-        if ! command -v sshpass >/dev/null 2>&1; then
-            echo "错误: 已设置 SSHPASS 但未找到 sshpass" >&2
-            echo "提示: sudo apt install sshpass，或改用 ssh-copy-id 密钥登录" >&2
-            exit 1
-        fi
-        SSH_WRAP=(sshpass -e ssh -o StrictHostKeyChecking=accept-new)
-        RSYNC_RSH="sshpass -e ssh -o StrictHostKeyChecking=accept-new"
-        echo "SSH: 使用 SSHPASS + sshpass"
-    else
-        SSH_WRAP=(ssh -o StrictHostKeyChecking=accept-new)
-        RSYNC_RSH="ssh -o StrictHostKeyChecking=accept-new"
-        echo "SSH: 使用默认 ssh（密钥或 ~/.ssh/config）"
+    if [[ -z "${SSHPASS:-}" ]]; then
+        echo "错误: 板端模式需要设置 SSHPASS" >&2
+        echo "示例: export SSHPASS='your_password'" >&2
+        exit 1
     fi
-}
-
-run_build_and_install() {
-    echo ""
-    echo "==============================="
-    echo "=== build + install ==="
-    echo "==============================="
-    bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}" --install
+    if ! command -v sshpass >/dev/null 2>&1; then
+        echo "错误: 未找到 sshpass，请先安装（如: sudo apt install sshpass）" >&2
+        exit 1
+    fi
+    SSH_WRAP=(sshpass -e ssh -o StrictHostKeyChecking=accept-new)
+    RSYNC_RSH="sshpass -e ssh -o StrictHostKeyChecking=accept-new"
 }
 
 resolve_install_dir() {
@@ -87,84 +69,58 @@ resolve_install_dir() {
     echo "${prefix}"
 }
 
-runner_args() {
+build_runner_args() {
     RUNNER_ARGS=()
     if [[ "${RUN_BENCH}" -eq 1 ]]; then
         RUNNER_ARGS=(--bench "${BENCH_LOOPS}")
     fi
 }
 
-parse_board_spec() {
-    local board_spec="$1"
-    if [[ ! "${board_spec}" =~ ^([^@]+@[^:]+):(.+)$ ]]; then
-        echo "错误: --board 格式应为 user@host:remote_path" >&2
-        exit 1
-    fi
-    SSH_HOST="${BASH_REMATCH[1]}"
-    REMOTE_DIR_INPUT="${BASH_REMATCH[2]}"
-}
-
-run_install_tests_local() {
+run_test_runner_local() {
     local install_dir="$1"
-    local runner="${install_dir}/scripts/run_install_tests.sh"
+    local runner="${install_dir}/scripts/test_runner.sh"
     if [[ ! -x "${runner}" ]]; then
         echo "错误: 未找到 runner: ${runner}" >&2
         echo "提示: INSTALL_TESTS=ON 且已 install" >&2
         exit 1
     fi
-    runner_args
+    build_runner_args
     "${runner}" "${RUNNER_ARGS[@]}"
 }
 
-run_rsync_to_board() {
+run_on_board() {
     local install_dir="$1"
-    local ssh_host="$2"
-    local remote_dir_input="$3"
+    local board_spec="$2"
 
-    echo ""
-    echo "=== rsync install → board ==="
-    echo "source:  ${install_dir}/"
-    echo "target:  ${ssh_host}:${remote_dir_input}/"
+    if [[ ! "${board_spec}" =~ ^([^@]+@[^:]+):(.+)$ ]]; then
+        echo "错误: --board 格式应为 user@host:remote_path" >&2
+        exit 1
+    fi
+    local ssh_host="${BASH_REMATCH[1]}"
+    local remote_dir="${BASH_REMATCH[2]}"
 
-    rsync -avzc --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir_input}/"
-}
+    setup_ssh_transport
+    build_runner_args
 
-run_install_tests_remote() {
-    local ssh_host="$1"
-    local remote_dir_input="$2"
+    echo "=== rsync → ${ssh_host}:${remote_dir}/ ==="
+    rsync -avzc --delete -e "${RSYNC_RSH}" "${install_dir}/" "${ssh_host}:${remote_dir}/"
 
-    local remote_dir
-    remote_dir="$("${SSH_WRAP[@]}" "${ssh_host}" "cd ${remote_dir_input} && pwd")" || {
-        echo "错误: 无法访问远程目录: ${remote_dir_input}" >&2
+    # 展开 ~ 等，得到远程绝对路径后再拼 runner
+    local remote_abs
+    remote_abs="$("${SSH_WRAP[@]}" "${ssh_host}" "cd ${remote_dir} && pwd")" || {
+        echo "错误: 无法访问远程目录: ${remote_dir}" >&2
         exit 1
     }
 
-    runner_args
-
-    echo ""
-    echo "=== run_install_tests.sh (remote) ==="
-    echo "host: ${ssh_host}"
-    echo "dir:  ${remote_dir_input} → ${remote_dir}"
-
-    local remote_runner="${remote_dir}/scripts/run_install_tests.sh"
     local remote_cmd
-    remote_cmd="$(printf '%q' "${remote_runner}")"
+    remote_cmd="$(printf '%q' "${remote_abs}/scripts/test_runner.sh")"
     local arg
     for arg in "${RUNNER_ARGS[@]}"; do
         remote_cmd+=" $(printf '%q' "${arg}")"
     done
 
+    echo "=== test_runner (remote) ==="
     "${SSH_WRAP[@]}" "${ssh_host}" "bash -lc $(printf '%q' "${remote_cmd}")"
-}
-
-run_board_suite() {
-    local board_spec="$1"
-    local install_dir="$2"
-
-    parse_board_spec "${board_spec}"
-    setup_ssh_transport
-    run_rsync_to_board "${install_dir}" "${SSH_HOST}" "${REMOTE_DIR_INPUT}"
-    run_install_tests_remote "${SSH_HOST}" "${REMOTE_DIR_INPUT}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -188,27 +144,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "==============================="
-echo "deploy_percept test"
-echo "  preset: ${PRESET}"
 if [[ -n "${BOARD}" ]]; then
-    echo "  mode:   board (${BOARD})"
+    echo "test: preset=${PRESET} mode=board board=${BOARD}"
 else
-    echo "  mode:   PC (local install)"
+    echo "test: preset=${PRESET} mode=host"
 fi
 if [[ "${RUN_BENCH}" -eq 1 ]]; then
-    echo "  bench:  ${BENCH_LOOPS} loops"
+    echo "test: bench=${BENCH_LOOPS}"
 fi
-echo "==============================="
 
-run_build_and_install
+bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}" --install
 
 INSTALL_DIR="$(resolve_install_dir)"
 
 if [[ -n "${BOARD}" ]]; then
-    run_board_suite "${BOARD}" "${INSTALL_DIR}"
-    exit $?
+    run_on_board "${INSTALL_DIR}" "${BOARD}"
+else
+    run_test_runner_local "${INSTALL_DIR}"
 fi
-
-run_install_tests_local "${INSTALL_DIR}"
-exit $?

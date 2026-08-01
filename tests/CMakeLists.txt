@@ -17,7 +17,7 @@ if(ENABLE_TESTS)
                 DESTINATION "${CMAKE_INSTALL_DATADIR}/percept/fixtures"
                 USE_SOURCE_PERMISSIONS)
             install(
-                PROGRAMS "${CMAKE_SOURCE_DIR}/scripts/run_install_tests.sh"
+                PROGRAMS "${CMAKE_SOURCE_DIR}/scripts/test_runner.sh"
                 DESTINATION scripts)
         endif()
     else()
