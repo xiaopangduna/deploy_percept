@@ -7,6 +7,8 @@ option(ENABLE_TESTS "Enable tests (smoke, unit, integration)" ON)
 option(INSTALL_TESTS "Install test executables to tests/ (requires ENABLE_TESTS)" ON)
 option(ENABLE_BENCHMARKS "Build performance benchmarks" OFF)
 option(INSTALL_BENCHMARKS "Install benchmarks to benchmarks/ (requires ENABLE_BENCHMARKS)" ON)
+option(ENABLE_PROFILING "Build resource profiling tools (tests/profiling)" ON)
+option(INSTALL_PROFILING "Install profiling tools to profiling/ (requires ENABLE_PROFILING)" ON)
 
 # 指定C++标准
 set(CMAKE_CXX_STANDARD 17)
@@ -25,6 +27,8 @@ message(STATUS "  ENABLE_TESTS               = ${ENABLE_TESTS}")
 message(STATUS "  INSTALL_TESTS              = ${INSTALL_TESTS}")
 message(STATUS "  ENABLE_BENCHMARKS          = ${ENABLE_BENCHMARKS}")
 message(STATUS "  INSTALL_BENCHMARKS         = ${INSTALL_BENCHMARKS}")
+message(STATUS "  ENABLE_PROFILING           = ${ENABLE_PROFILING}")
+message(STATUS "  INSTALL_PROFILING          = ${INSTALL_PROFILING}")
 message(STATUS "==============================================================================")
 
 # cmake/ 放 FindThirdParty；cmake/modules/ 放各库 Find 模块
@@ -54,7 +58,7 @@ if(ENABLE_TESTS)
     enable_testing()
 endif()
 
-if(ENABLE_TESTS OR ENABLE_BENCHMARKS)
+if(ENABLE_TESTS OR ENABLE_BENCHMARKS OR ENABLE_PROFILING)
     add_subdirectory(tests)
 endif()
 

@@ -62,6 +62,25 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 拷回 PC 后置于 `tests/fixtures/unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz`。
 
+### 资源画像（`--duration-sec`）
+
+按墙钟循环推理，供 `profiling/percept_monitor` 旁路采样。`--profile T` / `--duration-sec T` 都是 **app 循环持续时间**；monitor 跟进程退出，没有单独监控时长。
+
+```bash
+./bin/mobilenetv2_classify_awnn --duration-sec 30 \
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
+  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg &
+
+./profiling/percept_monitor --name mobilenetv2_classify_awnn
+```
+
+```bash
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@<ip>:~/deploy_percept --profile 30
+```
+
+详见 [tests/profiling/README.md](../../tests/profiling/README.md)。
+
 ## 预处理
 
 1. 读取 BGR 原图

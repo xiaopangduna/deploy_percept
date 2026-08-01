@@ -8,6 +8,8 @@ PRESET="x86_64-debug"
 BOARD=""
 RUN_BENCH=0
 BENCH_LOOPS=50
+RUN_PROFILE=0
+PROFILE_DURATION_SEC=30
 
 SSH_WRAP=()
 RSYNC_RSH=""
@@ -24,6 +26,7 @@ show_help() {
     echo "  --preset <name>          CMake preset（默认: x86_64-debug）"
     echo "  --board <user@host:path> 板端模式（user@host:远程 install 根目录）"
     echo "  --bench [loops]          传给 test_runner（默认 loops=50）"
+    echo "  --profile [sec]          传给 test_runner：app 循环墙钟秒数（默认 30）"
     echo "  --help                   显示帮助"
     echo ""
     echo "板端 SSH: 仅支持密码登录"
@@ -33,10 +36,10 @@ show_help() {
     echo "  bash $0 --preset x86_64-debug"
     echo "  export SSHPASS='orangepi'"
     echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \\"
-    echo "    --board orangepi@192.168.1.10:~/deploy_percept --bench 100"
+    echo "    --board orangepi@192.168.1.10:~/deploy_percept --bench 100 --profile 30"
 }
 
-is_unsigned_loops() {
+is_unsigned() {
     [[ "${1:-}" =~ ^[0-9]+$ ]]
 }
 
@@ -72,7 +75,10 @@ resolve_install_dir() {
 build_runner_args() {
     RUNNER_ARGS=()
     if [[ "${RUN_BENCH}" -eq 1 ]]; then
-        RUNNER_ARGS=(--bench "${BENCH_LOOPS}")
+        RUNNER_ARGS+=(--bench "${BENCH_LOOPS}")
+    fi
+    if [[ "${RUN_PROFILE}" -eq 1 ]]; then
+        RUNNER_ARGS+=(--profile "${PROFILE_DURATION_SEC}")
     fi
 }
 
@@ -130,9 +136,21 @@ while [[ $# -gt 0 ]]; do
         --bench)
             RUN_BENCH=1
             shift
-            if [[ $# -gt 0 ]] && is_unsigned_loops "$1"; then
+            if [[ $# -gt 0 ]] && is_unsigned "$1"; then
                 BENCH_LOOPS="$1"
                 shift
+            fi
+            ;;
+        --profile)
+            RUN_PROFILE=1
+            shift
+            if [[ $# -gt 0 ]] && is_unsigned "$1"; then
+                PROFILE_DURATION_SEC="$1"
+                shift
+            fi
+            if [[ "${PROFILE_DURATION_SEC}" -eq 0 ]]; then
+                echo "错误: --profile 时长须 > 0" >&2
+                exit 1
             fi
             ;;
         --help) show_help; exit 0 ;;
@@ -151,6 +169,9 @@ else
 fi
 if [[ "${RUN_BENCH}" -eq 1 ]]; then
     echo "test: bench=${BENCH_LOOPS}"
+fi
+if [[ "${RUN_PROFILE}" -eq 1 ]]; then
+    echo "test: profile=${PROFILE_DURATION_SEC}"
 fi
 
 bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}" --install

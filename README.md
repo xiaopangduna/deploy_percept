@@ -79,7 +79,8 @@ install/<platform>/
 ├── lib/                          # 自研库、VIPLite .so；shared 第三方 .so（find_package 或 ZLIB/CNPY_LINK_TYPE=SHARED）
 ├── include/deploy_percept/       # 对外头文件
 ├── tests/                        # 测试可执行文件（INSTALL_TESTS）
-├── benchmarks/                   # benchmark（ENABLE/INSTALL_BENCHMARKS）
+├── benchmarks/                   # 延迟 benchmark（ENABLE/INSTALL_BENCHMARKS）
+├── profiling/                    # 资源画像（ENABLE/INSTALL_PROFILING）
 ├── scripts/test_runner.sh        # install 包测试 runner
 └── share/percept/fixtures/       # 测试与 demo 共用数据
 ```
@@ -100,17 +101,18 @@ export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board orangepi@192.168.0.103:~/deploy_percept
 
-# 含 benchmark（默认 50 loops）
+# 含 benchmark（默认 50 loops）与资源画像（默认 30s）
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@192.168.0.103:~/deploy_percept --bench 100
+  --board orangepi@192.168.0.103:~/deploy_percept --bench 100 --profile 30
 ```
 
 **install 包内直接跑**（PC 或开发板，rsync 后）：
 
 ```bash
 cd ~/deploy_percept
-./scripts/test_runner.sh              # 扫描 tests/ 下全部可执行文件
-./scripts/test_runner.sh --bench 50   # tests + benchmarks
+./scripts/test_runner.sh                 # 扫描 tests/ 下全部可执行文件
+./scripts/test_runner.sh --bench 50      # tests + benchmarks
+./scripts/test_runner.sh --profile 30    # tests + profiling（app --duration-sec + percept_monitor）
 ```
 
 手动同步 install 包：

@@ -2,14 +2,17 @@
  * Allwinner MobileNetV2 ImageNet 分类 demo（AwnnEngine + ClassificationPostProcessAwnn）
  *
  * 用法（路径相对当前工作目录，或使用绝对路径）：
- *   mobilenetv2_classify_awnn [model.nb] [input.jpg] [model_outputs.npz]
+ *   mobilenetv2_classify_awnn [--duration-sec T] [model.nb] [input.jpg] [model_outputs.npz]
  *
  * 默认：./mobilenetv2.nb  ./cat.jpg
- * 性能对比见 tests/benchmarks/awnn/bench_mobilenetv2_classify
+ * --duration-sec：按墙钟循环推理，供 tests/profiling/percept_monitor 旁路采样
+ * 延迟对比见 tests/benchmarks/awnn/bench_mobilenetv2_classify
  */
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -63,15 +66,34 @@ bool prepare_model_input(
 
 int main(int argc, char **argv)
 {
-    const std::string model_path_str = (argc > 1) ? argv[1] : kDefaultModel;
-    const std::string input_path_str = (argc > 2) ? argv[2] : kDefaultInput;
+    double duration_sec = 0.0;
+    int argi = 1;
+    if (argi + 1 < argc && std::strcmp(argv[argi], "--duration-sec") == 0)
+    {
+        duration_sec = std::atof(argv[argi + 1]);
+        if (duration_sec <= 0.0)
+        {
+            std::fprintf(stderr, "invalid --duration-sec: %s\n", argv[argi + 1]);
+            return 1;
+        }
+        argi += 2;
+    }
+
+    const std::string model_path_str =
+        (argi < argc) ? argv[argi] : kDefaultModel;
+    const std::string input_path_str =
+        (argi + 1 < argc) ? argv[argi + 1] : kDefaultInput;
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
-    const char *npz_path = (argc > 3) ? argv[3] : nullptr;
+    const char *npz_path = (argi + 2 < argc) ? argv[argi + 2] : nullptr;
 
     std::printf("mobilenetv2_classify_awnn\n");
     std::printf("  model : %s\n", model_path);
     std::printf("  input : %s\n", input_path);
+    if (duration_sec > 0.0)
+    {
+        std::printf("  duration-sec: %.3f\n", duration_sec);
+    }
     if (npz_path != nullptr)
     {
         std::printf("  npz   : %s\n", npz_path);
@@ -121,53 +143,69 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!engine.run(input_buffer.data(), input_buffer.size()))
-    {
-        std::fprintf(stderr, "AwnnEngine::run failed\n");
-        return 1;
-    }
-
-    EngineResultGuard engine_result_guard(engine);
-    const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
-    if (tensor_views.empty())
-    {
-        std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
-        return 1;
-    }
-
-    std::error_code ec;
-
-    if (npz_path != nullptr)
-    {
-        try
-        {
-            const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
-            fs::create_directories(fs::path(npz_path).parent_path(), ec);
-            if (!save_npz(npz_path, model_outputs_npz))
-            {
-                std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
-                return 1;
-            }
-            std::printf("saved model outputs to %s\n", npz_path);
-        }
-        catch (const std::exception &ex)
-        {
-            std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
-            return 1;
-        }
-    }
-
     ClassificationPostProcessAwnn processor({
         .num_classes = static_cast<int>(engine.getInfo().output_sizes.at(0)[0]),
     });
-    if (!processor.run(tensor_views))
+
+    const auto t0 = std::chrono::steady_clock::now();
+    std::uint64_t frames = 0;
+    do
     {
-        std::fprintf(stderr, "post process failed\n");
-        return 1;
-    }
+        if (!engine.run(input_buffer.data(), input_buffer.size()))
+        {
+            std::fprintf(stderr, "AwnnEngine::run failed\n");
+            return 1;
+        }
+
+        EngineResultGuard engine_result_guard(engine);
+        const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
+        if (tensor_views.empty())
+        {
+            std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
+            return 1;
+        }
+
+        if (npz_path != nullptr && frames == 0)
+        {
+            std::error_code ec;
+            try
+            {
+                const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
+                fs::create_directories(fs::path(npz_path).parent_path(), ec);
+                if (!save_npz(npz_path, model_outputs_npz))
+                {
+                    std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
+                    return 1;
+                }
+                std::printf("saved model outputs to %s\n", npz_path);
+            }
+            catch (const std::exception &ex)
+            {
+                std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
+                return 1;
+            }
+        }
+
+        if (!processor.run(tensor_views))
+        {
+            std::fprintf(stderr, "post process failed\n");
+            return 1;
+        }
+        ++frames;
+    } while (duration_sec > 0.0 &&
+             std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() <
+                 duration_sec);
 
     const auto &result = processor.getResult();
     std::printf("top1: class_id=%d score=%.4f\n", result.class_id, result.score);
+    if (duration_sec > 0.0)
+    {
+        const double wall =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("done: frames=%llu wall=%.3fs\n",
+                    static_cast<unsigned long long>(frames),
+                    wall);
+    }
 
     return 0;
 }

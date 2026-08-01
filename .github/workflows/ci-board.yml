@@ -24,6 +24,10 @@ on:
         description: "Benchmark loops；填 0 表示不跑 bench"
         required: false
         default: "50"
+      profile_sec:
+        description: "Profiling duration-sec；填 0 表示不跑 profile"
+        required: false
+        default: "30"
       board_spec:
         description: "覆盖 BOARD_SPEC（留空则用仓库 Variable）"
         required: false
@@ -98,12 +102,16 @@ jobs:
           SSHPASS: ${{ secrets.SSHPASS }}
           BOARD_SPEC: ${{ steps.board.outputs.board_spec }}
           BENCH_LOOPS: ${{ inputs.bench_loops }}
+          PROFILE_SEC: ${{ inputs.profile_sec }}
         run: |
           set -euo pipefail
 
           TEST_ARGS=(--preset "${PRESET}" --board "${BOARD_SPEC}")
           if [[ "${BENCH_LOOPS}" != "0" ]]; then
             TEST_ARGS+=(--bench "${BENCH_LOOPS}")
+          fi
+          if [[ "${PROFILE_SEC}" != "0" ]]; then
+            TEST_ARGS+=(--profile "${PROFILE_SEC}")
           fi
 
           docker run --rm \
