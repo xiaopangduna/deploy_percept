@@ -98,7 +98,7 @@ cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   -DENABLE_BENCHMARKS=ON
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --target yolov5_detect_awnn bench_yolov5
-bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release --install
 ```
 
 ## 运行

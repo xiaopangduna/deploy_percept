@@ -63,12 +63,12 @@ bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ### 4. 安装
 
 ```bash
-bash scripts/install.sh --preset <preset>
+bash scripts/build.sh --preset <preset> --install
 ```
 
 ```bash
-bash scripts/install.sh --preset x86_64-debug
-bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/build.sh --preset x86_64-debug --install
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release --install
 ```
 
 install 包布局（`install/<platform>/`）：
@@ -143,8 +143,7 @@ deploy_percept/
 │   ├── data/                      # COCO / ImageNet 标签
 │   └── utils/                     # 预处理、可视化、io
 ├── scripts/
-│   ├── build.sh                   # 构建
-│   ├── install.sh                 # 安装
+│   ├── build.sh                   # 构建（可选 --install）
 │   ├── test.sh                    # build + install + 验证 install 包
 │   ├── run_install_tests.sh       # install 包内测试 runner（随包安装）
 │   ├── third_party_builder.sh

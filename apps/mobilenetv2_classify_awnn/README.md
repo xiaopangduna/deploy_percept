@@ -11,28 +11,20 @@
 
 模型与图片位于 `tests/fixtures/integration/awnn/mobilenetv2_classify/`，install 时复制到 `share/percept/fixtures/`。
 
-## 模型转换
+## 模型从哪来
 
-参考 `tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/mobilenetv2/`：
+训练 → ONNX → Acuity → `.nb` 的全流程入口见：
 
-1. 下载 [mobilenetv2-12.onnx](https://github.com/onnx/models/tree/main/validated/vision/classification/mobilenet)
-2. Acuity 转换（A733 NPU v3，optimize 目标 **a733**）：
+→ [src/train/exports/awnn/mobilenet_v2/README.md](../../../train/exports/awnn/mobilenet_v2/README.md)
 
-```bash
-cd tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/mobilenetv2/convert_model/
-./convert_model_env.sh
-./pegasus_import.sh mobilenetv2-12
-./pegasus_quantize.sh mobilenetv2-12 pcq 10
-./pegasus_export_ovx_nbg.sh mobilenetv2-12 pcq a733
-```
-
-`config_yml.py` 需保持 `ADD_PREPROC_NODE=True`、`PREPROC_TYPE=IMAGE_RGB`、`ADD_POSTPROC_NODE=True`（NPU 内 mean/scale + FP32 输出）。
-
-将导出产物 `mobilenetv2-12_pcq_a733.nb` 复制为 fixture：
+转换完成后将产物复制为 fixture（路径相对 `deploy_percept/`）：
 
 ```bash
-cp mobilenetv2-12_pcq_a733.nb tests/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb
+cp ../train/exports/awnn/mobilenet_v2/model/mobilenetv2-12_pcq_a733.nb \
+  tests/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb
 ```
+
+要求：`ADD_PREPROC_NODE=True`、`PREPROC_TYPE=IMAGE_RGB`、`ADD_POSTPROC_NODE=True`（NPU 内 mean/scale + FP32 输出）。
 
 ## 构建与安装
 
@@ -40,7 +32,7 @@ cp mobilenetv2-12_pcq_a733.nb tests/fixtures/integration/awnn/mobilenetv2_classi
 cmake --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release
 cmake --build --preset=aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --target mobilenetv2_classify_awnn bench_mobilenetv2_classify
-bash scripts/install.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
+bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release --install
 ```
 
 ## 运行

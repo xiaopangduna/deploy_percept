@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 PRESET=""
+DO_INSTALL=0
 
 show_help() {
     echo "deploy_percept 构建脚本"
@@ -13,21 +14,18 @@ show_help() {
     echo ""
     echo "选项:"
     echo "  --preset <name>    CMake preset（默认: x86_64-debug）"
+    echo "  --install          构建完成后执行 cmake --install"
     echo "  --help             显示帮助"
     echo ""
-    echo "可用 preset:"
-    echo "  x86_64-debug                                  x86_64 调试（宿主机）"
-    echo "  armv7l-SSC375-release                         Sigmastar SSC375 交叉编译"
-    echo "  aarch64-linux-gnu_orange_pi_4_pro_a733-release  Orange Pi 4 Pro A733 交叉编译"
+    echo "可用 preset 见 CMakePresets.json，或: cmake --list-presets"
     echo ""
     echo "示例:"
     echo "  bash $0"
     echo "  bash $0 --preset x86_64-debug"
-    echo "  bash $0 --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release"
+    echo "  bash $0 --preset x86_64-debug --install"
     echo ""
     echo "相关脚本:"
     echo "  bash scripts/test.sh    build + install + 验证 install 包"
-    echo "  bash scripts/install.sh 仅安装到 install/<platform>/"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -35,6 +33,10 @@ while [[ $# -gt 0 ]]; do
         --preset)
             PRESET="$2"
             shift 2
+            ;;
+        --install)
+            DO_INSTALL=1
+            shift
             ;;
         --help)
             show_help
@@ -62,13 +64,29 @@ echo "配置: cmake --preset=${PRESET}"
 echo "构建: cmake --build --preset=${PRESET}"
 echo "==============================="
 
+##########################################################################
+# 核心构建逻辑
 cmake --preset="${PRESET}"
 cmake --build --preset="${PRESET}"
 
 echo ""
 echo "构建完成: ${BUILD_DIR}"
+
+if [[ "${DO_INSTALL}" -eq 1 ]]; then
+    if [[ ! -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
+        echo "错误: 构建目录未配置: ${BUILD_DIR}" >&2
+        exit 1
+    fi
+    INSTALL_DIR="$(grep -E '^CMAKE_INSTALL_PREFIX:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)"
+    echo ""
+    echo "=== cmake --install ==="
+    ##########################################################################
+    # 安装逻辑
+    cmake --install "${BUILD_DIR}"
+    echo "安装完成: ${INSTALL_DIR}"
+    exit 0
+fi
+
 echo ""
-echo "下一步:"
-echo "  测试:    bash scripts/test.sh --preset ${PRESET}"
-echo "  安装:    bash scripts/install.sh --preset ${PRESET}"
-echo "  ctest:   cd ${BUILD_DIR} && ctest --output-on-failure"
+echo "下一步: bash scripts/build.sh --preset ${PRESET} --install"
+echo "        bash scripts/test.sh --preset ${PRESET}"

@@ -64,20 +64,12 @@ setup_ssh_transport() {
     fi
 }
 
-run_build() {
+run_build_and_install() {
     echo ""
     echo "==============================="
-    echo "=== build ==="
+    echo "=== build + install ==="
     echo "==============================="
-    bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}"
-}
-
-run_install() {
-    echo ""
-    echo "==============================="
-    echo "=== install ==="
-    echo "==============================="
-    bash "${SCRIPT_DIR}/install.sh" --preset "${PRESET}"
+    bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}" --install
 }
 
 resolve_install_dir() {
@@ -209,8 +201,7 @@ if [[ "${RUN_BENCH}" -eq 1 ]]; then
 fi
 echo "==============================="
 
-run_build
-run_install
+run_build_and_install
 
 INSTALL_DIR="$(resolve_install_dir)"
 
