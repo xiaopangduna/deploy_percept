@@ -1,8 +1,8 @@
 # 板端 CI：self-hosted runner 上用开发同款容器交叉编译，再 SSH 上板跑测。
 #
 # 仓库 Secrets / Variables（Settings → Secrets and variables → Actions）：
-#   Secret  SSHPASS      板端 SSH 密码
-#   Var     BOARD_SPEC   例如 orangepi@192.168.1.101:~/deploy_percept
+#   Secret  SSHPASS      板端 SSH 密码（root）
+#   Var     BOARD_SPEC   例如 root@192.168.1.101:~/deploy_percept
 #
 # Runner 宿主机一次性准备：
 #   1) Docker 可用（当前用户可 docker run，无需 sudo）
@@ -12,6 +12,9 @@
 #      可从已跑通的开发树拷贝：
 #        mkdir -p ~/ci-cache/deploy_percept
 #        cp -a /path/to/deploy_percept/third_party ~/ci-cache/deploy_percept/
+#
+# 板端：建议 root SSH（读 NPU debugfs /sys/kernel/debug/viplite/core_loading）。
+# SSHPASS 只用于 SSH。见 tests/profiling/README.md。
 #
 # 触发：Actions → "Board test (Orange Pi A733)" → Run workflow
 
@@ -27,7 +30,7 @@ on:
       profile_sec:
         description: "Profiling duration-sec；填 0 表示不跑 profile"
         required: false
-        default: "30"
+        default: "60"
       board_spec:
         description: "覆盖 BOARD_SPEC（留空则用仓库 Variable）"
         required: false

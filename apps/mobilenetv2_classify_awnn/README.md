@@ -64,10 +64,10 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ### 资源画像（`--duration-sec`）
 
-按墙钟循环推理，供 `profiling/percept_monitor` 旁路采样。`--profile T` / `--duration-sec T` 都是 **app 循环持续时间**；monitor 跟进程退出，没有单独监控时长。
+按墙钟循环推理，供 `profiling/percept_monitor` 旁路采样。`--profile T` / `--duration-sec T` 都是 **app 循环持续时间**（推荐 ≥60）；monitor 跟进程退出。读 NPU 请用 **root** 会话（见 profiling README）。
 
 ```bash
-./bin/mobilenetv2_classify_awnn --duration-sec 30 \
+./bin/mobilenetv2_classify_awnn --duration-sec 60 \
   share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
   share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg &
 
@@ -76,7 +76,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ```bash
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@<ip>:~/deploy_percept --profile 30
+  --board root@<ip>:~/deploy_percept --profile 60
 ```
 
 详见 [tests/profiling/README.md](../../tests/profiling/README.md)。
@@ -109,7 +109,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 ```bash
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@<ip>:~/deploy_percept
+  --board root@<ip>:~/deploy_percept
 ```
 
 对应 `tests/test_mobilenetv2_classify_awnn`。Top-5 class_id 真值：`{281, 282, 285, 287, 478}`。
@@ -119,7 +119,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 ```bash
 # 板端：测试完成后加 --bench
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@<ip>:~/deploy_percept --bench 50
+  --board root@<ip>:~/deploy_percept --bench 50
 
 # 或 install prefix 本地直接跑
 export PERCEPT_ROOT=$PWD/share/percept

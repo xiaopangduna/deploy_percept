@@ -7,7 +7,7 @@ INSTALL_PREFIX="$(cd "${PERCEPT_INSTALL_PREFIX:-${SCRIPT_DIR}/..}" && pwd)"
 RUN_BENCH=0
 BENCH_LOOPS=50
 RUN_PROFILE=0
-PROFILE_DURATION_SEC=30
+PROFILE_DURATION_SEC=60
 
 TESTS_DIR="${INSTALL_PREFIX}/tests"
 BENCHMARKS_DIR="${INSTALL_PREFIX}/benchmarks"
@@ -24,7 +24,7 @@ show_help() {
     echo ""
     echo "选项:"
     echo "  --bench [loops]     tests 完成后再跑 benchmarks/（默认 loops=50）"
-    echo "  --profile [sec]     tests 后再跑资源画像；sec=app 循环墙钟秒数（默认 30）"
+    echo "  --profile [sec]     tests 后再跑资源画像；sec=app 循环墙钟秒数（默认 60）"
     echo "  --help              显示帮助"
     echo ""
     echo "环境变量:"
@@ -172,6 +172,9 @@ run_one_profile_target() {
     echo "monitor: ${monitor_bin}"
     echo "model:   ${model_path}"
     echo "input:   ${input_path}"
+    if [[ "$(id -u)" -ne 0 ]]; then
+        echo "提示: 当前非 root，NPU core_loading 可能无法读取；板端建议 --board root@host:path" >&2
+    fi
 
     local app_log
     app_log="$(mktemp "${PERCEPT_OUTPUT_DIR}/profile_${app_name}.XXXXXX.log")"

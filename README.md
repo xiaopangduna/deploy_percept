@@ -99,11 +99,11 @@ bash scripts/test.sh --preset x86_64-debug
 export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@192.168.0.103:~/deploy_percept
+  --board root@192.168.0.103:~/deploy_percept
 
-# 含 benchmark（默认 50 loops）与资源画像（默认 30s）
+# 含 benchmark（默认 50 loops）与资源画像（默认 60s）
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@192.168.0.103:~/deploy_percept --bench 100 --profile 30
+  --board root@192.168.0.103:~/deploy_percept --bench 100 --profile 60
 ```
 
 **install 包内直接跑**（PC 或开发板，rsync 后）：
@@ -112,15 +112,17 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 cd ~/deploy_percept
 ./scripts/test_runner.sh                 # 扫描 tests/ 下全部可执行文件
 ./scripts/test_runner.sh --bench 50      # tests + benchmarks
-./scripts/test_runner.sh --profile 30    # tests + profiling（app --duration-sec + percept_monitor）
+./scripts/test_runner.sh --profile 60    # tests + profiling（app --duration-sec + percept_monitor）
 ```
+
+NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:path`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
 
 手动同步 install 包：
 
 ```bash
 rsync -avz --delete -e ssh \
   install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
-  orangepi@192.168.0.103:~/deploy_percept/
+  root@192.168.0.103:~/deploy_percept/
 ```
 
 开发期 build tree 单测：`cd build/<preset> && ctest --output-on-failure`

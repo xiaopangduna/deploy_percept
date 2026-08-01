@@ -21,12 +21,15 @@
  * | rss_mb          | 当前常驻内存           | /proc/<pid>/status               | VmRSS:（kB → MB） |
  * | hwm_mb / rss_hwm| 峰值常驻内存           | /proc/<pid>/status               | VmHWM:（kB → MB） |
  * | threads         | 线程数                 | /proc/<pid>/status               | Threads: |
+ * | npu_load_percent| VIP ~30s 历史窗口占用率 | /sys/kernel/debug/viplite/core_loading |
+ * |                 | %（debugfs，通常需 root）| 例: Core0: Inference Time=... ms (80%) |
  *
  * 生命周期：
  *   --wait-sec 内等到唯一同名进程 → attach 后按 --interval-ms 采样 →
  *   /proc/<pid> 消失则结束并打印 summary（前 --warmup-sec 不计入 summary）。
  *
- * 本工具不采：温度、NPU、整机 CPU、IO。
+ * NPU：仅 core_loading；无权限/无节点则跳过，不失败。不采频率/温度/整机 CPU。
+ * 板端读 NPU：建议 root SSH（见 profiling/README）。
  */
 #include <cmath>
 #include <cstdint>
@@ -66,6 +69,12 @@ struct ProcSample
     int threads{0};             // /proc/<pid>/status: Threads
 };
 
+struct NpuSample
+{
+    bool load_ok{false};
+    double load_percent{0.0};
+};
+
 struct Agg
 {
     std::uint64_t samples{0};
@@ -76,7 +85,14 @@ struct Agg
     double hwm_max{0.0};
     double threads_sum{0.0};
     int threads_max{0};
+
+    std::uint64_t npu_load_samples{0};
+    double npu_load_sum{0.0};
+    double npu_load_max{0.0};
 };
+
+constexpr const char *kVipLiteDir = "/sys/kernel/debug/viplite";
+constexpr const char *kVipCoreLoading = "/sys/kernel/debug/viplite/core_loading";
 
 void print_usage(const char *argv0)
 {
@@ -86,7 +102,8 @@ void print_usage(const char *argv0)
         "  %s --name <proc> [--interval-ms 100] [--warmup-sec 5]\n"
         "     [--wait-sec 60] [--out stats.csv]\n"
         "\n"
-        "按进程名旁路采样 CPU%% / RSS / threads，直至目标退出。\n",
+        "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading，直至目标退出。\n"
+        "读 NPU 需要 root（板端建议 root SSH）。\n",
         argv0);
 }
 
@@ -422,7 +439,7 @@ pid_t wait_for_unique_process(const Options &opt, pid_t self_pid)
     }
 }
 
-void add_sample(Agg &agg, double cpu_pct, const ProcSample &s)
+void add_sample(Agg &agg, double cpu_pct, const ProcSample &s, const NpuSample &npu)
 {
     ++agg.samples;
     agg.cpu_sum += cpu_pct;
@@ -444,6 +461,109 @@ void add_sample(Agg &agg, double cpu_pct, const ProcSample &s)
     {
         agg.threads_max = s.threads;
     }
+
+    if (npu.load_ok)
+    {
+        ++agg.npu_load_samples;
+        agg.npu_load_sum += npu.load_percent;
+        if (npu.load_percent > agg.npu_load_max)
+        {
+            agg.npu_load_max = npu.load_percent;
+        }
+    }
+}
+
+std::string read_file_text(const char *path)
+{
+    std::ifstream in(path);
+    if (!in)
+    {
+        return {};
+    }
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+/**
+ * 解析 core_loading，例如:
+ *   VIP Total Time=30009 ms
+ *   History Loading -----> Core0: Inference Time=24063 ms (80%)
+ * 取括号内百分比作为 NPU 历史窗口占用率。
+ */
+bool parse_core_loading(const std::string &text, double &load_percent)
+{
+    const auto pos = text.rfind('(');
+    if (pos == std::string::npos)
+    {
+        return false;
+    }
+    int pct = -1;
+    if (std::sscanf(text.c_str() + pos, "(%d%%)", &pct) != 1 || pct < 0)
+    {
+        return false;
+    }
+    load_percent = static_cast<double>(pct);
+    return true;
+}
+
+enum class NpuAccess
+{
+    Unknown,
+    Ok,
+    Unavailable, // 无目录/无权限/解析失败 → 本轮会话不再重试
+};
+
+NpuSample read_npu_sample(NpuAccess &access)
+{
+    NpuSample npu;
+    if (access == NpuAccess::Unavailable)
+    {
+        return npu;
+    }
+
+    if (!fs::is_directory(kVipLiteDir))
+    {
+        if (access == NpuAccess::Unknown)
+        {
+            std::fprintf(
+                stderr,
+                "提示: 无 %s，跳过 NPU 采样（需 vipcore + debugfs）\n",
+                kVipLiteDir);
+            access = NpuAccess::Unavailable;
+        }
+        return npu;
+    }
+
+    const std::string loading = read_file_text(kVipCoreLoading);
+    if (loading.empty())
+    {
+        if (access == NpuAccess::Unknown)
+        {
+            std::fprintf(
+                stderr,
+                "提示: 无法读 %s，跳过 NPU 采样（请以 root 运行）\n",
+                kVipCoreLoading);
+            access = NpuAccess::Unavailable;
+        }
+        return npu;
+    }
+
+    if (!parse_core_loading(loading, npu.load_percent))
+    {
+        if (access == NpuAccess::Unknown)
+        {
+            std::fprintf(stderr, "提示: core_loading 解析失败，跳过 NPU 采样\n");
+            access = NpuAccess::Unavailable;
+        }
+        return npu;
+    }
+
+    npu.load_ok = true;
+    if (access == NpuAccess::Unknown)
+    {
+        std::printf("npu: enabled (core_loading)\n");
+        access = NpuAccess::Ok;
+    }
+    return npu;
 }
 
 } // namespace
@@ -489,6 +609,10 @@ int main(int argc, char **argv)
     std::printf("attached pid=%d\n", static_cast<int>(target));
     std::fflush(stdout);
 
+    NpuAccess npu_access = NpuAccess::Unknown;
+    // 探测一次：有权限则后续每拍采样，否则整段跳过
+    (void)read_npu_sample(npu_access);
+
     FILE *csv = nullptr;
     if (!opt.out_path.empty())
     {
@@ -500,7 +624,7 @@ int main(int argc, char **argv)
         }
         std::fprintf(
             csv,
-            "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads\n");
+            "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,npu_load_percent\n");
     }
 
     ProcSample prev = read_sample(target);
@@ -534,6 +658,8 @@ int main(int argc, char **argv)
             break;
         }
 
+        const NpuSample npu = read_npu_sample(npu_access);
+
         const double wall_dt =
             std::chrono::duration<double>(now - prev_wall).count();
         const double elapsed =
@@ -555,20 +681,28 @@ int main(int argc, char **argv)
 
         if (!in_warmup)
         {
-            add_sample(run_agg, cpu_pct, cur);
+            add_sample(run_agg, cpu_pct, cur, npu);
         }
 
         if (csv != nullptr)
         {
             std::fprintf(
                 csv,
-                "%.3f,%s,%.2f,%.2f,%.2f,%d\n",
+                "%.3f,%s,%.2f,%.2f,%.2f,%d,",
                 elapsed,
                 phase,
                 cpu_pct,
                 cur.rss_mb,
                 cur.hwm_mb,
                 cur.threads);
+            if (npu.load_ok)
+            {
+                std::fprintf(csv, "%.1f\n", npu.load_percent);
+            }
+            else
+            {
+                std::fprintf(csv, "\n");
+            }
         }
 
         prev = cur;
@@ -615,5 +749,14 @@ int main(int argc, char **argv)
         run_agg.hwm_max,
         run_agg.threads_sum / n,
         run_agg.threads_max);
+
+    if (run_agg.npu_load_samples > 0)
+    {
+        std::printf(
+            "npu_load_avg=%.1f%%  npu_load_max=%.1f%%  (samples=%llu)\n",
+            run_agg.npu_load_sum / static_cast<double>(run_agg.npu_load_samples),
+            run_agg.npu_load_max,
+            static_cast<unsigned long long>(run_agg.npu_load_samples));
+    }
     return 0;
 }
