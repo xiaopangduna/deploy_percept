@@ -1,0 +1,50 @@
+{
+    "name": "ubuntu-20.04-sigmastar",
+    "remoteUser": "vscode",
+    "updateRemoteUserUID": true,
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "../..",
+        // Clash/mihomo fake-ip 会把镜像解析到 198.18.0.0/15；默认 bridge 建网不走宿主机 TUN，apt 会连假 IP 失败
+        "options": ["--network=host"]
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": false,
+            "username": "vscode",
+            "userUid": "automatic",
+            "userGid": "automatic",
+            "upgradePackages": false
+        }
+    },
+    "mounts": [
+        "source=/opt/toolchains,target=/opt/toolchains,type=bind",
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    ],
+    "workspaceMount": "source=${localWorkspaceFolder}/../..,target=/workspace/deep_learning,type=bind",
+    "workspaceFolder": "/workspace/deep_learning/src/deploy_percept",
+    "runArgs": [
+        "--env=DISPLAY=${env:DISPLAY}",
+        "--env=NO_AT_BRIDGE=1",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--network=host"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "NO_AT_BRIDGE": "1"
+    },
+    "postCreateCommand": "bash .devcontainer/ubuntu-20.04-sigmastar/post-create.sh",
+    "postStartCommand": "bash .devcontainer/ubuntu-20.04-sigmastar/post-start.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "SimpleToolsDev.opencv-image",
+                "anysphere.cpptools"
+            ]
+        }
+    }
+}
