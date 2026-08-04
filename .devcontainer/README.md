@@ -57,6 +57,7 @@ ln -sfn /path/to/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu \
 - 工具链：宿主机 `/opt/toolchains/` → 容器 `/opt/toolchains/`
 - 预期工具链：`arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf`（前缀 `arm-unknown-linux-gnueabihf-`）
 - sysroot：`.../arm-unknown-linux-gnueabihf/sysroot`
+- CMake：Kitware 源安装（≥3.21，支持 `cmake --preset`；勿用系统自带 3.16）
 
 工具链准备：
 

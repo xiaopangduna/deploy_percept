@@ -59,6 +59,18 @@ fi
 
 BUILD_DIR="${PROJECT_ROOT}/build/${PRESET}"
 
+# CMakePresets.json version 3 需要 CMake >= 3.21；Ubuntu 20.04 自带 3.16 不支持 --preset
+CMAKE_VER="$(cmake --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
+CMAKE_MAJOR="${CMAKE_VER%%.*}"
+CMAKE_MINOR="${CMAKE_VER#*.}"
+if [[ -z "${CMAKE_VER}" ]] \
+   || (( CMAKE_MAJOR < 3 )) \
+   || (( CMAKE_MAJOR == 3 && CMAKE_MINOR < 21 )); then
+    echo "错误: 需要 CMake >= 3.21 以支持 --preset（当前: $(cmake --version 2>/dev/null | head -1 || echo '未找到 cmake')）" >&2
+    echo "  Sigmastar 容器请 Rebuild（.devcontainer/ubuntu-20.04-sigmastar 已从 Kitware 安装新版 CMake）。" >&2
+    exit 1
+fi
+
 echo "==============================="
 echo "配置: cmake --preset=${PRESET}"
 echo "构建: cmake --build --preset=${PRESET}"

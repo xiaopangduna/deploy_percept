@@ -21,14 +21,14 @@
       }
     },
     {
-      "name": "armv7l-SSC375-release",
-      "displayName": "Sigmastar SSC375 Dev (Release build type)",
+      "name": "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
+      "displayName": "CoMake Pi D1 SSD2355 (Release build type)",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/armv7l-SSC375-release",
+      "binaryDir": "${sourceDir}/build/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/armv7l-SSC375-toolchain.cmake",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-SSC375",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_TESTS": "ON",
         "INSTALL_TESTS": "ON",
@@ -38,7 +38,7 @@
         "INSTALL_PROFILING": "ON"
       },
       "environment": {
-        "PATH": "/opt/toolchains/arm-sigmastar-linux-uclibcgnueabihf-9.1.0/bin:$penv{PATH}"
+        "PATH": "/opt/toolchains/arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf/bin:$penv{PATH}"
       }
     },
     {
@@ -71,8 +71,8 @@
       "jobs": 16
     },
     {
-      "name": "armv7l-SSC375-release",
-      "configurePreset": "armv7l-SSC375-release",
+      "name": "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
+      "configurePreset": "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
       "jobs": 16
     },
     {

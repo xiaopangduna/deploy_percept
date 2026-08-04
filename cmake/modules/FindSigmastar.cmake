@@ -1,8 +1,10 @@
-# FindSigmastar.cmake - Sigmastar MI SDK (armv7l-SSC375)
+# FindSigmastar.cmake - Sigmastar MI SDK（路径仍为旧 SSC375/uclibc 布局，SSD2355 启用前需按新 SDK 更新）
+# 预期平台 tag: armv7l-linux-gnueabihf_comake_pi_d1_ssd2355
 
-if(NOT THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-SSC375")
+if(NOT THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355")
     message(FATAL_ERROR
-        "FindSigmastar: unsupported platform '${THIRD_PARTY_PLATFORM_TAG}' (only armv7l-SSC375)")
+        "FindSigmastar: unsupported platform '${THIRD_PARTY_PLATFORM_TAG}' "
+        "(only armv7l-linux-gnueabihf_comake_pi_d1_ssd2355)")
 endif()
 
 set(_SIGMASTAR_SDK_ROOT "${THIRD_PARTY_PLATFORM_DIR}/project/release")

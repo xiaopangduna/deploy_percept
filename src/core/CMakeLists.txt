@@ -16,7 +16,7 @@ add_library(deploy_percept_core STATIC ${CORE_SOURCES})
 target_link_libraries(deploy_percept_core PUBLIC deploy_percept_common)
 
 # 平台 NPU 引擎：由 FindThirdParty 按 platform tag 探测，*_FOUND 即编入核心库
-# TODO: Sigmastar SSC375
+# TODO: Sigmastar SSD2355 (CoMake Pi D1)
 # if(SIGMASTAR_FOUND)
 #     target_sources(deploy_percept_core PRIVATE
 #         engine/SigmastarIpuEngine.cpp

@@ -10,11 +10,30 @@ RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/source
  && apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
-# --- 可扩展工具层：后续在此追加 apt 包 ---
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     cmake \
-#     ninja-build \
-#     && rm -rf /var/lib/apt/lists/*
+# CMake >= 3.21（CMakePresets.json version 3 / cmake --preset）；
+# Ubuntu 20.04 自带 3.16 会把 --preset 当成源码路径。用 Kitware 源装新版。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+ && curl -fsSL https://apt.kitware.com/keys/kitware-archive-latest.asc \
+    | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg \
+ && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' \
+    > /etc/apt/sources.list.d/kitware.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends cmake \
+ && cmake --version \
+ && rm -rf /var/lib/apt/lists/*
+
+# 板端联调辅助工具（rsync 已由基镜像 comake_d1_docker 提供，此处不重复安装）
+# - openssh-client / sshpass：ssh/scp 推包与非交互登录
+# - iputils-ping：网络连通性检查
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-client \
+    sshpass \
+    iputils-ping \
+   #  rsync \ # 已由基镜像 comake_d1_docker 提供
+ && rm -rf /var/lib/apt/lists/*
 
 # 工具链挂载点（宿主机 /opt/toolchains -> 容器 /opt/toolchains）
 RUN mkdir -p /opt/toolchains

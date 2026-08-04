@@ -10,9 +10,9 @@
 |--------|------|----------|
 | `x86_64-debug` | 宿主机开发、后处理单测 | — |
 | `aarch64-linux-gnu_orange_pi_4_pro_a733-release` | Orange Pi A733 交叉编译与板端部署 | AWNN |
-| `armv7l-SSC375-release` | Sigmastar 预留 | 未启用 |
+| `armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release` | CoMake Pi D1 (SSD2355) 交叉编译 | Sigmastar 未启用 |
 
-开发容器：`.devcontainer/ubuntu-22.04-allwinner/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
+开发容器：`.devcontainer/ubuntu-22.04-allwinner/`、`.devcontainer/ubuntu-20.04-sigmastar/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
 
 ## 构建与测试
 
@@ -21,6 +21,7 @@
 - **x86_64**：无需额外配置，使用宿主机或 devcontainer 自带编译器。
 - **aarch64-linux-gnu_orange_pi_4_pro_a733**：下载 `gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`，放置于 `/opt/toolchains/`
   - 下载：https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
+- **armv7l-linux-gnueabihf_comake_pi_d1_ssd2355**：`arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf`，放置于 `/opt/toolchains/`（见 sigmastar devcontainer）
 
 ### 2. 第三方库
 
