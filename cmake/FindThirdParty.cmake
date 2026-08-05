@@ -14,10 +14,9 @@ message(STATUS "第三方库配置信息:")
 message(STATUS "  - THIRD_PARTY_PLATFORM_DIR: ${THIRD_PARTY_PLATFORM_DIR}")
 
 # 平台专属 NPU 运行时（一平台最多一个；未 include 则该平台无对应引擎）
-# TODO: Sigmastar SSD2355 (CoMake Pi D1)
-# if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355")
-#     include(FindSigmastar)
-# endif()
+if(THIRD_PARTY_PLATFORM_TAG STREQUAL "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355")
+    include(FindSigmastar)
+endif()
 
 if(THIRD_PARTY_PLATFORM_TAG STREQUAL "aarch64-linux-gnu_orange_pi_4_pro_a733")
     include(FindAwnn)
