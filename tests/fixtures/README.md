@@ -13,10 +13,12 @@ tests/fixtures/
 │   ├── yolov8_detect_awnn/     model_outputs.npz（AWNN FP32，板端 dump）
 │   ├── yolov8_seg/             model_outputs.npz, mask.bin, bus.jpg
 │   └── mobilenetv2_classify_awnn/  model_outputs.npz（AWNN FP32，板端 dump）
-└── integration/awnn/           # AWNN 集成测 / demo / benchmark
-    ├── yolov5_detect/          yolov5.nb, dog.jpg
-    ├── yolov8_detect/          yolov8.nb, dog.jpg
-    └── mobilenetv2_classify/   mobilenetv2.nb, cat.jpg
+├── integration/awnn/           # AWNN 集成测 / demo / benchmark
+│   ├── yolov5_detect/          yolov5.nb, dog.jpg
+│   ├── yolov8_detect/          yolov8.nb, dog.jpg
+│   └── mobilenetv2_classify/   mobilenetv2.nb, cat.jpg
+└── integration/sigmastar/      # Sigmastar IPU 集成测 / demo
+    └── yolov8_detect/          yolov8n_640x640.img, dog.jpg
 ```
 
 `unit/post_process/yolov5_detect/model_outputs.npz` 由 RKNN 导出（INT8），单测只比对后处理逻辑，运行时不依赖 RKNN。
@@ -30,6 +32,8 @@ mobilenetv2_classify_awnn mobilenetv2.nb cat.jpg model_outputs.npz
 ```
 
 `unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/mobilenetv2_classify/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
+
+`integration/sigmastar/yolov8_detect/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640.img`（IPU 入口 NV12）+ `dog.jpg`。集成测需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
 
 ## 路径 API
 

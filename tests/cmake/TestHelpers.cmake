@@ -26,10 +26,11 @@ endfunction()
 #       LINK_LIBS deploy_percept_core deploy_percept_utils  # 可选
 #       USE_CUSTOM_MAIN              # 可选，源文件自带 main 时设置
 #       AWNN                         # 可选，AWNN 集成测试（链 VIPLite + 板端 ctest 禁用）
+#       SIGMASTAR                    # 可选，Sigmastar 集成测试（板端 ctest 禁用）
 #   )
 
 function(add_percept_test)
-    set(options USE_CUSTOM_MAIN AWNN)
+    set(options USE_CUSTOM_MAIN AWNN SIGMASTAR)
     set(oneValueArgs NAME TIER)
     set(multiValueArgs SOURCES LINK_LIBS)
     cmake_parse_arguments(PARSED "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -43,13 +44,16 @@ function(add_percept_test)
     if(PARSED_AWNN AND NOT AWNN_FOUND)
         message(FATAL_ERROR "add_percept_test(${PARSED_NAME}): AWNN not found")
     endif()
+    if(PARSED_SIGMASTAR AND NOT SIGMASTAR_FOUND)
+        message(FATAL_ERROR "add_percept_test(${PARSED_NAME}): SIGMASTAR not found")
+    endif()
 
     add_executable(${PARSED_NAME} ${PARSED_SOURCES})
 
     set(_include_dirs
         ${CMAKE_SOURCE_DIR}/tests
         ${CMAKE_SOURCE_DIR})
-    if(PARSED_AWNN)
+    if(PARSED_AWNN OR PARSED_SIGMASTAR)
         list(APPEND _include_dirs ${CMAKE_CURRENT_SOURCE_DIR})
     endif()
     target_include_directories(${PARSED_NAME} PRIVATE ${_include_dirs})
@@ -76,6 +80,8 @@ function(add_percept_test)
     set(_test_labels "${PARSED_TIER}")
     if(PARSED_AWNN)
         set(_test_labels "integration;awnn")
+    elseif(PARSED_SIGMASTAR)
+        set(_test_labels "integration;sigmastar")
     endif()
 
     add_test(NAME ${PARSED_NAME} COMMAND ${PARSED_NAME})
@@ -88,9 +94,18 @@ function(add_percept_test)
         set_tests_properties(${PARSED_NAME} PROPERTIES DISABLED TRUE)
         message(STATUS "integration/awnn: ${PARSED_NAME} disabled under cross-compiling (run on board via test.sh)")
     endif()
+    if(PARSED_SIGMASTAR AND CMAKE_CROSSCOMPILING)
+        set_tests_properties(${PARSED_NAME} PROPERTIES DISABLED TRUE)
+        message(STATUS "integration/sigmastar: ${PARSED_NAME} disabled under cross-compiling (run on board via test.sh)")
+    endif()
 endfunction()
 
 # 兼容别名：AWNN 集成测试
 function(add_percept_awnn_integration_test)
     add_percept_test(${ARGN} TIER integration AWNN)
+endfunction()
+
+# 别名：Sigmastar 集成测试
+function(add_percept_sigmastar_integration_test)
+    add_percept_test(${ARGN} TIER integration SIGMASTAR)
 endfunction()
