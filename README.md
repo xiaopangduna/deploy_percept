@@ -94,7 +94,7 @@ install/<platform>/
 bash scripts/test.sh --preset x86_64-debug
 ```
 
-**开发板**（build → install → rsync → 远程跑测）：
+**开发板**（build → install → 远程清空后 scp → 远程跑测；无需板端 rsync）：
 
 ```bash
 export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
@@ -105,9 +105,13 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 # 含 benchmark（默认 50 loops）与资源画像（默认 60s）
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board root@192.168.0.103:~/deploy_percept --bench 100 --profile 60
+
+# Sigmastar / busybox 板同样用法，例如：
+# bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
+#   --board root@192.168.1.102:/customer/deploy_percept
 ```
 
-**install 包内直接跑**（PC 或开发板，rsync 后）：
+**install 包内直接跑**（PC 或开发板，scp/同步后）：
 
 ```bash
 cd ~/deploy_percept
@@ -120,11 +124,11 @@ NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@h
 
 板端跑完后会把日志拉到 `ci-artifacts/board-logs/`（`test_runner_console.log` + `logs/{test,bench,profile}.log` + `profile.csv`）。Board CI 上传 artifact `board-logs-<sha>`，便于对比不同 commit。
 
-手动同步 install 包：
+手动同步 install 包（等价于 test.sh 的清空 + scp）：
 
 ```bash
-rsync -avz --delete -e ssh \
-  install/aarch64-linux-gnu_orange_pi_4_pro_a733/ \
+ssh root@192.168.0.103 'mkdir -p ~/deploy_percept && cd ~/deploy_percept && rm -rf ./* ./.[!.]* ./..?* 2>/dev/null || true'
+scp -r install/aarch64-linux-gnu_orange_pi_4_pro_a733/* \
   root@192.168.0.103:~/deploy_percept/
 ```
 

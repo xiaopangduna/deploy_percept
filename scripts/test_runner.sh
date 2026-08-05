@@ -1,7 +1,8 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+# busybox ash / POSIX sh 兼容（Sigmastar 等板无 bash）
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_PREFIX="$(cd "${PERCEPT_INSTALL_PREFIX:-${SCRIPT_DIR}/..}" && pwd)"
 
 RUN_BENCH=0
@@ -36,16 +37,19 @@ show_help() {
 }
 
 is_unsigned() {
-    [[ "${1:-}" =~ ^[0-9]+$ ]]
+    case "${1:-}" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
 }
 
 parse_args() {
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case "$1" in
             --bench)
                 RUN_BENCH=1
                 shift
-                if [[ $# -gt 0 ]] && is_unsigned "$1"; then
+                if [ $# -gt 0 ] && is_unsigned "$1"; then
                     BENCH_LOOPS="$1"
                     shift
                 fi
@@ -53,11 +57,11 @@ parse_args() {
             --profile)
                 RUN_PROFILE=1
                 shift
-                if [[ $# -gt 0 ]] && is_unsigned "$1"; then
+                if [ $# -gt 0 ] && is_unsigned "$1"; then
                     PROFILE_DURATION_SEC="$1"
                     shift
                 fi
-                if [[ "${PROFILE_DURATION_SEC}" -eq 0 ]]; then
+                if [ "${PROFILE_DURATION_SEC}" -eq 0 ]; then
                     echo "错误: --profile 时长须 > 0" >&2
                     exit 1
                 fi
@@ -76,11 +80,11 @@ parse_args() {
 }
 
 validate_install_tree() {
-    if [[ ! -d "${INSTALL_PREFIX}/share/percept" ]]; then
+    if [ ! -d "${INSTALL_PREFIX}/share/percept" ]; then
         echo "错误: 无效的 install 目录（缺少 share/percept/）: ${INSTALL_PREFIX}" >&2
         exit 1
     fi
-    if [[ ! -d "${TESTS_DIR}" ]]; then
+    if [ ! -d "${TESTS_DIR}" ]; then
         echo "错误: 未找到测试目录: ${TESTS_DIR}" >&2
         echo "提示: ENABLE_TESTS=ON、INSTALL_TESTS=ON 且已 install" >&2
         exit 1
@@ -90,7 +94,11 @@ validate_install_tree() {
 setup_install_tree_env() {
     export PERCEPT_ROOT="${INSTALL_PREFIX}/share/percept"
     export PERCEPT_OUTPUT_DIR="${INSTALL_PREFIX}/var/percept/output"
-    export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+        export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${LD_LIBRARY_PATH}"
+    else
+        export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib"
+    fi
     mkdir -p "${PERCEPT_OUTPUT_DIR}"
     mkdir -p "${LOGS_DIR}"
     # 每次 runner 覆盖固定日志名，便于板端回传与版本对比
@@ -103,7 +111,11 @@ setup_install_tree_env() {
 
 write_meta() {
     {
-        echo "timestamp=$(date -Iseconds)"
+        if date -Iseconds >/dev/null 2>&1; then
+            echo "timestamp=$(date -Iseconds)"
+        else
+            echo "timestamp=$(date)"
+        fi
         echo "hostname=$(hostname 2>/dev/null || echo unknown)"
         echo "uid=$(id -u)"
         echo "user=$(id -un 2>/dev/null || echo unknown)"
@@ -115,56 +127,67 @@ write_meta() {
     } >"${LOGS_DIR}/meta.txt"
 }
 
+# 列出目录下可执行文件名（兼容 busybox find，无 -printf/-executable）
 discover_executables() {
-    local dir="$1"
-    find "${dir}" -maxdepth 1 -type f -executable -printf '%f\n' 2>/dev/null | sort
+    _dir="$1"
+    find "${_dir}" -maxdepth 1 -type f 2>/dev/null | while IFS= read -r _f; do
+        [ -x "${_f}" ] || continue
+        basename "${_f}"
+    done | sort
 }
 
-# 将目录下可执行文件依次跑完，stdout/stderr 追加到同一个 log_file（段分隔）
+# 将目录下可执行文件依次跑完；可选第 4 参作为传给每个可执行文件的单一参数（如 bench loops）
 run_executables_in_dir() {
-    local dir="$1"
-    local label="$2"
-    local log_file="$3"
-    shift 3
-    local extra_args=("$@")
-
-    local names
-    mapfile -t names < <(discover_executables "${dir}")
+    _dir="$1"
+    _label="$2"
+    _log_file="$3"
+    _extra_arg="${4:-}"
 
     {
-        echo "=== ${label} ==="
+        echo "=== ${_label} ==="
         echo "prefix: ${INSTALL_PREFIX}"
-        echo "dir:    ${dir}"
+        echo "dir:    ${_dir}"
         echo ""
-    } | tee -a "${log_file}"
+    } | tee -a "${_log_file}"
 
-    if [[ ${#names[@]} -eq 0 ]]; then
-        echo "skip: 目录下无可执行文件" | tee -a "${log_file}"
+    _names_file="$(mktemp)"
+    discover_executables "${_dir}" >"${_names_file}" || true
+
+    if [ ! -s "${_names_file}" ]; then
+        echo "skip: 目录下无可执行文件" | tee -a "${_log_file}"
+        rm -f "${_names_file}"
         return 0
     fi
 
-    local fail=0
-    local name
-    for name in "${names[@]}"; do
+    _fail=0
+    while IFS= read -r _name; do
+        [ -n "${_name}" ] || continue
         {
-            echo "========== ${name} =========="
-        } | tee -a "${log_file}"
-        if [[ ${#extra_args[@]} -gt 0 ]]; then
-            if ! "${dir}/${name}" "${extra_args[@]}" 2>&1 | tee -a "${log_file}"; then
-                fail=1
-            fi
+            echo "========== ${_name} =========="
+        } | tee -a "${_log_file}"
+
+        _out_tmp="$(mktemp)"
+        set +e
+        if [ -n "${_extra_arg}" ]; then
+            "${_dir}/${_name}" "${_extra_arg}" >"${_out_tmp}" 2>&1
         else
-            if ! "${dir}/${name}" 2>&1 | tee -a "${log_file}"; then
-                fail=1
-            fi
+            "${_dir}/${_name}" >"${_out_tmp}" 2>&1
         fi
-        echo "" | tee -a "${log_file}"
-    done
-    return "${fail}"
+        _rc=$?
+        set -e
+        tee -a "${_log_file}" <"${_out_tmp}"
+        rm -f "${_out_tmp}"
+        if [ "${_rc}" -ne 0 ]; then
+            _fail=1
+        fi
+        echo "" | tee -a "${_log_file}"
+    done <"${_names_file}"
+    rm -f "${_names_file}"
+    return "${_fail}"
 }
 
 run_benchmarks() {
-    if [[ ! -d "${BENCHMARKS_DIR}" ]]; then
+    if [ ! -d "${BENCHMARKS_DIR}" ]; then
         echo "错误: 未找到 benchmark 目录: ${BENCHMARKS_DIR}" >&2
         echo "提示: ENABLE_BENCHMARKS=ON、INSTALL_BENCHMARKS=ON 且已 install 到 benchmarks/" >&2
         return 1
@@ -186,92 +209,97 @@ EOF
 }
 
 run_one_profile_target() {
-    local app_name="$1"
-    local model_rel="$2"
-    local input_rel="$3"
+    _app_name="$1"
+    _model_rel="$2"
+    _input_rel="$3"
 
-    local app_bin="${BIN_DIR}/${app_name}"
-    local monitor_bin="${PROFILING_DIR}/percept_monitor"
-    local model_path="${FIXTURES_ROOT}/${model_rel}"
-    local input_path="${FIXTURES_ROOT}/${input_rel}"
+    _app_bin="${BIN_DIR}/${_app_name}"
+    _monitor_bin="${PROFILING_DIR}/percept_monitor"
+    _model_path="${FIXTURES_ROOT}/${_model_rel}"
+    _input_path="${FIXTURES_ROOT}/${_input_rel}"
 
-    if [[ ! -x "${app_bin}" ]]; then
-        echo "skip: 未找到 ${app_bin}"
+    if [ ! -x "${_app_bin}" ]; then
+        echo "skip: 未找到 ${_app_bin}"
         return 0
     fi
-    if [[ ! -f "${model_path}" ]]; then
-        echo "错误: fixture 模型不存在: ${model_path}" >&2
+    if [ ! -f "${_model_path}" ]; then
+        echo "错误: fixture 模型不存在: ${_model_path}" >&2
         return 1
     fi
-    if [[ ! -f "${input_path}" ]]; then
-        echo "错误: fixture 输入不存在: ${input_path}" >&2
+    if [ ! -f "${_input_path}" ]; then
+        echo "错误: fixture 输入不存在: ${_input_path}" >&2
         return 1
     fi
 
-    echo "=== profile ${app_name} (duration-sec=${PROFILE_DURATION_SEC}) ==="
-    echo "app:     ${app_bin}"
-    echo "monitor: ${monitor_bin}"
-    echo "model:   ${model_path}"
-    echo "input:   ${input_path}"
-    if [[ "$(id -u)" -ne 0 ]]; then
+    echo "=== profile ${_app_name} (duration-sec=${PROFILE_DURATION_SEC}) ==="
+    echo "app:     ${_app_bin}"
+    echo "monitor: ${_monitor_bin}"
+    echo "model:   ${_model_path}"
+    echo "input:   ${_input_path}"
+    if [ "$(id -u)" -ne 0 ]; then
         echo "提示: 当前非 root，NPU core_loading 可能无法读取；板端建议 --board root@host:path" >&2
     fi
 
-    local profile_log="${LOGS_DIR}/profile.log"
-    local profile_csv="${LOGS_DIR}/profile.csv"
-    local app_tmp
-    app_tmp="$(mktemp)"
+    _profile_log="${LOGS_DIR}/profile.log"
+    _profile_csv="${LOGS_DIR}/profile.csv"
+    _app_tmp="$(mktemp)"
 
     {
-        echo "========== profile ${app_name} =========="
+        echo "========== profile ${_app_name} =========="
         echo "duration-sec=${PROFILE_DURATION_SEC}"
-        echo "model=${model_path}"
-        echo "input=${input_path}"
+        echo "model=${_model_path}"
+        echo "input=${_input_path}"
         echo ""
-    } | tee -a "${profile_log}"
+    } | tee -a "${_profile_log}"
 
-    "${app_bin}" --duration-sec "${PROFILE_DURATION_SEC}" \
-        "${model_path}" "${input_path}" >"${app_tmp}" 2>&1 &
-    local app_pid=$!
+    "${_app_bin}" --duration-sec "${PROFILE_DURATION_SEC}" \
+        "${_model_path}" "${_input_path}" >"${_app_tmp}" 2>&1 &
+    _app_pid=$!
 
-    local monitor_rc=0
-    local app_rc=0
+    _monitor_rc=0
+    _app_rc=0
     {
         echo "--- percept_monitor ---"
-    } | tee -a "${profile_log}"
-    if ! "${monitor_bin}" --name "${app_name}" --out "${profile_csv}" 2>&1 | tee -a "${profile_log}"; then
-        monitor_rc=1
-    fi
+    } | tee -a "${_profile_log}"
 
-    if ! wait "${app_pid}"; then
-        app_rc=1
-    fi
+    _mon_tmp="$(mktemp)"
+    set +e
+    "${_monitor_bin}" --name "${_app_name}" --out "${_profile_csv}" >"${_mon_tmp}" 2>&1
+    _monitor_rc=$?
+    set -e
+    tee -a "${_profile_log}" <"${_mon_tmp}"
+    rm -f "${_mon_tmp}"
+
+    set +e
+    wait "${_app_pid}"
+    _app_rc=$?
+    set -e
 
     {
         echo ""
-        echo "--- ${app_name} app ---"
-        cat "${app_tmp}"
+        echo "--- ${_app_name} app ---"
+        cat "${_app_tmp}"
         echo ""
-        echo "--- profile.csv: ${profile_csv} ---"
+        echo "--- profile.csv: ${_profile_csv} ---"
         echo ""
-    } | tee -a "${profile_log}"
-    rm -f "${app_tmp}"
+    } | tee -a "${_profile_log}"
+    rm -f "${_app_tmp}"
 
-    if [[ "${app_rc}" -ne 0 ]]; then
-        echo "错误: ${app_name} 退出码非 0" >&2
+    if [ "${_app_rc}" -ne 0 ]; then
+        echo "错误: ${_app_name} 退出码非 0" >&2
         return 1
     fi
-    if [[ "${monitor_rc}" -ne 0 ]]; then
-        echo "错误: percept_monitor 失败 (${app_name})" >&2
+    if [ "${_monitor_rc}" -ne 0 ]; then
+        echo "错误: percept_monitor 失败 (${_app_name})" >&2
         return 1
     fi
     return 0
 }
 
 run_profiling() {
-    local monitor_bin="${PROFILING_DIR}/percept_monitor"
-    if [[ ! -x "${monitor_bin}" ]]; then
-        echo "错误: 未找到 ${monitor_bin}" >&2
+    _monitor_bin="${PROFILING_DIR}/percept_monitor"
+    if [ ! -x "${_monitor_bin}" ]; then
+        echo "错误: 未找到 ${_monitor_bin}" >&2
         echo "提示: ENABLE_PROFILING=ON、INSTALL_PROFILING=ON 且已 install" >&2
         return 1
     fi
@@ -280,24 +308,29 @@ run_profiling() {
     echo "=== install tree profiling (duration-sec=${PROFILE_DURATION_SEC}) ==="
     echo "prefix: ${INSTALL_PREFIX}"
 
-    local ran=0
-    local fail=0
-    local line app_name model_rel input_rel
-    while IFS='|' read -r app_name model_rel input_rel; do
-        [[ -z "${app_name}" ]] && continue
-        if [[ ! -x "${BIN_DIR}/${app_name}" ]]; then
-            echo "skip: ${app_name}（bin 中无此 app）"
+    _targets_file="$(mktemp)"
+    profile_targets >"${_targets_file}"
+
+    _ran=0
+    _fail=0
+    while IFS='|' read -r _app_name _model_rel _input_rel; do
+        [ -n "${_app_name}" ] || continue
+        if [ ! -x "${BIN_DIR}/${_app_name}" ]; then
+            echo "skip: ${_app_name}（bin 中无此 app）"
             continue
         fi
-        ran=1
-        run_one_profile_target "${app_name}" "${model_rel}" "${input_rel}" || fail=1
-    done < <(profile_targets)
+        _ran=1
+        if ! run_one_profile_target "${_app_name}" "${_model_rel}" "${_input_rel}"; then
+            _fail=1
+        fi
+    done <"${_targets_file}"
+    rm -f "${_targets_file}"
 
-    if [[ "${ran}" -eq 0 ]]; then
+    if [ "${_ran}" -eq 0 ]; then
         echo "skip: 无可用 profiling 目标（例如板端 AWNN app 未安装）"
         return 0
     fi
-    return "${fail}"
+    return "${_fail}"
 }
 
 main() {
@@ -309,15 +342,21 @@ main() {
 
     echo "logs: ${LOGS_DIR}"
 
-    local fail=0
-    run_executables_in_dir "${TESTS_DIR}" "install tree tests" "${LOGS_DIR}/test.log" || fail=1
-
-    if [[ "${RUN_BENCH}" -eq 1 ]]; then
-        run_benchmarks || fail=1
+    _fail=0
+    if ! run_executables_in_dir "${TESTS_DIR}" "install tree tests" "${LOGS_DIR}/test.log"; then
+        _fail=1
     fi
 
-    if [[ "${RUN_PROFILE}" -eq 1 ]]; then
-        run_profiling || fail=1
+    if [ "${RUN_BENCH}" -eq 1 ]; then
+        if ! run_benchmarks; then
+            _fail=1
+        fi
+    fi
+
+    if [ "${RUN_PROFILE}" -eq 1 ]; then
+        if ! run_profiling; then
+            _fail=1
+        fi
     fi
 
     {
@@ -326,7 +365,7 @@ main() {
     } >>"${LOGS_DIR}/meta.txt"
 
     echo "logs written under: ${LOGS_DIR}"
-    exit "${fail}"
+    exit "${_fail}"
 }
 
 main "$@"
