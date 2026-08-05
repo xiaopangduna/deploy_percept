@@ -178,6 +178,8 @@ namespace deploy_percept
                     return "FP32";
                 case TensorDtype::INT8:
                     return "INT8";
+                case TensorDtype::INT16:
+                    return "INT16";
                 default:
                     return "UNKNOWN";
                 }

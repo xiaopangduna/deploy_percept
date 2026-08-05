@@ -10,7 +10,7 @@
 |--------|------|----------|
 | `x86_64-debug` | 宿主机开发、后处理单测 | — |
 | `aarch64-linux-gnu_orange_pi_4_pro_a733-release` | Orange Pi A733 交叉编译与板端部署 | AWNN |
-| `armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release` | CoMake Pi D1 (SSD2355) 交叉编译 | Sigmastar IPU（`yolov8_detect_ipu`） |
+| `armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release` | CoMake Pi D1 (SSD2355) 交叉编译 | Sigmastar IPU（`yolov8_detect_sigmastar`） |
 
 开发容器：`.devcontainer/ubuntu-22.04-allwinner/`、`.devcontainer/ubuntu-20.04-sigmastar/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
 

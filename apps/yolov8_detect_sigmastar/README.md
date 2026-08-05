@@ -1,12 +1,10 @@
-# yolov8_detect_ipu
+# yolov8_detect_sigmastar
 
 Sigmastar IPU YOLOv8 检测 demo（CoMake Pi D1 / SSD2355 / pcupid）。
 
-源码从 OpenDLA sample 复现：
+使用 `SigmastarEngine` + `YoloV8DetectPostProcessSigmastar`（1/3/5 路输出 decode + NMS）+ `drawDetectionResults`。
 
-`tmp/.../sdk/verify/opendla/source/detection/yolov8` + `source/utils`。
-
-当前为 **原始 MI_IPU API 直调**（尚未接入 `SigmastarIpuEngine` / 框架后处理）。板端已验证模型：`yolov8n_640x640.img`。
+板端已验证模型：`yolov8n_640x640.img`。
 
 ## 准备 Sigmastar SDK
 
@@ -29,34 +27,29 @@ ln -sfn /path/to/Linux_SDK_Release_*/SourceCode/project/release \
 ```bash
 cmake --preset=armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release
 cmake --build --preset=armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --target yolov8_detect_ipu
+  --target yolov8_detect_sigmastar
 ```
 
-或：
-
-```bash
-bash scripts/build.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release
-```
-
-产物：`build/.../apps/yolov8_detect_ipu/yolov8_detect_ipu`
+产物：`build/.../apps/yolov8_detect_sigmastar/yolov8_detect_sigmastar`
 
 ## 运行（板端）
 
 需要：
 
-- 可执行文件 `yolov8_detect_ipu`
-- 模型 `yolov8n_640x640.img`（SDK：`project/board/pcupid/dla_file/ipu_open_models/detection/`）
+- install 树：`bin/yolov8_detect_sigmastar` + `lib/libcnpy.so`（及 zlib）
+- 模型 `yolov8n_640x640.img`
 - 固件默认 `/config/dla/ipu_firmware.bin`
 - 输入图片
 
 ```bash
-./yolov8_detect_ipu -i "./dog.png" -m ./yolov8n_640x640.img -t 0.5
+cd /customer/deploy_percept
+# 若二进制未带 RPATH，可临时：
+# export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
+./bin/yolov8_detect_sigmastar ./yolov8n_640x640.img ./dog.jpg ./out.jpg
 ```
 
-| 参数 | 说明 |
-|------|------|
-| `-i` | 输入图片（支持 glob） |
-| `-m` | IPU 模型 `.img` |
-| `-t` | 置信度阈值（默认 0.5） |
-
-结果写到 `./output/<timestamp>/`。
+| 位置参数 | 说明 |
+|----------|------|
+| `argv[1]` | IPU 模型 `.img`（默认 `./yolov8n_640x640.img`） |
+| `argv[2]` | 输入图片（默认 `./dog.jpg`） |
+| `argv[3]` | 输出图片（默认 `./yolov8_detect_sigmastar_out.jpg`） |

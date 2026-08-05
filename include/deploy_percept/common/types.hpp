@@ -13,6 +13,7 @@ enum class TensorDtype : std::uint8_t
 {
     FP32,
     INT8,
+    INT16,
 };
 
 struct TensorView

@@ -13,11 +13,18 @@
 #include "deploy_percept/core/post_process/YoloV5DetectPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessAwnn.hpp"
 #endif
+#ifdef SIGMASTAR_FOUND
+#include "deploy_percept/core/post_process/YoloV8DetectPostProcessSigmastar.hpp"
+#endif
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8PosePostProcessRknn.hpp"
 
 #ifdef AWNN_FOUND
 #include "deploy_percept/core/engine/AwnnEngine.hpp"
+#include "deploy_percept/core/engine/EngineResultGuard.hpp"
+#endif
+#ifdef SIGMASTAR_FOUND
+#include "deploy_percept/core/engine/SigmastarEngine.hpp"
 #include "deploy_percept/core/engine/EngineResultGuard.hpp"
 #endif
 #include "deploy_percept/core/engine/RknnEngine.hpp"

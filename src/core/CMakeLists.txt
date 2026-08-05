@@ -5,6 +5,7 @@ set(CORE_SOURCES
     post_process/YoloV5DetectPostProcessRknn.cpp
     post_process/YoloV5DetectPostProcessAwnn.cpp
     post_process/YoloV8DetectPostProcessAwnn.cpp
+    post_process/YoloV8DetectPostProcessSigmastar.cpp
     post_process/YoloV5SegPostProcessRknn.cpp
     post_process/YoloV8PosePostProcessRknn.cpp
     post_process/YoloV8SegPostProcessRknn.cpp
@@ -16,14 +17,13 @@ add_library(deploy_percept_core STATIC ${CORE_SOURCES})
 target_link_libraries(deploy_percept_core PUBLIC deploy_percept_common)
 
 # 平台 NPU 引擎：由 FindThirdParty 按 platform tag 探测，*_FOUND 即编入核心库
-# TODO: Sigmastar SSD2355 (CoMake Pi D1)
-# if(SIGMASTAR_FOUND)
-#     target_sources(deploy_percept_core PRIVATE
-#         engine/SigmastarIpuEngine.cpp
-#     )
-#     target_link_libraries(deploy_percept_core PUBLIC sigmastar::mi)
-#     target_compile_definitions(deploy_percept_core PUBLIC SIGMASTAR_FOUND=1)
-# endif()
+if(SIGMASTAR_FOUND)
+    target_sources(deploy_percept_core PRIVATE
+        engine/SigmastarEngine.cpp
+    )
+    target_link_libraries(deploy_percept_core PUBLIC sigmastar::mi)
+    target_compile_definitions(deploy_percept_core PUBLIC SIGMASTAR_FOUND=1)
+endif()
 
 # TODO: RKNN（瑞芯微）
 # if(RKNN_FOUND)
