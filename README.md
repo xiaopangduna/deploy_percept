@@ -88,13 +88,14 @@ install/<platform>/
 
 ### 5. 测试
 
-**PC 全流程**（build → install → 跑 install 包）：
+**PC 全流程**（build → install → **主机编排**跑 tests）：
 
 ```bash
 bash scripts/test.sh --preset x86_64-debug
+# 日志：ci-artifacts/host-logs/{orchestrator.log,tests/*.log,meta.txt}
 ```
 
-**开发板**（build → install → 远程清空后 scp → 远程跑测；无需板端 rsync）：
+**开发板**（build → install → 清空+scp → **主机逐条 ssh 执行**；板端无需 bash/rsync）：
 
 ```bash
 export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
@@ -108,21 +109,32 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 # Sigmastar / busybox 板同样用法，例如：
 # bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-#   --board root@192.168.1.102:/customer/deploy_percept
+#   --board root@192.168.1.102:/customer/tmp/deploy_percept
+
+# 过渡：仍走板上 scripts/test_runner.sh
+# bash scripts/test.sh ... --board ... --legacy-runner
 ```
 
-**install 包内直接跑**（PC 或开发板，scp/同步后）：
+环境变量由主机拼进每条 remote 命令（`LD_LIBRARY_PATH` / `PERCEPT_ROOT` / `PERCEPT_OUTPUT_DIR`），无 `board_env.sh`。
+
+**板上手动跑单个测试**（不经 test.sh）：
+
+```bash
+cd /customer/tmp/deploy_percept   # 或你的 install 根
+export LD_LIBRARY_PATH=$PWD/lib PERCEPT_ROOT=$PWD/share/percept
+./tests/test_yolov8_detect_sigmastar
+```
+
+**旧版板上 runner**（仍安装，默认不再由 test.sh 调用）：
 
 ```bash
 cd ~/deploy_percept
-./scripts/test_runner.sh                 # 扫描 tests/ 下全部可执行文件
-./scripts/test_runner.sh --bench 50      # tests + benchmarks
-./scripts/test_runner.sh --profile 60    # tests + profiling（app --duration-sec + percept_monitor）
+./scripts/test_runner.sh                 # 或 test.sh --legacy-runner
 ```
 
 NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:path`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
 
-板端跑完后会把日志拉到 `ci-artifacts/board-logs/`（`test_runner_console.log` + `logs/{test,bench,profile}.log` + `profile.csv`）。Board CI 上传 artifact `board-logs-<sha>`，便于对比不同 commit。
+板端跑完后日志在主机 `ci-artifacts/board-logs/`（`orchestrator.log`、`tests/*.log`、`meta.txt`；bench/profile 同分目录）。Board CI 上传 artifact `board-logs-<sha>`。
 
 手动同步 install 包（等价于 test.sh 的清空 + scp）：
 
