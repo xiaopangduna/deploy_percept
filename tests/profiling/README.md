@@ -35,21 +35,20 @@ History Loading -----> Core0: Inference Time=24063 ms (80%)
 `/sys/kernel/debug/viplite/` 在 debugfs 上，普通用户无权访问。专用开发板 / CI **直接 root SSH**，无需 sudoers：
 
 ```bash
-# BOARD_SPEC / --board 示例
-root@192.168.1.101:~/deploy_percept
+# BOARD_SPEC / --board 示例（绝对路径）
+root@192.168.1.101:/root/deploy_percept
 
 export SSHPASS='...'
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@192.168.1.101:~/deploy_percept --profile 60
+  --board root@192.168.1.101:/root/deploy_percept --full
 ```
 
-root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH 登录。
+root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH 登录。`test.sh` 只编排正确性测试；profile 请按下述手跑（后续可加 `test_profile.sh`）。
 
 ## 板端示例（与 mobilenetv2 demo）
 
 ```bash
-cd ~/deploy_percept   # install prefix（root 会话）
-export LD_LIBRARY_PATH=$PWD/lib
+cd /root/deploy_percept   # install prefix（root 会话）
 
 ./bin/mobilenetv2_classify_awnn --duration-sec 60 \
   share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
@@ -58,30 +57,16 @@ export LD_LIBRARY_PATH=$PWD/lib
 ./profiling/percept_monitor --name mobilenetv2_classify_awnn
 ```
 
-`--profile T` / app `--duration-sec T`：都是 **app 循环墙钟时间**（默认推荐 **60**，配合 core_loading ~30s 窗口）。monitor 跟随目标进程退出。延迟分段请用 `benchmarks/bench_*`。
-
-## 经 test_runner / test.sh
-
-```bash
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@<ip>:~/deploy_percept --profile 60
-
-./scripts/test_runner.sh --profile 60
-```
-
-当前内置目标：`mobilenetv2_classify_awnn`（bin 中不存在则 skip）。
+app `--duration-sec T`：是 **app 循环墙钟时间**（默认推荐 **60**，配合 core_loading ~30s 窗口）。monitor 跟随目标进程退出。延迟分段请用 `benchmarks/bench_*`。
 
 ## 日志与回传
 
-`test_runner` 写入 install 树：
+`test.sh --board` 写入源码树：
 
 ```text
-var/percept/logs/
+ci-artifacts/board-logs/   # 或 host-logs/
   meta.txt
-  test.log       # 全部正确性测试（段分隔）
-  bench.log      # 全部 latency bench
-  profile.log    # monitor + app 文本
-  profile.csv    # monitor 时间序列（含 npu_load）
+  test_run.log
 ```
 
-`--board` 模式结束后，`test.sh` 拉到源码树 `ci-artifacts/board-logs/`；Board CI 上传 artifact `board-logs-<sha>`。
+Board CI 上传 artifact `board-logs-<sha>`。

@@ -25,7 +25,8 @@ show_help() {
     echo "  bash $0 --preset x86_64-debug --install"
     echo ""
     echo "相关脚本:"
-    echo "  bash scripts/test.sh    build + install + 验证 install 包"
+    echo "  bash scripts/test.sh         build + install + 跑测"
+    echo "  bash scripts/sync_install_to_board.sh 仅同步 install 到开发板"
 }
 
 while [[ $# -gt 0 ]]; do

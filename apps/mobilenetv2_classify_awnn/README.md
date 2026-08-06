@@ -74,12 +74,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./profiling/percept_monitor --name mobilenetv2_classify_awnn
 ```
 
-```bash
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@<ip>:~/deploy_percept --profile 60
-```
-
-详见 [tests/profiling/README.md](../../tests/profiling/README.md)。
+详见 [tests/profiling/README.md](../../tests/profiling/README.md)（手跑 app + `percept_monitor`；`test.sh` 不再带 `--profile`）。
 
 ## 预处理
 
@@ -109,7 +104,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 ```bash
 bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@<ip>:~/deploy_percept
+  --board root@<ip>:/root/deploy_percept --full
 ```
 
 对应 `tests/test_mobilenetv2_classify_awnn`。Top-5 class_id 真值：`{281, 282, 285, 287, 478}`。
@@ -117,11 +112,7 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 ## 性能 benchmark
 
 ```bash
-# 板端：测试完成后加 --bench
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@<ip>:~/deploy_percept --bench 50
-
-# 或 install prefix 本地直接跑
+# install prefix 内直接跑 bench（test.sh 不再带 --bench）
 export PERCEPT_ROOT=$PWD/share/percept
 export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./benchmarks/bench_mobilenetv2_classify 50

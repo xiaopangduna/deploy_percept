@@ -82,7 +82,7 @@ install/<platform>/
 ├── tests/                        # 测试可执行文件（INSTALL_TESTS）
 ├── benchmarks/                   # 延迟 benchmark（ENABLE/INSTALL_BENCHMARKS）
 ├── profiling/                    # 资源画像（ENABLE/INSTALL_PROFILING）
-├── scripts/test_runner.sh        # install 包测试 runner
+├── scripts/test_run.sh           # 板上/本机：对某目录逐个跑 ELF（sh）
 └── share/percept/fixtures/       # 测试与 demo 共用数据
 ```
 
@@ -95,54 +95,61 @@ bash scripts/test.sh --preset x86_64-debug
 # 日志：ci-artifacts/host-logs/{orchestrator.log,tests/*.log,meta.txt}
 ```
 
-**开发板**（build → install → 清空+scp → **主机逐条 ssh 执行**；板端无需 bash/rsync）：
+**仅部署到开发板**（只 scp，不 build；默认 quick 清单，首次/CI 加 `--full`）：
+
+```bash
+export SSHPASS='your_password'
+# 日常（默认非全量，清单见 scripts/sync_install_to_board.sh 内 QUICK_PATHS）
+bash scripts/sync_install_to_board.sh \
+  --install-dir install/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355 \
+  --board root@192.168.1.102:/customer/tmp/deploy_percept
+
+# 首次上板或 CI：全量清空后整树上传
+bash scripts/sync_install_to_board.sh \
+  --install-dir install/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355 \
+  --board root@192.168.1.102:/customer/tmp/deploy_percept --full
+```
+
+约束：`--board` 路径须为**绝对路径**，且 basename 为 `deploy_percept`。
+
+**开发板跑测**（build+install → 调 `sync_install_to_board.sh` → 主机逐条 ssh；板端无需 bash/rsync）：
 
 ```bash
 export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@192.168.0.103:~/deploy_percept
+# 日常（默认 quick 部署）
+bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
+  --board root@192.168.1.102:/customer/tmp/deploy_percept
 
-# 含 benchmark（默认 50 loops）与资源画像（默认 60s）
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board root@192.168.0.103:~/deploy_percept --bench 100 --profile 60
+# 首次 / CI：加 --full
+bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
+  --board root@192.168.1.102:/customer/tmp/deploy_percept --full
 
-# Sigmastar / busybox 板同样用法，例如：
-# bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-#   --board root@192.168.1.102:/customer/tmp/deploy_percept
-
-# 过渡：仍走板上 scripts/test_runner.sh
-# bash scripts/test.sh ... --board ... --legacy-runner
 ```
 
-环境变量由主机拼进每条 remote 命令（`LD_LIBRARY_PATH` / `PERCEPT_ROOT` / `PERCEPT_OUTPUT_DIR`），无 `board_env.sh`。
+环境变量由主机拼进每条 remote 命令（`LD_LIBRARY_PATH` / `PERCEPT_ROOT` / `PERCEPT_OUTPUT_DIR`）。
 
-**板上手动跑单个测试**（不经 test.sh）：
+**板上/本机跑某一目录全部测试**（`test_run.sh`，POSIX sh，无额外参数）：
 
 ```bash
-cd /customer/tmp/deploy_percept   # 或你的 install 根
+sh scripts/test_run.sh /path/to/install/.../tests
+# 板上（sync 后）:
+sh /customer/tmp/deploy_percept/scripts/test_run.sh /customer/tmp/deploy_percept/tests
+```
+
+需要给某个 ELF 传参时，请直接单独运行该文件。
+
+**板上手动跑单个测试**：
+
+```bash
+cd /customer/tmp/deploy_percept
 export LD_LIBRARY_PATH=$PWD/lib PERCEPT_ROOT=$PWD/share/percept
 ./tests/test_yolov8_detect_sigmastar
 ```
 
-**旧版板上 runner**（仍安装，默认不再由 test.sh 调用）：
-
-```bash
-cd ~/deploy_percept
-./scripts/test_runner.sh                 # 或 test.sh --legacy-runner
-```
-
-NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:path`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
+NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:/abs/deploy_percept`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
 
 板端跑完后日志在主机 `ci-artifacts/board-logs/`（`orchestrator.log`、`tests/*.log`、`meta.txt`；bench/profile 同分目录）。Board CI 上传 artifact `board-logs-<sha>`。
-
-手动同步 install 包（等价于 test.sh 的清空 + scp）：
-
-```bash
-ssh root@192.168.0.103 'mkdir -p ~/deploy_percept && cd ~/deploy_percept && rm -rf ./* ./.[!.]* ./..?* 2>/dev/null || true'
-scp -r install/aarch64-linux-gnu_orange_pi_4_pro_a733/* \
-  root@192.168.0.103:~/deploy_percept/
-```
 
 开发期 build tree 单测：`cd build/<preset> && ctest --output-on-failure`
 
@@ -167,8 +174,9 @@ deploy_percept/
 │   └── utils/                     # 预处理、可视化、io
 ├── scripts/
 │   ├── build.sh                   # 构建（可选 --install）
-│   ├── test.sh                    # build + install + 验证 install 包
-│   ├── test_runner.sh             # install 包内测试 runner（随包安装）
+│   ├── sync_install_to_board.sh   # 仅 scp install → 板（默认 quick，--full 全量）
+│   ├── test.sh                    # 编排：build + install + 可选 sync + 调 test_run
+│   ├── test_run.sh                # 对给定目录逐个跑 ELF（sh；本机=板端）
 │   ├── third_party_builder.sh
 │   └── third_party_builders/
 ├── src/

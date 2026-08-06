@@ -129,16 +129,9 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH   # 建议始终设置
 
 默认输出：`yolov5_detect_awnn_out.jpg`（当前工作目录）
 
-**性能 benchmark（install 后，与测试同一脚本）：**
+**性能 benchmark（install prefix 内直接跑；`test.sh` 不再带 `--bench`）：**
 
 ```bash
-# 板端：先跑正确性测试，再加 --bench 跑性能
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@<ip>:~/deploy_percept
-bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
-  --board orangepi@<ip>:~/deploy_percept --bench 50
-
-# 或 install prefix 本地直接跑 benchmark
 export PERCEPT_ROOT=$PWD/share/percept
 export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./benchmarks/bench_yolov5 50

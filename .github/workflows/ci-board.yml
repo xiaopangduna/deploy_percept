@@ -2,7 +2,8 @@
 #
 # 仓库 Secrets / Variables（Settings → Secrets and variables → Actions）：
 #   Secret  SSHPASS      板端 SSH 密码（root）
-#   Var     BOARD_SPEC   例如 root@192.168.1.101:~/deploy_percept
+#   Var     BOARD_SPEC   例如 root@192.168.1.101:/root/deploy_percept
+#                        （须绝对路径，basename=deploy_percept）
 #
 # Runner 宿主机一次性准备：
 #   1) Docker 可用（当前用户可 docker run，无需 sudo）
@@ -112,13 +113,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          TEST_ARGS=(--preset "${PRESET}" --board "${BOARD_SPEC}")
-          if [[ "${BENCH_LOOPS}" != "0" ]]; then
-            TEST_ARGS+=(--bench "${BENCH_LOOPS}")
-          fi
-          if [[ "${PROFILE_SEC}" != "0" ]]; then
-            TEST_ARGS+=(--profile "${PROFILE_SEC}")
-          fi
+          # bench / profile 已从 test.sh 拆出；本 job 只跑正确性 tests
+          TEST_ARGS=(--preset "${PRESET}" --board "${BOARD_SPEC}" --full)
 
           docker run --rm \
             --network=host \
