@@ -10,6 +10,7 @@ set(CORE_SOURCES
     post_process/YoloV8PosePostProcessRknn.cpp
     post_process/YoloV8SegPostProcessRknn.cpp
     post_process/ClassificationPostProcessAwnn.cpp
+    post_process/ClassificationPostProcessSigmastar.cpp
 )
 
 add_library(deploy_percept_core STATIC ${CORE_SOURCES})

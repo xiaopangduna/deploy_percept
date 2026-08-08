@@ -21,6 +21,7 @@ tests/fixtures/
 │   └── cat.jpg
 └── integration/sigmastar/      # Sigmastar IPU 集成测 / demo
     ├── yolov8n_640x640_ssd2355.img
+    ├── mobilenet_v2_224_ssd2355.img
     └── dog.jpg
 ```
 
@@ -36,7 +37,7 @@ mobilenetv2_classify_awnn mobilenetv2_a733.nb cat.jpg model_outputs.npz
 
 `unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
 
-`integration/sigmastar/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640_ssd2355.img`（IPU 入口 NV12）+ `dog.jpg`。集成测需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
+`integration/sigmastar/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640_ssd2355.img`（检测，IPU 入口 NV12）、`mobilenet_v2_224_ssd2355.img`（分类，ImageNet-1000）+ `dog.jpg`。集成测需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
 
 ## 路径 API
 

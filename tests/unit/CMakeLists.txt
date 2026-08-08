@@ -23,6 +23,12 @@ add_percept_test(
     LINK_LIBS deploy_percept_core deploy_percept_utils)
 
 add_percept_test(
+    NAME test_ClassificationPostProcessSigmastar
+    TIER unit
+    SOURCES post_process/test_ClassificationPostProcessSigmastar.cpp
+    LINK_LIBS deploy_percept_core)
+
+add_percept_test(
     NAME test_YoloV5DetectPostProcessAwnn
     TIER unit
     SOURCES post_process/test_YoloV5DetectPostProcessAwnn.cpp

@@ -21,6 +21,7 @@ endif()
 
 if(SIGMASTAR_FOUND AND TARGET deploy_percept_utils AND TARGET deploy_percept_core)
     add_subdirectory(yolov8_detect_sigmastar)
+    add_subdirectory(mobilenetv2_classify_sigmastar)
 elseif(SIGMASTAR_FOUND AND TARGET deploy_percept_core)
     message(WARNING "apps: Sigmastar 已找到但 deploy_percept_utils 未编译，跳过 Sigmastar 示例")
 elseif(SIGMASTAR_FOUND)

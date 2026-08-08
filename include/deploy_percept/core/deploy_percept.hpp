@@ -15,6 +15,7 @@
 #endif
 #ifdef SIGMASTAR_FOUND
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessSigmastar.hpp"
+#include "deploy_percept/core/post_process/ClassificationPostProcessSigmastar.hpp"
 #endif
 #include "deploy_percept/core/post_process/ClassificationPostProcessAwnn.hpp"
 #include "deploy_percept/core/post_process/YoloV8PosePostProcessRknn.hpp"
