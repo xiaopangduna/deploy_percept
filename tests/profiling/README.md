@@ -51,8 +51,8 @@ root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH
 cd /root/deploy_percept   # install prefix（root 会话）
 
 ./bin/mobilenetv2_classify_awnn --duration-sec 60 \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg &
+  share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+  share/percept/fixtures/integration/awnn/cat.jpg &
 
 ./profiling/percept_monitor --name mobilenetv2_classify_awnn
 ```

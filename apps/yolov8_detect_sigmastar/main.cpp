@@ -4,7 +4,7 @@
  * 用法：
  *   yolov8_detect_sigmastar [model.img] [input.jpg] [output.jpg]
  *
- * 默认：./yolov8n_640x640.img  ./dog.jpg  ./yolov8_detect_sigmastar_out.jpg
+ * 默认：./yolov8n_640x640_ssd2355.img  ./dog.jpg  ./yolov8_detect_sigmastar_out.jpg
  */
 #include <cstdio>
 #include <cstdint>
@@ -32,7 +32,7 @@ using deploy_percept::utils::drawDetectionResults;
 namespace
 {
 
-constexpr const char *kDefaultModel = "yolov8n_640x640.img";
+constexpr const char *kDefaultModel = "yolov8n_640x640_ssd2355.img";
 constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov8_detect_sigmastar_out.jpg";
 constexpr std::uint32_t kDivpYuvAlignment = 16;
@@ -126,7 +126,7 @@ bool prepare_model_input(
     auto fmt = static_cast<MI_IPU_ELEMENT_FORMAT>(elm_format);
     if (fmt == MI_IPU_FORMAT_NV12)
     {
-        // 板端 yolov8n_640x640.img 输入为 NV12（elm_format=1）
+        // 板端 yolov8n_640x640_ssd2355.img 输入为 NV12（elm_format=1）
         const int align_h = static_cast<int>(align_down(static_cast<std::uint32_t>(model_h), 2));
         const int align_w = static_cast<int>(align_down(static_cast<std::uint32_t>(model_w), 2));
         cv::Mat align_bgr = model_input_bgr(cv::Range(0, align_h), cv::Range(0, align_w)).clone();

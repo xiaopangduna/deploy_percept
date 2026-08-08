@@ -22,7 +22,7 @@ using percept::test::fixture_data;
 
 namespace {
 
-// A733 + mobilenetv2.nb + cat.jpg 板端标定（imagenet_10/1.jpg）
+// A733 + mobilenetv2_a733.nb + cat.jpg 板端标定（imagenet_10/1.jpg）
 constexpr int kExpectedTop1ClassId = 281;
 
 bool prepare_model_input(
@@ -63,8 +63,8 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 
 TEST(MobileNetV2ClassifyAwnnIntegration, CatTop1MatchGolden)
 {
-    const fs::path model_path = fixture_data("integration/awnn/mobilenetv2_classify/mobilenetv2.nb");
-    const fs::path input_path = fixture_data("integration/awnn/mobilenetv2_classify/cat.jpg");
+    const fs::path model_path = fixture_data("integration/awnn/mobilenetv2_a733.nb");
+    const fs::path input_path = fixture_data("integration/awnn/cat.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     VipLiteRuntime runtime;

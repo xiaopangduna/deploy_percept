@@ -29,7 +29,7 @@ namespace
 constexpr int kBoxTolerancePx = 4;
 constexpr std::uint32_t kDivpYuvAlignment = 16;
 
-// Golden：板端 dog.jpg + yolov8n_640x640.img（NV12）
+// Golden：板端 dog.jpg + yolov8n_640x640_ssd2355.img（NV12）
 const std::vector<Detection> kExpectedDetections = {
     MakeDetectResult(1, 0.8056f, 102, 151, 474, 467),
     MakeDetectResult(16, 0.7859f, 111, 249, 257, 600),
@@ -193,9 +193,9 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 TEST(YoloV8DetectSigmastarIntegration, DogDetectionsMatchGolden)
 {
     const fs::path model_path =
-        fixture_data("integration/sigmastar/yolov8_detect/yolov8n_640x640.img");
+        fixture_data("integration/sigmastar/yolov8n_640x640_ssd2355.img");
     const fs::path input_path =
-        fixture_data("integration/sigmastar/yolov8_detect/dog.jpg");
+        fixture_data("integration/sigmastar/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     SigmastarEngine::Params engine_params;

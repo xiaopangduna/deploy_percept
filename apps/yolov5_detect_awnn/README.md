@@ -2,14 +2,14 @@
 
 全志 VIPLite YOLOv5 检测（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`。
 
-## 资源（install → share/percept/fixtures/integration/awnn/yolov5_detect/）
+## 资源（install → share/percept/fixtures/integration/awnn/）
 
 | 文件 | 说明 |
 |------|------|
-| `yolov5.nb` | A733 模型 |
+| `yolov5_a733.nb` | A733 模型 |
 | `dog.jpg` | 默认输入图 |
 
-install 包内 `yolov5.nb` 为 **COCO 预训练 YOLOv5s** 经 Acuity 转换后的 NBG 模型，可直接跑 demo。若要换自己的数据集，见下文。
+install 包内 `yolov5_a733.nb` 为 **COCO 预训练 YOLOv5s** 经 Acuity 转换后的 NBG 模型，可直接跑 demo。若要换自己的数据集，见下文。
 https://docs.aw-ol.com/v853/npu/npu_yolov5/
 https://docs.100ask.net/vision/docs/V853/part6/06-1_Yolov5ModelDeployment
 
@@ -18,7 +18,7 @@ https://docs.100ask.net/vision/docs/V853/part6/06-1_Yolov5ModelDeployment
 `.nb` 不能在板端或 NPU 上直接「训练」得到，完整链路如下：
 
 ```
-PC 训练 (PyTorch) → 导出 ONNX → onnxsim 固定尺寸 → Acuity 量化/编译 → yolov5.nb → 板端 AWNN 推理
+PC 训练 (PyTorch) → 导出 ONNX → onnxsim 固定尺寸 → Acuity 量化/编译 → yolov5_a733.nb → 板端 AWNN 推理
 ```
 
 本 demo 的模型 I/O 约定：**输入** UINT8 NCHW 640×640；**输出** 三检测头 FP32（stride 8/16/32），后处理见 `YoloV5DetectPostProcessAwnn`。转换时需导出 **三个 raw head**，不要把 NMS/Decode 放进 NPU 图里。
@@ -85,7 +85,7 @@ source /path/to/tmp/ai-sdk/models/env.sh v3
 ### 4. 替换 install 包内模型
 
 ```bash
-cp yolov5s-sim_uint8.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov5_detect/yolov5.nb
+cp yolov5s-sim_uint8.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov5_a733.nb
 # 板端 rsync install 树后重跑 demo / test.sh
 ```
 
@@ -111,7 +111,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov5_detect_awnn
 ```
 
-无参运行时默认使用当前工作目录下的 `./yolov5.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
+无参运行时默认使用当前工作目录下的 `./yolov5_a733.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
 
 **必须**保证 VIPLite 动态库来自 install 的 `lib/`（与构建版本一致）：
 
@@ -142,4 +142,4 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ## 模型 I/O
 
 - 输入：UINT8 NCHW 640×640
-- 输出：`yolov5.nb` 为三头 **FP32**（stride 8/16/32），后处理用 `YoloV5DetectPostProcessAwnn`
+- 输出：`yolov5_a733.nb` 为三头 **FP32**（stride 8/16/32），后处理用 `YoloV5DetectPostProcessAwnn`

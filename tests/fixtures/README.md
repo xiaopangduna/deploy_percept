@@ -14,33 +14,36 @@ tests/fixtures/
 │   ├── yolov8_seg/             model_outputs.npz, mask.bin, bus.jpg
 │   └── mobilenetv2_classify_awnn/  model_outputs.npz（AWNN FP32，板端 dump）
 ├── integration/awnn/           # AWNN 集成测 / demo / benchmark
-│   ├── yolov5_detect/          yolov5.nb, dog.jpg
-│   ├── yolov8_detect/          yolov8.nb, dog.jpg
-│   └── mobilenetv2_classify/   mobilenetv2.nb, cat.jpg
+│   ├── yolov5_a733.nb
+│   ├── yolov8_a733.nb
+│   ├── mobilenetv2_a733.nb
+│   ├── dog.jpg
+│   └── cat.jpg
 └── integration/sigmastar/      # Sigmastar IPU 集成测 / demo
-    └── yolov8_detect/          yolov8n_640x640.img, dog.jpg
+    ├── yolov8n_640x640_ssd2355.img
+    └── dog.jpg
 ```
 
 `unit/post_process/yolov5_detect/model_outputs.npz` 由 RKNN 导出（INT8），单测只比对后处理逻辑，运行时不依赖 RKNN。
 
-`unit/post_process/yolov5_detect_awnn/model_outputs.npz` 与 `yolov8_detect_awnn/` 下同名文件由板端 AWNN 推理导出（FP32），输入须为 `integration/awnn/*/dog.jpg`，与 integration golden 对齐。**若 fixture 由旧版 `save_npz` 导出（误按 int8 写入），需用修复后的 demo 重新 dump。**
+`unit/post_process/yolov5_detect_awnn/model_outputs.npz` 与 `yolov8_detect_awnn/` 下同名文件由板端 AWNN 推理导出（FP32），输入须为 `integration/awnn/dog.jpg`，与 integration golden 对齐。**若 fixture 由旧版 `save_npz` 导出（误按 int8 写入），需用修复后的 demo 重新 dump。**
 
 ```bash
-yolov5_detect_awnn yolov5.nb dog.jpg out.jpg model_outputs.npz
-yolov8_detect_awnn yolov8.nb dog.jpg out.jpg model_outputs.npz
-mobilenetv2_classify_awnn mobilenetv2.nb cat.jpg model_outputs.npz
+yolov5_detect_awnn yolov5_a733.nb dog.jpg out.jpg model_outputs.npz
+yolov8_detect_awnn yolov8_a733.nb dog.jpg out.jpg model_outputs.npz
+mobilenetv2_classify_awnn mobilenetv2_a733.nb cat.jpg model_outputs.npz
 ```
 
-`unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/mobilenetv2_classify/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
+`unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
 
-`integration/sigmastar/yolov8_detect/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640.img`（IPU 入口 NV12）+ `dog.jpg`。集成测需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
+`integration/sigmastar/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640_ssd2355.img`（IPU 入口 NV12）+ `dog.jpg`。集成测需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
 
 ## 路径 API
 
 ```cpp
 #include "test_common/paths.hpp"
 
-percept::test::fixture_data("integration/awnn/yolov5_detect/yolov5.nb");
+percept::test::fixture_data("integration/awnn/yolov5_a733.nb");
 ```
 
 测试内可用 `percept::test::fixture_data(...)`；benchmark 同样通过 `test_common/paths.hpp` 解析 fixtures。

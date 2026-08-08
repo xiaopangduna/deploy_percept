@@ -4,7 +4,7 @@
  * 用法（路径相对当前工作目录，或使用绝对路径）：
  *   mobilenetv2_classify_awnn [--duration-sec T] [model.nb] [input.jpg] [model_outputs.npz]
  *
- * 默认：./mobilenetv2.nb  ./cat.jpg
+ * 默认：./mobilenetv2_a733.nb  ./cat.jpg
  * --duration-sec：按墙钟循环推理，供 tests/profiling/percept_monitor 旁路采样
  * 延迟对比见 tests/benchmarks/awnn/bench_mobilenetv2_classify
  */
@@ -36,7 +36,7 @@ using deploy_percept::utils::save_npz;
 namespace
 {
 
-constexpr const char *kDefaultModel = "mobilenetv2.nb";
+constexpr const char *kDefaultModel = "mobilenetv2_a733.nb";
 constexpr const char *kDefaultInput = "cat.jpg";
 
 bool prepare_model_input(

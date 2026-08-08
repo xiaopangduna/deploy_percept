@@ -2,11 +2,11 @@
 
 全志 VIPLite YOLOv8 检测（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`，后处理见 `YoloV8DetectPostProcessAwnn`（与 `tmp/awnpu_model_zoo-.../examples/yolov8` 六路 FP32 输出一致）。
 
-## 资源（install → share/percept/fixtures/integration/awnn/yolov8_detect/）
+## 资源（install → share/percept/fixtures/integration/awnn/）
 
 | 文件 | 说明 |
 |------|------|
-| `yolov8.nb` | A733 模型 |
+| `yolov8_a733.nb` | A733 模型 |
 | `dog.jpg` | 默认输入图（768×576） |
 
 ## 模型训练与转换
@@ -14,7 +14,7 @@
 完整链路：
 
 ```
-PC 训练/下载 (Ultralytics) → 导出 ONNX → onnxsim 固定尺寸 → onnx_extract 裁剪 6 路 head → Acuity 量化/编译 → yolov8.nb → 板端 AWNN 推理
+PC 训练/下载 (Ultralytics) → 导出 ONNX → onnxsim 固定尺寸 → onnx_extract 裁剪 6 路 head → Acuity 量化/编译 → yolov8_a733.nb → 板端 AWNN 推理
 ```
 
 参考 `tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/yolov8/`：
@@ -37,7 +37,7 @@ cd tmp/awnpu_model_zoo-v1.0.0-20260423-f562dd16/examples/yolov8/convert_model/
 ### 替换 install 包内模型
 
 ```bash
-cp yolov8n_6_uint8_a733.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov8_detect/yolov8.nb
+cp yolov8n_6_uint8_a733.nb /path/to/install/share/percept/fixtures/integration/awnn/yolov8_a733.nb
 # 板端 rsync install 树后重跑 demo / test.sh
 ```
 
@@ -61,7 +61,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/yolov8_detect_awnn
 ```
 
-无参运行时默认使用当前工作目录下的 `./yolov8.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
+无参运行时默认使用当前工作目录下的 `./yolov8_a733.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
 
 **正确性回归（板端）：**
 
@@ -115,7 +115,7 @@ demo 与 integration test 使用相同流程：
 
 demo 在 **resize 后的 640×640 图** 上画框，而非原图。
 
-### dog.jpg 板端标定（A733 + yolov8.nb，640×640 模型坐标）
+### dog.jpg 板端标定（A733 + yolov8_a733.nb，640×640 模型坐标）
 
 | cls | COCO | box [left, top, right, bottom] | prob |
 |-----|------|--------------------------------|------|

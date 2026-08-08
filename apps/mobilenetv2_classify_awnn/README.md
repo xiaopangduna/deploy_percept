@@ -2,14 +2,14 @@
 
 全志 VIPLite MobileNetV2 ImageNet 分类（Orange Pi 4 Pro A733）。推理经 `deploy_percept::engine::AwnnEngine`，后处理见 `ClassificationPostProcessAwnn`（与 `tmp/awnpu_model_zoo-.../examples/mobilenetv2` 单路 FP32 logits + Top-K 一致）。
 
-## 资源（install → share/percept/fixtures/integration/awnn/mobilenetv2_classify/）
+## 资源（install → share/percept/fixtures/integration/awnn/）
 
 | 文件 | 说明 |
 |------|------|
-| `mobilenetv2.nb` | A733 Acuity 导出模型 |
+| `mobilenetv2_a733.nb` | A733 Acuity 导出模型 |
 | `cat.jpg` | 默认输入图（任意尺寸，demo 内 resize 至 224×224） |
 
-模型与图片位于 `tests/fixtures/integration/awnn/mobilenetv2_classify/`，install 时复制到 `share/percept/fixtures/`。
+模型与图片位于 `tests/fixtures/integration/awnn/`，install 时复制到 `share/percept/fixtures/`。
 
 ## 模型从哪来
 
@@ -21,7 +21,7 @@
 
 ```bash
 cp ../train/exports/awnn/mobilenet_v2/model/mobilenetv2-12_pcq_a733.nb \
-  tests/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb
+  tests/fixtures/integration/awnn/mobilenetv2_a733.nb
 ```
 
 要求：`ADD_PREPROC_NODE=True`、`PREPROC_TYPE=IMAGE_RGB`、`ADD_POSTPROC_NODE=True`（NPU 内 mean/scale + FP32 输出）。
@@ -47,16 +47,16 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ```bash
 ./bin/mobilenetv2_classify_awnn \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg
+  share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+  share/percept/fixtures/integration/awnn/cat.jpg
 ```
 
 导出 unit 单测 fixture（板端，后处理 golden）：
 
 ```bash
 ./bin/mobilenetv2_classify_awnn \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg \
+  share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+  share/percept/fixtures/integration/awnn/cat.jpg \
   /tmp/model_outputs.npz
 ```
 
@@ -68,8 +68,8 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ```bash
 ./bin/mobilenetv2_classify_awnn --duration-sec 60 \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/mobilenetv2.nb \
-  share/percept/fixtures/integration/awnn/mobilenetv2_classify/cat.jpg &
+  share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+  share/percept/fixtures/integration/awnn/cat.jpg &
 
 ./profiling/percept_monitor --name mobilenetv2_classify_awnn
 ```

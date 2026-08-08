@@ -72,8 +72,8 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 
 TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
 {
-    const fs::path model_path = fixture_data("integration/awnn/yolov8_detect/yolov8.nb");
-    const fs::path input_path = fixture_data("integration/awnn/yolov8_detect/dog.jpg");
+    const fs::path model_path = fixture_data("integration/awnn/yolov8_a733.nb");
+    const fs::path input_path = fixture_data("integration/awnn/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     VipLiteRuntime runtime;
@@ -91,7 +91,7 @@ TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
         GTEST_SKIP() << "AwnnEngine init failed";
     }
 
-    // yolov8.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
+    // yolov8_a733.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
     const auto &sizes = engine.getInfo().input_sizes.at(0);
     const int model_c = static_cast<int>(sizes[0]);
     const int model_h = static_cast<int>(sizes[1]);

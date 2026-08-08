@@ -32,7 +32,7 @@ protected:
         }
 
         processor = std::make_unique<ClassificationPostProcessAwnn>(ClassificationPostProcessAwnn::Params{
-            .num_classes = 1000, // mobilenetv2.nb output_sizes[0][0]（unit 无 Engine，与 fixture 一致）
+            .num_classes = 1000, // mobilenetv2_a733.nb output_sizes[0][0]（unit 无 Engine，与 fixture 一致）
         });
         model_outputs_npz = cnpy::npz_load(npz_path.string());
     }
@@ -43,7 +43,7 @@ protected:
 
 TEST_F(ClassificationPostProcessAwnnTest, GoldenRun)
 {
-    // A733 + mobilenetv2.nb + cat.jpg，与 integration/awnn/test_mobilenetv2_classify_awnn 一致
+    // A733 + mobilenetv2_a733.nb + cat.jpg，与 integration/awnn/test_mobilenetv2_classify_awnn 一致
     const int expected_class_id = 281;
     const float expected_score = 14.8013f; // 板端 dump 原始 logit（非 softmax）
 

@@ -98,8 +98,8 @@ void skip_unless_fixture_ready(const fs::path &model_path, const fs::path &input
 
 TEST(YoloV5DetectAwnnIntegration, DogDetectionsMatchGolden)
 {
-    const fs::path model_path = fixture_data("integration/awnn/yolov5_detect/yolov5.nb");
-    const fs::path input_path = fixture_data("integration/awnn/yolov5_detect/dog.jpg");
+    const fs::path model_path = fixture_data("integration/awnn/yolov5_a733.nb");
+    const fs::path input_path = fixture_data("integration/awnn/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     VipLiteRuntime runtime;

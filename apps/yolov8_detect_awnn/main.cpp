@@ -4,7 +4,7 @@
  * 用法（路径相对当前工作目录，或使用绝对路径）：
  *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
- * 默认：./yolov8.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
+ * 默认：./yolov8_a733.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
  * 性能对比见 tests/benchmarks/awnn/bench_yolov8
  */
 #include <cstdio>
@@ -34,7 +34,7 @@ using deploy_percept::utils::save_npz;
 namespace
 {
 
-constexpr const char *kDefaultModel = "yolov8.nb";
+constexpr const char *kDefaultModel = "yolov8_a733.nb";
 constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov8_detect_awnn_out.jpg";
 
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // yolov8.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
+    // yolov8_a733.nb VIP input sizes: [C, H, W, N] = [3, 640, 640, 1]，buffer 为 RGB HWC
     const auto &sizes = engine.getInfo().input_sizes.at(0);
     const int model_h = static_cast<int>(sizes[1]);
     const int model_w = static_cast<int>(sizes[2]);

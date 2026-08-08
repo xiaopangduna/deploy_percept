@@ -4,7 +4,7 @@
  * 用法（路径相对当前工作目录，或使用绝对路径）：
  *   yolov5_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
- * 默认：./yolov5.nb  ./dog.jpg  ./yolov5_detect_awnn_out.jpg
+ * 默认：./yolov5_a733.nb  ./dog.jpg  ./yolov5_detect_awnn_out.jpg
  * 性能对比见 tests/benchmarks/awnn/bench_yolov5
  */
 #include <cstdio>
@@ -34,7 +34,7 @@ using deploy_percept::utils::save_npz;
 namespace
 {
 
-constexpr const char *kDefaultModel = "yolov5.nb";
+constexpr const char *kDefaultModel = "yolov5_a733.nb";
 constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kDefaultOutput = "yolov5_detect_awnn_out.jpg";
 

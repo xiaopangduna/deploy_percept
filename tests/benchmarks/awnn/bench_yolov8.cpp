@@ -34,8 +34,7 @@ using percept::test::fixture_data;
 
 constexpr int kWarmup = 5;
 constexpr int kDefaultLoops = 50;
-constexpr const char *kFixtureCase = "yolov8_detect";
-constexpr const char *kDefaultModel = "yolov8.nb";
+constexpr const char *kDefaultModel = "yolov8_a733.nb";
 constexpr const char *kDefaultInput = "dog.jpg";
 constexpr const char *kPostProcessorClass = "YoloV8DetectPostProcessAwnn";
 
@@ -61,9 +60,7 @@ struct BenchRowStats
 
 std::string default_awnn_fixture(const char *relative)
 {
-    return fixture_data(
-               std::string("integration/awnn/") + kFixtureCase + "/" + relative)
-        .string();
+    return fixture_data(std::string("integration/awnn/") + relative).string();
 }
 
 std::string resolve_path(const char *path, const fs::path &base)
