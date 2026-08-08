@@ -92,7 +92,9 @@ install/<platform>/
 
 ```bash
 bash scripts/test.sh --preset x86_64-debug
-# 日志：ci-artifacts/host-logs/{orchestrator.log,tests/*.log,meta.txt}
+# 再跑 benchmarks/（ELF 用默认 loops）:
+# bash scripts/test.sh --preset x86_64-debug --bench
+# 日志：ci-artifacts/host-logs/{tests.log,benchmarks.log,meta.txt}
 ```
 
 **仅部署到开发板**（只 scp，不 build；默认 quick 清单，首次/CI 加 `--full`）：
@@ -121,9 +123,9 @@ export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
   --board root@192.168.1.102:/customer/tmp/deploy_percept
 
-# 首次 / CI：加 --full
+# 首次 / CI：加 --full；需要性能时再加 --bench
 bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --board root@192.168.1.102:/customer/tmp/deploy_percept --full
+  --board root@192.168.1.102:/customer/tmp/deploy_percept --full --bench
 
 ```
 
@@ -149,7 +151,7 @@ export LD_LIBRARY_PATH=$PWD/lib PERCEPT_ROOT=$PWD/share/percept
 
 NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@host:/abs/deploy_percept`），见 [tests/profiling/README.md](tests/profiling/README.md)。`SSHPASS` 只用于 SSH。
 
-板端跑完后日志在主机 `ci-artifacts/board-logs/`（`orchestrator.log`、`tests/*.log`、`meta.txt`；bench/profile 同分目录）。Board CI 上传 artifact `board-logs-<sha>`。
+板端跑完后日志在主机 `ci-artifacts/board-logs/`（`tests.log`、可选 `benchmarks.log`、`meta.txt`）。Board CI 上传 artifact `board-logs-<sha>`。
 
 开发期 build tree 单测：`cd build/<preset> && ctest --output-on-failure`
 

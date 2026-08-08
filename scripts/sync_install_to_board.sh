@@ -17,6 +17,7 @@ QUICK_PATHS=(
     # lib/libdeploy_percept_core.a
     # lib/libdeploy_percept_utils.a
     tests/
+    benchmarks/
     scripts/
     share/percept/fixtures/integration/sigmastar/
 )
@@ -122,8 +123,8 @@ scp_one_rel() {
     local rel_clean="${rel%/}"
 
     if [[ ! -e "${local_path}" ]]; then
-        echo "错误: 清单项不存在: ${local_path}" >&2
-        return 1
+        echo "警告: 清单项不存在，跳过: ${local_path}" >&2
+        return 0
     fi
 
     local remote_path="${REMOTE_ABS}/${rel_clean}"

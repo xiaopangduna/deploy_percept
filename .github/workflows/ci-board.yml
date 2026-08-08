@@ -24,14 +24,10 @@ name: Board test (Orange Pi A733)
 on:
   workflow_dispatch:
     inputs:
-      bench_loops:
-        description: "Benchmark loops；填 0 表示不跑 bench"
+      run_bench:
+        description: "是否加 --bench（跑 benchmarks/；填 0 跳过）"
         required: false
-        default: "50"
-      profile_sec:
-        description: "Profiling duration-sec；填 0 表示不跑 profile"
-        required: false
-        default: "60"
+        default: "0"
       board_spec:
         description: "覆盖 BOARD_SPEC（留空则用仓库 Variable）"
         required: false
@@ -108,13 +104,14 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSHPASS }}
           BOARD_SPEC: ${{ steps.board.outputs.board_spec }}
-          BENCH_LOOPS: ${{ inputs.bench_loops }}
-          PROFILE_SEC: ${{ inputs.profile_sec }}
+          RUN_BENCH: ${{ inputs.run_bench }}
         run: |
           set -euo pipefail
 
-          # bench / profile 已从 test.sh 拆出；本 job 只跑正确性 tests
           TEST_ARGS=(--preset "${PRESET}" --board "${BOARD_SPEC}" --full)
+          if [[ "${RUN_BENCH}" != "0" ]]; then
+            TEST_ARGS+=(--bench)
+          fi
 
           docker run --rm \
             --network=host \
