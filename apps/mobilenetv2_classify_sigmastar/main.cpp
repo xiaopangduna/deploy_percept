@@ -4,7 +4,7 @@
  * 用法：
  *   mobilenetv2_classify_sigmastar [model.img] [input.jpg]
  *
- * 默认：./mobilenet_v2_224_ssd2355.img  ./dog.jpg
+ * 默认：./mobilenet_v2_224_ssd2355.img  ./apple.jpg
  *
  * 对齐 OpenDLA classification：INT16 × fScalar → Softmax → Top-1。
  * SDK 开放模型为 5 类：apple / butternut / pizza / goldfish / sea snake。
@@ -32,7 +32,7 @@ namespace
 {
 
 constexpr const char *kDefaultModel = "mobilenet_v2_224_ssd2355.img";
-constexpr const char *kDefaultInput = "dog.jpg";
+constexpr const char *kDefaultInput = "apple.jpg";
 constexpr std::uint32_t kDivpYuvAlignment = 16;
 
 /** OpenDLA classification demo 标签（与 output class_id 对齐） */

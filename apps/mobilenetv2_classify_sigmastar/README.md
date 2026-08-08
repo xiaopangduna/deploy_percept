@@ -27,7 +27,7 @@ ln -sfn /path/to/Linux_SDK_Release_*/SourceCode/project/release \
 | 文件 | 说明 |
 |------|------|
 | `mobilenet_v2_224_ssd2355.img` | pcupid 开放分类模型（224×224，ImageNet-1000） |
-| `dog.jpg` | 默认输入（与检测 fixture 共用） |
+| `apple.jpg` | 默认输入（OpenDLA `source/resource/apple.jpg`） |
 
 源码树：`tests/fixtures/integration/sigmastar/`；install 后为 `share/percept/fixtures/integration/sigmastar/`。
 
@@ -36,6 +36,8 @@ ln -sfn /path/to/Linux_SDK_Release_*/SourceCode/project/release \
 ```bash
 cp tmp/Pcupid_DLC173V2.3.3_0918/Linux_SDK_Release_20250918/SourceCode/project/board/pcupid/dla_file/ipu_open_models/classification/mobilenet_v2_224.img \
   tests/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img
+cp tmp/Pcupid_DLC173V2.3.3_0918/Linux_SDK_Release_20250918/SourceCode/sdk/verify/opendla/source/resource/apple.jpg \
+  tests/fixtures/integration/sigmastar/apple.jpg
 ```
 
 ## 构建
@@ -63,10 +65,10 @@ cd /customer/deploy_percept
 # export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 ./bin/mobilenetv2_classify_sigmastar \
   ./share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
-  ./share/percept/fixtures/integration/sigmastar/dog.jpg
+  ./share/percept/fixtures/integration/sigmastar/apple.jpg
 ```
 
 | 位置参数 | 说明 |
 |----------|------|
 | `argv[1]` | IPU 模型 `.img`（默认 `./mobilenet_v2_224_ssd2355.img`） |
-| `argv[2]` | 输入图片（默认 `./dog.jpg`） |
+| `argv[2]` | 输入图片（默认 `./apple.jpg`） |

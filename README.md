@@ -188,7 +188,7 @@ deploy_percept/
 ├── tests/
 │   ├── fixtures/                  # install → share/percept/fixtures/
 │   ├── test_common/               # 路径解析、fixture 工具（tests + benchmarks 共用）
-│   ├── benchmarks/                # 性能 benchmark（AWNN，ENABLE_BENCHMARKS）
+│   ├── benchmarks/                # 性能 benchmark（AWNN / Sigmastar，ENABLE_BENCHMARKS）
 │   ├── smoke/
 │   ├── unit/post_process/
 │   ├── integration/awnn/

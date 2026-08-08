@@ -66,3 +66,46 @@ function(add_percept_awnn_benchmark)
 
     percept_install_benchmark(${PARSED_NAME})
 endfunction()
+
+# add_percept_sigmastar_benchmark - Sigmastar IPU 性能 benchmark
+#
+# 用法:
+#   add_percept_sigmastar_benchmark(
+#       NAME bench_ipu_img
+#       SOURCES bench_ipu_img.cpp
+#   )
+
+function(add_percept_sigmastar_benchmark)
+    set(oneValueArgs NAME)
+    set(multiValueArgs SOURCES)
+    cmake_parse_arguments(PARSED "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(NOT PARSED_NAME)
+        message(FATAL_ERROR "add_percept_sigmastar_benchmark: NAME is required")
+    endif()
+    if(NOT SIGMASTAR_FOUND)
+        message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): SIGMASTAR not found")
+    endif()
+    if(NOT TARGET test_common)
+        message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): test_common not built")
+    endif()
+    if(NOT TARGET sigmastar::mi)
+        message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): sigmastar::mi missing")
+    endif()
+
+    add_executable(${PARSED_NAME} ${PARSED_SOURCES})
+
+    target_include_directories(${PARSED_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/tests
+        ${CMAKE_SOURCE_DIR})
+
+    target_compile_definitions(${PARSED_NAME} PRIVATE
+        "PERCEPT_ROOT=\"${CMAKE_SOURCE_DIR}\"")
+
+    target_link_libraries(${PARSED_NAME} PRIVATE
+        test_common
+        sigmastar::mi)
+
+    percept_install_benchmark(${PARSED_NAME})
+endfunction()

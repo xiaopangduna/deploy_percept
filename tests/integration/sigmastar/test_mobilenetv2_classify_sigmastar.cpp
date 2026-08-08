@@ -184,7 +184,7 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
     const fs::path model_path =
         fixture_data("integration/sigmastar/mobilenet_v2_224_ssd2355.img");
     const fs::path input_path =
-        fixture_data("integration/sigmastar/dog.jpg");
+        fixture_data("integration/sigmastar/apple.jpg");
     skip_unless_fixture_ready(model_path, input_path);
 
     SigmastarEngine::Params engine_params;

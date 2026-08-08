@@ -6,6 +6,7 @@ set(CORE_SOURCES
     post_process/YoloV5DetectPostProcessAwnn.cpp
     post_process/YoloV8DetectPostProcessAwnn.cpp
     post_process/YoloV8DetectPostProcessSigmastar.cpp
+    post_process/YoloV8SegPostProcessSigmastar.cpp
     post_process/YoloV5SegPostProcessRknn.cpp
     post_process/YoloV8PosePostProcessRknn.cpp
     post_process/YoloV8SegPostProcessRknn.cpp
