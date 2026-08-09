@@ -12,14 +12,16 @@ REMOTE_BASENAME_REQUIRED="deploy_percept"
 # 默认 quick 清单（相对 --install-dir；当前主测板 = Sigmastar）
 # 其它平台 fixture / unit 数据请用 --full；后续合并板型时再扩展本数组。
 QUICK_PATHS=(
+    benchmarks/
     bin/
+    include/
     lib/
     # lib/libdeploy_percept_core.a
     # lib/libdeploy_percept_utils.a
-    tests/
-    benchmarks/
+    profiling/
     scripts/
-    share/percept/fixtures/integration/sigmastar/
+    share/
+    tests/
 )
 
 INSTALL_DIR=""
