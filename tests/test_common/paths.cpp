@@ -25,6 +25,49 @@ bool fixture_file_exists(const fs::path &path)
     return fs::is_regular_file(path, ec);
 }
 
+bool fixture_directory_exists(const fs::path &path)
+{
+    std::error_code ec;
+    return fs::is_directory(path, ec);
+}
+
+/** Prefer install layout, then source-tree layout under share/percept root. */
+fs::path fixture_candidate(const fs::path &root, const std::string &relative, bool want_dir)
+{
+    const fs::path installed = root / "fixtures" / relative;
+    if (want_dir ? fixture_directory_exists(installed) : fixture_file_exists(installed))
+    {
+        return installed;
+    }
+
+    const fs::path source_tree = root / "tests" / "fixtures" / relative;
+    if (want_dir ? fixture_directory_exists(source_tree) : fixture_file_exists(source_tree))
+    {
+        return source_tree;
+    }
+
+    return {};
+}
+
+fs::path fixture_fallback(const std::string &relative, bool want_dir)
+{
+#ifdef PERCEPT_ROOT
+    const fs::path from_macro = fs::path(PERCEPT_ROOT) / "tests" / "fixtures" / relative;
+    if (want_dir ? fixture_directory_exists(from_macro) : fixture_file_exists(from_macro))
+    {
+        return from_macro;
+    }
+#endif
+
+    const fs::path from_cwd = fs::current_path() / "tests" / "fixtures" / relative;
+    if (want_dir ? fixture_directory_exists(from_cwd) : fixture_file_exists(from_cwd))
+    {
+        return from_cwd;
+    }
+
+    return fs::path("tests/fixtures") / relative;
+}
+
 } // namespace
 
 fs::path install_prefix_from_executable()
@@ -111,25 +154,29 @@ fs::path install_output_dir()
 fs::path fixture_path(const std::string &relative)
 {
     const fs::path root = share_percept_root();
-
     if (!root.empty())
     {
-        const fs::path installed = root / "fixtures" / relative;
-        if (fixture_file_exists(installed))
+        if (const fs::path found = fixture_candidate(root, relative, /*want_dir=*/false); !found.empty())
         {
-            return installed;
+            return found;
         }
-
-        const fs::path source_tree = root / "tests" / "fixtures" / relative;
-        if (fixture_file_exists(source_tree))
-        {
-            return source_tree;
-        }
-
-        return installed;
+        return root / "fixtures" / relative;
     }
+    return fixture_fallback(relative, /*want_dir=*/false);
+}
 
-    return fs::path("tests/fixtures") / relative;
+fs::path fixture_dir(const std::string &relative)
+{
+    const fs::path root = share_percept_root();
+    if (!root.empty())
+    {
+        if (const fs::path found = fixture_candidate(root, relative, /*want_dir=*/true); !found.empty())
+        {
+            return found;
+        }
+        return root / "fixtures" / relative;
+    }
+    return fixture_fallback(relative, /*want_dir=*/true);
 }
 
 fs::path output_dir()

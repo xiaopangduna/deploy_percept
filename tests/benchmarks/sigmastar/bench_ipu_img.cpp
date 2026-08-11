@@ -1,8 +1,13 @@
 /**
  * Sigmastar IPU .img 模型无关性能 benchmark（自包含，不经 SigmastarEngine）。
  *
- * 对齐 OpenDLA prog_benchmark：按 BatchMode 走 Invoke2 / Invoke2Custom，
- * 报告 invoke 时延、bandwidth、ROM、RAM 估算。增强：warmup、多轮统计、输入填充。
+ * 渊源:
+ *   - IPU 调用路径源自 SigmaStar SDK verify 样例
+ *     Pcupid_DLC173V2.3.3_0918/Linux_SDK_Release_20250918/SourceCode/sdk/verify/release_feature/source/dla/dla_show_img_info
+ *     dla_show_img_info（GetOfflineModeStaticInfo / BatchMode 分支 /
+ *     MMA 张量缓冲 / Invoke2·Invoke2Custom / RuntimeInfo）。
+ *   - 指标与跑法对齐 OpenDLA prog_benchmark：warmup、多轮统计、
+ *     bandwidth、ROM/RAM 估算；随机填充输入；并打印单模型 IO 详情。
  *
  * 用法:
  *   bench_ipu_img [options] [path]
@@ -13,13 +18,10 @@
  *   model_dir/ → 目录递归 *.img
  *
  * options:
- *   --batch N           N_BUF 模式 batch（默认 1）
- *   --warmup N          warmup 次数（默认 5）
- *   --loops N           计入统计的 invoke 次数（默认 50）
- *   --firmware PATH     IPU firmware（默认 /config/dla/ipu_firmware.bin）
- *   --fill random|zero  输入填充（默认 random）
- *   --csv PATH          可选 CSV 输出
+ *   --batch N   N_BUF 模式 batch（默认 1）
  *   -h, --help
+ *
+ * 固定: warmup=5, loops=50, firmware=/config/dla/ipu_firmware.bin, fill=random
  */
 #include "test_common/paths.hpp"
 
@@ -30,12 +32,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <getopt.h>
 #include <numeric>
 #include <random>
@@ -49,26 +51,15 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr int kDefaultBatch = 1;
-constexpr int kDefaultWarmup = 5;
-constexpr int kDefaultLoops = 50;
-constexpr const char *kDefaultFirmware = "/config/dla/ipu_firmware.bin";
+constexpr int kWarmup = 5;
+constexpr int kLoops = 50;
+constexpr const char *kFirmware = "/config/dla/ipu_firmware.bin";
 constexpr const char *kDefaultFixtureRel = "integration/sigmastar";
 constexpr MI_U16 kSocId = 0;
-
-enum class FillMode
-{
-    Random,
-    Zero,
-};
 
 struct Options
 {
     int batch{kDefaultBatch};
-    int warmup{kDefaultWarmup};
-    int loops{kDefaultLoops};
-    std::string firmware{kDefaultFirmware};
-    FillMode fill{FillMode::Random};
-    std::string csv_path;
     std::string path; // empty → auto fixtures
 };
 
@@ -84,11 +75,122 @@ struct ModelStats
     double p50_ms{0};
     double p99_ms{0};
     double avg_bw_kb{0};
-    double avg_bw_kb_s{0};
     double rom_kb{0};
     double ram_kb{0};
     std::string error;
 };
+
+const char *tensor_type_name(MI_IPU_ELEMENT_FORMAT fmt)
+{
+    switch (fmt)
+    {
+    case MI_IPU_FORMAT_U8:
+        return "UINT8";
+    case MI_IPU_FORMAT_NV12:
+        return "YUV_NV12";
+    case MI_IPU_FORMAT_INT16:
+        return "INT16";
+    case MI_IPU_FORMAT_INT32:
+        return "INT32";
+    case MI_IPU_FORMAT_INT8:
+        return "INT8";
+    case MI_IPU_FORMAT_FP32:
+        return "FLOAT32";
+    case MI_IPU_FORMAT_UNKNOWN:
+        return "UNKNOWN";
+    case MI_IPU_FORMAT_ARGB8888:
+        return "BGRA";
+    case MI_IPU_FORMAT_ABGR8888:
+        return "RGBA";
+    case MI_IPU_FORMAT_GRAY:
+        return "GRAY";
+    case MI_IPU_FORMAT_COMPLEX64:
+        return "COMPLEX64";
+    default:
+        return "NOTYPE";
+    }
+}
+
+void print_tensor_desc(const char *kind, MI_U32 idx, const MI_IPU_TensorDesc_t &td)
+{
+    std::printf("%s(%u):\n", kind, idx);
+    std::printf("    name:\t%s\n", td.name);
+    std::printf("    dtype:\t%s\n", tensor_type_name(td.eElmFormat));
+    std::printf("    shape:\t[");
+    for (MI_U32 d = 0; d < td.u32TensorDim; ++d)
+    {
+        std::printf("%u%s", td.u32TensorShape[d], (d + 1 < td.u32TensorDim) ? ", " : "");
+    }
+    std::printf("]\n");
+    std::printf("    size:\t%d\n", td.s32AlignedBufSize);
+    if (td.eLayoutType == E_IPU_LAYOUT_TYPE_NCHW)
+    {
+        std::printf("    layout:\tNCHW\n");
+    }
+    if (td.eElmFormat == MI_IPU_FORMAT_INT16)
+    {
+        std::printf("    quantization:\t(%g, %lld)\n",
+                    static_cast<double>(td.fScalar),
+                    static_cast<long long>(td.s64ZeroPoint));
+    }
+}
+
+void print_model_details(
+    const std::string &model_path,
+    MI_U32 channel_id,
+    const MI_IPU_OfflineModelStaticInfo_t &offline,
+    const MI_IPU_SubNet_InputOutputDesc_t &desc,
+    int batch)
+{
+    std::printf("%s(%u):\n", model_path.c_str(), channel_id);
+    std::printf(
+        "Variable size: %.6f MB\n",
+        offline.u32VariableBufferSize / 1024.0 / 1024.0);
+    std::printf(
+        "Work mode:     %s\n",
+        offline.eIpuWorkMode == E_IPU_IPU_WORK_MODE_SINGLECORE ? "single_core" : "multicore");
+
+    if (offline.eBatchMode == E_IPU_BATCH_N_BUF_MODE)
+    {
+        std::printf("Batch mode:    n_buf\n");
+        std::printf("Setting batch: %u\n", offline.au32BatchNumTypes[0]);
+        std::printf("Suggest batch: [");
+        const MI_U32 max_batch = offline.au32BatchNumTypes[1];
+        const MI_U32 steps = (max_batch == 1) ? 1u : static_cast<MI_U32>(std::log2(max_batch));
+        MI_U32 cur = 1;
+        for (MI_U32 i = 0; i < steps; ++i)
+        {
+            std::printf("%u%s", cur, (i + 1 < steps) ? ", " : "");
+            cur *= 2;
+        }
+        std::printf("]\n");
+        std::printf("Run batch:     %d\n", batch);
+    }
+    else
+    {
+        std::printf("Batch mode:    one_buf\n");
+        std::printf("Support batch: [");
+        for (MI_U32 i = 0; i < offline.u32TotalBatchNumTypes; ++i)
+        {
+            std::printf(
+                "%u%s",
+                offline.au32BatchNumTypes[i],
+                (i + 1 < offline.u32TotalBatchNumTypes) ? ", " : "");
+        }
+        std::printf("]\n");
+        std::printf("Run batch:     %d\n", batch);
+    }
+
+    for (MI_U32 i = 0; i < desc.u32InputTensorCount; ++i)
+    {
+        print_tensor_desc("Input", i, desc.astMI_InputTensorDescs[i]);
+    }
+    for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
+    {
+        print_tensor_desc("Output", i, desc.astMI_OutputTensorDescs[i]);
+    }
+    std::printf("\n");
+}
 
 void show_usage(const char *exe)
 {
@@ -100,68 +202,33 @@ void show_usage(const char *exe)
         "  path = directory recursive *.img\n"
         "\n"
         "Options:\n"
-        "  --batch N           batch size for N_BUF mode (default %d)\n"
-        "  --warmup N          warmup invokes (default %d)\n"
-        "  --loops N           timed invokes (default %d)\n"
-        "  --firmware PATH     IPU firmware (default %s)\n"
-        "  --fill random|zero  input fill (default random)\n"
-        "  --csv PATH          write CSV report\n"
-        "  -h, --help\n",
+        "  --batch N   batch size for N_BUF mode (default %d)\n"
+        "  -h, --help\n"
+        "\n"
+        "Fixed: warmup=%d  loops=%d  firmware=%s  fill=random\n",
         exe,
         kDefaultFixtureRel,
         kDefaultBatch,
-        kDefaultWarmup,
-        kDefaultLoops,
-        kDefaultFirmware);
+        kWarmup,
+        kLoops,
+        kFirmware);
 }
 
 bool parse_args(int argc, char **argv, Options &opt)
 {
     static const option long_opts[] = {
         {"batch", required_argument, nullptr, 'b'},
-        {"warmup", required_argument, nullptr, 'w'},
-        {"loops", required_argument, nullptr, 'n'},
-        {"firmware", required_argument, nullptr, 'f'},
-        {"fill", required_argument, nullptr, 'F'},
-        {"csv", required_argument, nullptr, 'c'},
         {"help", no_argument, nullptr, 'h'},
         {nullptr, 0, nullptr, 0},
     };
 
     int c = 0;
-    while ((c = getopt_long(argc, argv, "b:w:n:f:F:c:h", long_opts, nullptr)) != -1)
+    while ((c = getopt_long(argc, argv, "b:h", long_opts, nullptr)) != -1)
     {
         switch (c)
         {
         case 'b':
             opt.batch = std::atoi(optarg);
-            break;
-        case 'w':
-            opt.warmup = std::atoi(optarg);
-            break;
-        case 'n':
-            opt.loops = std::atoi(optarg);
-            break;
-        case 'f':
-            opt.firmware = optarg;
-            break;
-        case 'F':
-            if (std::strcmp(optarg, "random") == 0)
-            {
-                opt.fill = FillMode::Random;
-            }
-            else if (std::strcmp(optarg, "zero") == 0)
-            {
-                opt.fill = FillMode::Zero;
-            }
-            else
-            {
-                std::fprintf(stderr, "invalid --fill '%s' (use random|zero)\n", optarg);
-                return false;
-            }
-            break;
-        case 'c':
-            opt.csv_path = optarg;
             break;
         case 'h':
             show_usage(argv[0]);
@@ -172,9 +239,9 @@ bool parse_args(int argc, char **argv, Options &opt)
         }
     }
 
-    if (opt.batch < 1 || opt.warmup < 0 || opt.loops < 1)
+    if (opt.batch < 1)
     {
-        std::fprintf(stderr, "invalid --batch/--warmup/--loops\n");
+        std::fprintf(stderr, "invalid --batch\n");
         return false;
     }
 
@@ -195,40 +262,6 @@ std::string resolve_user_path(const std::string &path)
     std::error_code ec;
     const fs::path canonical = fs::weakly_canonical(p, ec);
     return ec ? p.string() : canonical.string();
-}
-
-fs::path default_fixture_dir()
-{
-    const fs::path rel = kDefaultFixtureRel;
-    const fs::path root = percept::test::share_percept_root();
-    if (!root.empty())
-    {
-        const fs::path installed = root / "fixtures" / rel;
-        if (fs::is_directory(installed))
-        {
-            return installed;
-        }
-        const fs::path under_root = root / "tests" / "fixtures" / rel;
-        if (fs::is_directory(under_root))
-        {
-            return under_root;
-        }
-    }
-
-#ifdef PERCEPT_ROOT
-    const fs::path source = fs::path(PERCEPT_ROOT) / "tests" / "fixtures" / rel;
-    if (fs::is_directory(source))
-    {
-        return source;
-    }
-#endif
-
-    const fs::path cwd = fs::current_path() / "tests" / "fixtures" / rel;
-    if (fs::is_directory(cwd))
-    {
-        return cwd;
-    }
-    return {};
 }
 
 void collect_img_files(const fs::path &dir, std::vector<std::string> &out)
@@ -258,8 +291,8 @@ bool resolve_models(const Options &opt, std::vector<std::string> &models, std::s
     models.clear();
     if (opt.path.empty())
     {
-        const fs::path dir = default_fixture_dir();
-        if (dir.empty() || !fs::is_directory(dir))
+        const fs::path dir = percept::test::fixture_dir(kDefaultFixtureRel);
+        if (!fs::is_directory(dir))
         {
             std::fprintf(
                 stderr,
@@ -321,18 +354,13 @@ std::uint64_t output_tensor_bytes(const MI_IPU_SubNet_InputOutputDesc_t &desc)
     return total;
 }
 
-void fill_buffer(void *data, std::size_t bytes, FillMode mode, std::mt19937 &rng)
+void fill_buffer_random(void *data, std::size_t bytes, std::mt19937 &rng)
 {
     if (data == nullptr || bytes == 0)
     {
         return;
     }
     auto *p = static_cast<std::uint8_t *>(data);
-    if (mode == FillMode::Zero)
-    {
-        std::memset(p, 0, bytes);
-        return;
-    }
     std::uniform_int_distribution<int> dist(0, 255);
     for (std::size_t i = 0; i < bytes; ++i)
     {
@@ -478,7 +506,6 @@ bool fill_invoke_inputs(
     const MI_IPU_SubNet_InputOutputDesc_t &desc,
     MI_IPU_BatchInvokeParam_t &invoke,
     MI_IPU_BatchMode_e batch_mode,
-    FillMode fill,
     std::mt19937 &rng)
 {
     if (batch_mode == E_IPU_BATCH_N_BUF_MODE)
@@ -491,7 +518,7 @@ bool fill_invoke_inputs(
                 const MI_U32 bytes =
                     static_cast<MI_U32>(desc.astMI_InputTensorDescs[i].s32AlignedBufSize);
                 void *data = invoke.astArrayTensors[idx].ptTensorData[0];
-                fill_buffer(data, bytes, fill, rng);
+                fill_buffer_random(data, bytes, rng);
                 if (data != nullptr && MI_SYS_FlushInvCache(data, bytes) != MI_SUCCESS)
                 {
                     std::fprintf(stderr, "FlushInvCache failed\n");
@@ -506,7 +533,7 @@ bool fill_invoke_inputs(
     {
         const MI_U32 bytes = desc.astMI_InputTensorDescs[i].u32BufSize * invoke.u32BatchN;
         void *data = invoke.astArrayTensors[i].ptTensorData[0];
-        fill_buffer(data, bytes, fill, rng);
+        fill_buffer_random(data, bytes, rng);
         if (data != nullptr && MI_SYS_FlushInvCache(data, bytes) != MI_SUCCESS)
         {
             std::fprintf(stderr, "FlushInvCache failed\n");
@@ -538,8 +565,7 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
 
     std::vector<char> model_cstr(model_path.begin(), model_path.end());
     model_cstr.push_back('\0');
-    std::vector<char> firmware_cstr(opt.firmware.begin(), opt.firmware.end());
-    firmware_cstr.push_back('\0');
+    std::vector<char> firmware_cstr(kFirmware, kFirmware + std::strlen(kFirmware) + 1);
 
     MI_IPU_OfflineModelStaticInfo_t offline{};
     if (MI_IPU_GetOfflineModeStaticInfo(nullptr, model_cstr.data(), &offline) != MI_SUCCESS)
@@ -598,6 +624,8 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
         return stats;
     }
 
+    print_model_details(model_path, channel_id, offline, desc, batch);
+
     MI_IPU_BatchInvokeParam_t invoke{};
     invoke.u32BatchN = static_cast<MI_U32>(batch);
     invoke.u32IpuAffinity = 0;
@@ -648,7 +676,7 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
     }
 
     std::mt19937 rng(42);
-    if (!fill_invoke_inputs(desc, invoke, offline.eBatchMode, opt.fill, rng))
+    if (!fill_invoke_inputs(desc, invoke, offline.eBatchMode, rng))
     {
         cleanup();
         stats.error = "fill inputs failed";
@@ -662,7 +690,7 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
         return ret == MI_SUCCESS;
     };
 
-    for (int i = 0; i < opt.warmup; ++i)
+    for (int i = 0; i < kWarmup; ++i)
     {
         MI_IPU_RuntimeInfo_t runtime{};
         if (!do_invoke(runtime))
@@ -674,11 +702,10 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
     }
 
     std::vector<double> times_ms;
-    times_ms.reserve(static_cast<std::size_t>(opt.loops));
+    times_ms.reserve(static_cast<std::size_t>(kLoops));
     double bw_kb_sum = 0.0;
-    double bw_kb_s_sum = 0.0;
 
-    for (int i = 0; i < opt.loops; ++i)
+    for (int i = 0; i < kLoops; ++i)
     {
         MI_IPU_RuntimeInfo_t runtime{};
         const auto t0 = Clock::now();
@@ -693,13 +720,8 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
             std::chrono::duration<double, std::milli>(t1 - t0).count();
         times_ms.push_back(ms);
 
-        const double bw_kb =
+        bw_kb_sum +=
             static_cast<double>(batch) * static_cast<double>(runtime.u64BandWidth) / 1024.0;
-        bw_kb_sum += bw_kb;
-        if (ms > 0.0)
-        {
-            bw_kb_s_sum += bw_kb * 1000.0 / ms;
-        }
     }
 
     const double sum =
@@ -709,7 +731,6 @@ ModelStats bench_one_model(const std::string &model_path, const Options &opt)
     stats.p50_ms = percentile_ms(times_ms, 0.50);
     stats.p99_ms = percentile_ms(times_ms, 0.99);
     stats.avg_bw_kb = bw_kb_sum / static_cast<double>(times_ms.size());
-    stats.avg_bw_kb_s = bw_kb_s_sum / static_cast<double>(times_ms.size());
 
     const long long rom = file_size_bytes(model_path);
     stats.rom_kb = static_cast<double>(rom) / 1024.0;
@@ -730,12 +751,11 @@ void print_report(const Options &opt, const std::string &mode_desc, const std::v
     std::printf("bench_ipu_img\n");
     std::printf("  mode    : %s\n", mode_desc.c_str());
     std::printf(
-        "  warmup  : %d  loops: %d  batch: %d  fill: %s\n",
-        opt.warmup,
-        opt.loops,
-        opt.batch,
-        opt.fill == FillMode::Zero ? "zero" : "random");
-    std::printf("  firmware: %s\n\n", opt.firmware.c_str());
+        "  warmup  : %d  loops: %d  batch: %d  fill: random\n",
+        kWarmup,
+        kLoops,
+        opt.batch);
+    std::printf("  firmware: %s\n\n", kFirmware);
 
     std::printf(
         "%-48s %-8s %5s %9s %9s %9s %9s %12s %10s %10s\n",
@@ -770,26 +790,6 @@ void print_report(const Options &opt, const std::string &mode_desc, const std::v
             r.rom_kb,
             r.ram_kb);
     }
-}
-
-bool write_csv(const std::string &path, const std::vector<ModelStats> &rows)
-{
-    std::ofstream out(path);
-    if (!out)
-    {
-        std::fprintf(stderr, "failed to write csv: %s\n", path.c_str());
-        return false;
-    }
-    out << "model,path,batch_mode,batch,ok,avg_ms,p50_ms,p99_ms,min_ms,"
-           "avg_bw_kb,avg_bw_kb_s,rom_kb,ram_kb,error\n";
-    for (const auto &r : rows)
-    {
-        out << r.model_name << ',' << r.model_path << ',' << r.batch_mode << ',' << r.batch
-            << ',' << (r.ok ? 1 : 0) << ',' << r.avg_ms << ',' << r.p50_ms << ',' << r.p99_ms
-            << ',' << r.min_ms << ',' << r.avg_bw_kb << ',' << r.avg_bw_kb_s << ',' << r.rom_kb
-            << ',' << r.ram_kb << ',' << r.error << '\n';
-    }
-    return true;
 }
 
 } // namespace
@@ -835,12 +835,6 @@ int main(int argc, char **argv)
 
     std::printf("\n");
     print_report(opt, mode_desc, rows);
-
-    if (!opt.csv_path.empty() && !write_csv(opt.csv_path, rows))
-    {
-        MI_SYS_Exit(kSocId);
-        return 1;
-    }
 
     MI_SYS_Exit(kSocId);
     return ok_count > 0 ? 0 : 1;

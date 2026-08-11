@@ -6,11 +6,13 @@
 
 ### 平台与 CMake Preset
 
-| Preset | 用途 | NPU 引擎 |
-|--------|------|----------|
-| `x86_64-debug` | 宿主机开发、后处理单测 | — |
-| `aarch64-linux-gnu_orange_pi_4_pro_a733-release` | Orange Pi A733 交叉编译与板端部署 | AWNN |
+
+| Preset                                                | 用途                          | NPU 引擎                                   |
+| ----------------------------------------------------- | --------------------------- | ---------------------------------------- |
+| `x86_64-debug`                                        | 宿主机开发、后处理单测                 | —                                        |
+| `aarch64-linux-gnu_orange_pi_4_pro_a733-release`      | Orange Pi A733 交叉编译与板端部署    | AWNN                                     |
 | `armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release` | CoMake Pi D1 (SSD2355) 交叉编译 | Sigmastar IPU（`yolov8_detect_sigmastar`） |
+
 
 开发容器：`.devcontainer/ubuntu-22.04-allwinner/`、`.devcontainer/ubuntu-20.04-sigmastar/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
 
@@ -20,19 +22,21 @@
 
 - **x86_64**：无需额外配置，使用宿主机或 devcontainer 自带编译器。
 - **aarch64-linux-gnu_orange_pi_4_pro_a733**：下载 `gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`，放置于 `/opt/toolchains/`
-  - 下载：https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/
+  - 下载：[https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/](https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/)
 - **armv7l-linux-gnueabihf_comake_pi_d1_ssd2355**：`arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf`，放置于 `/opt/toolchains/`（见 sigmastar devcontainer）
+
+
 
 ### 2. 第三方库
 
 构建产物安装至 `third_party/<platform>/`（`<platform>` 与 preset 对应 toolchain 中的平台 tag 一致）。
 
-- **公开库**（zlib、cnpy、gtest、opencv、spdlog 等）：由 `scripts/third_party_builder.sh` 调度，各库的下载与编译脚本在 [`scripts/third_party_builders/`](scripts/third_party_builders/)（`builder_*.sh`），可直接构建。
-- **`--link static|shared`**：控制 gtest、opencv、spdlog、yaml-cpp 等为静态或动态库，**默认 static**（**zlib、cnpy 例外**：上游同时安装 `.a`/`.so`，不受 `--link` 影响）。
+- **公开库**（zlib、cnpy、gtest、opencv、spdlog 等）：由 `scripts/third_party_builder.sh` 调度，各库的下载与编译脚本在 `[scripts/third_party_builders/](scripts/third_party_builders/)`（`builder_*.sh`），可直接构建。
+- `--link static|shared`：控制 gtest、opencv、spdlog、yaml-cpp 等为静态或动态库，**默认 static**（**zlib、cnpy 例外**：上游同时安装 `.a`/`.so`，不受 `--link` 影响）。
 - **install 运行时库**：
   - **zlib / cnpy**：由 CMake 选项 `ZLIB_LINK_TYPE`、`CNPY_LINK_TYPE` 选择链哪种；设为 `SHARED` 时 `cmake --install` 安装对应 `.so` 到 `install/<platform>/lib/`。
   - **gtest / opencv / spdlog / yaml-cpp**：由 `find_package` 判定（`SHARED IMPORTED` 或 `OpenCV_SHARED`）；third_party 用 `--link shared` 构建后，`cmake --install` 自动安装所需 `.so`，无需额外 CMake 参数。
-- **非公开 / 平台专属库**（如 AWNN、RKNN、RGA）：不在上述脚本内自动下载，需按 [`cmake/modules/`](cmake/modules/) 中对应 `Find*.cmake` 的说明手动准备（例如 AWNN 见 `FindAwnn.cmake`，将 `awnpu_model_zoo` 的 `common/npuruntime` 整包置于 `third_party/<platform>/awnn/npuruntime`）。rga/rknpu 仅提供 shared，请求 `--link static` 时会警告并仍安装 `.so`。
+- **非公开 / 平台专属库**（如 AWNN、RKNN、RGA）：不在上述脚本内自动下载，需按 `[cmake/modules/](cmake/modules/)` 中对应 `Find*.cmake` 的说明手动准备（例如 AWNN 见 `FindAwnn.cmake`，将 `awnpu_model_zoo` 的 `common/npuruntime` 整包置于 `third_party/<platform>/awnn/npuruntime`）。rga/rknpu 仅提供 shared，请求 `--link static` 时会警告并仍安装 `.so`。
 
 ```bash
 bash scripts/third_party_builder.sh --help
@@ -50,6 +54,8 @@ bash scripts/third_party_builder.sh x86_64 --libs zlib,opencv --link shared
 bash scripts/third_party_builder.sh aarch64-linux-gnu_orange_pi_4_pro_a733 --libs cnpy,zlib,gtest,opencv,spdlog
 ```
 
+
+
 ### 3. 构建
 
 ```bash
@@ -60,6 +66,8 @@ bash scripts/build.sh --preset <preset>
 bash scripts/build.sh --preset x86_64-debug
 bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release
 ```
+
+
 
 ### 4. 安装
 
@@ -85,6 +93,8 @@ install/<platform>/
 ├── scripts/test_run.sh           # 板上/本机：对某目录逐个跑 ELF（sh）
 └── share/percept/fixtures/       # 测试与 demo 共用数据
 ```
+
+
 
 ### 5. 测试
 
@@ -121,11 +131,11 @@ export SSHPASS='your_password'   # 板端仅支持密码登录（需 sshpass）
 
 # 日常（默认 quick 部署）
 bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --board root@192.168.1.102:/customer/tmp/deploy_percept
+  --board root@192.168.1.101:/customer/tmp/deploy_percept
 
 # 首次 / CI：加 --full；需要性能时再加 --bench
 bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --board root@192.168.1.102:/customer/tmp/deploy_percept --full --bench
+  --board root@192.168.1.101:/customer/tmp/deploy_percept --full --bench
 
 ```
 
@@ -156,6 +166,8 @@ NPU `core_loading` 在 debugfs 上，板端建议 **root SSH**（`--board root@h
 开发期 build tree 单测：`cd build/<preset> && ctest --output-on-failure`
 
 ## 架构说明
+
+
 
 ### 目录结构
 
@@ -196,15 +208,19 @@ deploy_percept/
 └── third_party/                   # 第三方预编译产物
 ```
 
+
+
 ### 库模块
 
-| 模块 | CMake target | 头文件入口 | 说明 |
-|------|--------------|------------|------|
-| **common** | `deploy_percept_common` | `common/types.hpp` | 类型与公共契约，INTERFACE |
-| **core** | `deploy_percept_core` | `core/deploy_percept.hpp` + `engine/`、`post_process/` | 推理与后处理，不依赖 OpenCV |
-| **utils** | `deploy_percept_utils` | `utils/deploy_percept_utils.hpp` | cnpy + OpenCV + spdlog 齐备才编译；RGA 按平台可选 |
-| **apps** | — | 按需 include | 通常链 `core` + `utils` |
-| **tests** | 分层门禁见下 | — | unit / integration 依赖 `deploy_percept_utils` |
+
+| 模块         | CMake target            | 头文件入口                                                 | 说明                                           |
+| ---------- | ----------------------- | ----------------------------------------------------- | -------------------------------------------- |
+| **common** | `deploy_percept_common` | `common/types.hpp`                                    | 类型与公共契约，INTERFACE                            |
+| **core**   | `deploy_percept_core`   | `core/deploy_percept.hpp` + `engine/`、`post_process/` | 推理与后处理，不依赖 OpenCV                            |
+| **utils**  | `deploy_percept_utils`  | `utils/deploy_percept_utils.hpp`                      | cnpy + OpenCV + spdlog 齐备才编译；RGA 按平台可选       |
+| **apps**   | —                       | 按需 include                                            | 通常链 `core` + `utils`                         |
+| **tests**  | 分层门禁见下                  | —                                                     | unit / integration 依赖 `deploy_percept_utils` |
+
 
 需要推理链 `deploy_percept_core`；需要 vis / pre_process / io 等再链 `deploy_percept_utils`（demo / 单测通常两者都链）。
 
@@ -218,14 +234,17 @@ deploy_percept/
 
 ## 示例应用
 
-示例位于 [`apps/`](apps/)，按芯片与任务索引；模型准备与运行步骤见各应用文档。
+示例位于 `[apps/](apps/)`，按芯片与任务索引；模型准备与运行步骤见各应用文档。
 
-| 芯片 | 任务 | 应用 | 文档 |
-|------|------|------|------|
-| A733 | 目标检测 | `yolov5_detect_awnn` | [README](apps/yolov5_detect_awnn/README.md) |
-| A733 | 目标检测 | `yolov8_detect_awnn` | [README](apps/yolov8_detect_awnn/README.md) |
-| A733 | 图像分类 | `mobilenetv2_classify_awnn` | [README](apps/mobilenetv2_classify_awnn/README.md) |
-| RK3588 | 目标检测 | `yolov5_detect_rknn` | — |
-| RK3588 | 实例分割 | `yolov5_seg_rknn` | — |
-| RK3588 | 实例分割 | `yolov8_seg_rknn` | [README](apps/yolov8_seg_rknn/README.md) |
-| RK3588 | 姿态估计 | `yolov8_pose_rknn` | — |
+
+| 芯片     | 任务   | 应用                          | 文档                                                 |
+| ------ | ---- | --------------------------- | -------------------------------------------------- |
+| A733   | 目标检测 | `yolov5_detect_awnn`        | [README](apps/yolov5_detect_awnn/README.md)        |
+| A733   | 目标检测 | `yolov8_detect_awnn`        | [README](apps/yolov8_detect_awnn/README.md)        |
+| A733   | 图像分类 | `mobilenetv2_classify_awnn` | [README](apps/mobilenetv2_classify_awnn/README.md) |
+| RK3588 | 目标检测 | `yolov5_detect_rknn`        | —                                                  |
+| RK3588 | 实例分割 | `yolov5_seg_rknn`           | —                                                  |
+| RK3588 | 实例分割 | `yolov8_seg_rknn`           | [README](apps/yolov8_seg_rknn/README.md)           |
+| RK3588 | 姿态估计 | `yolov8_pose_rknn`          | —                                                  |
+
+

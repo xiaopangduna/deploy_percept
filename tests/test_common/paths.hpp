@@ -16,12 +16,19 @@ std::filesystem::path share_percept_root();
 std::filesystem::path install_output_dir();
 
 /**
- * Resolve a path under tests/fixtures (source tree) or share/percept/fixtures (install).
+ * Resolve a file under tests/fixtures (source tree) or share/percept/fixtures (install).
  *
  * @p relative e.g. "unit/post_process/yolov5_seg/model_outputs.npz"
  *              or "integration/awnn/yolov5_a733.nb"
  */
 std::filesystem::path fixture_path(const std::string &relative);
+
+/**
+ * Resolve a directory under the same fixture roots as fixture_path().
+ *
+ * @p relative e.g. "integration/sigmastar"
+ */
+std::filesystem::path fixture_dir(const std::string &relative);
 
 inline std::filesystem::path fixture_data(const std::string &relative)
 {
