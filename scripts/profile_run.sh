@@ -1,6 +1,8 @@
 #!/bin/sh
-# 无参资源画像：在 install 根目录先启被测 app，再挂 percept_monitor。
+# 无参资源画像：在 install 根目录按列表依次「先 app 后 monitor」。
 # 用法: cd /path/to/deploy_percept && sh scripts/profile_run.sh
+#
+# 新增一组：在文末「场景列表」再调一次 run_one 即可。
 set -eu
 
 if [ "$#" -ne 0 ]; then
@@ -9,8 +11,8 @@ if [ "$#" -ne 0 ]; then
     exit 1
 fi
 
-if [ ! -x ./bin/yolov8_detect_sigmastar ] || [ ! -x ./profiling/percept_monitor ]; then
-    echo "错误: 请在 install 根目录执行（需可执行的 bin/ 与 profiling/）" >&2
+if [ ! -x ./profiling/percept_monitor ]; then
+    echo "错误: 请在 install 根目录执行（需 ./profiling/percept_monitor）" >&2
     exit 1
 fi
 
@@ -18,6 +20,8 @@ OUT="./var/profile/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "${OUT}"
 
 APP_PID=""
+FAIL=0
+
 cleanup() {
     if [ -n "${APP_PID}" ] && kill -0 "${APP_PID}" 2>/dev/null; then
         kill "${APP_PID}" 2>/dev/null || true
@@ -26,37 +30,74 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# run_one <monitor_name> <log_tag> <app> [app_args...]
+# 先后台启 app，再挂 percept_monitor（warmup=10，其余默认），再 wait。
+run_one() {
+    mon_name=$1
+    tag=$2
+    shift 2
+
+    if [ ! -x "$1" ]; then
+        echo "SKIP [${tag}]: 无可执行文件 $1" >&2
+        FAIL=1
+        return 0
+    fi
+
+    echo "----------------"
+    echo "[${tag}] app: $*"
+    echo "[${tag}] monitor: --name ${mon_name} --warmup-sec 10"
+
+    "$@" >"${OUT}/app_${tag}.log" 2>&1 &
+    APP_PID=$!
+
+    set +e
+    ./profiling/percept_monitor --name "${mon_name}" --warmup-sec 10 \
+        >"${OUT}/monitor_${tag}.log" 2>&1
+    mon_rc=$?
+    wait "${APP_PID}"
+    app_rc=$?
+    set -e
+    APP_PID=""
+
+    echo "--- app_${tag}.log (tail) ---"
+    tail -n 15 "${OUT}/app_${tag}.log" 2>/dev/null || true
+    echo "--- monitor_${tag} summary ---"
+    if grep -q '=== percept_monitor summary ===' "${OUT}/monitor_${tag}.log" 2>/dev/null; then
+        sed -n '/=== percept_monitor summary ===/,$p' "${OUT}/monitor_${tag}.log"
+    else
+        tail -n 20 "${OUT}/monitor_${tag}.log" 2>/dev/null || true
+    fi
+
+    if [ "${app_rc}" -ne 0 ] || [ "${mon_rc}" -ne 0 ]; then
+        echo "FAIL [${tag}] app_rc=${app_rc} monitor_rc=${mon_rc}" >&2
+        FAIL=1
+    else
+        echo "PASS [${tag}]"
+    fi
+    echo "################"
+}
+
 echo "=== profile_run out=${OUT} ==="
 
-# --- group 1: sigmastar yolov8 detect ---
-# app 90s；monitor 预热 10s（summary 不含），稳态约 60s+；其余用默认
-./bin/yolov8_detect_sigmastar --duration-sec 90 \
+# ========== 场景列表（依次执行；新增一组再写一条 run_one）==========
+# app 90s；monitor 预热 10s（summary 不含），稳态约 60s+
+
+run_one yolov8_detect_sigmastar yolov8_detect \
+    ./bin/yolov8_detect_sigmastar --duration-sec 90 \
     share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
-    share/percept/fixtures/integration/sigmastar/dog.jpg \
-    >"${OUT}/app.log" 2>&1 &
-APP_PID=$!
+    share/percept/fixtures/integration/sigmastar/dog.jpg
 
-set +e
-./profiling/percept_monitor --name yolov8_detect_sigmastar --warmup-sec 10 \
-    >"${OUT}/monitor.log" 2>&1
-MON_RC=$?
-wait "${APP_PID}"
-APP_RC=$?
-set -e
-APP_PID=""
+# 示例：再加一组时复制上面，改 name / tag / 命令即可（app 需支持 --duration-sec）
+# run_one yolov8_seg_sigmastar yolov8_seg \
+#     ./bin/yolov8_seg_sigmastar --duration-sec 90 \
+#     share/percept/fixtures/integration/sigmastar/yolov8n_seg_640x640_ssd2355.img \
+#     share/percept/fixtures/integration/sigmastar/bus.jpg
 
-echo "--- app.log (tail) ---"
-tail -n 20 "${OUT}/app.log" 2>/dev/null || true
-echo "--- monitor summary ---"
-if grep -q '=== percept_monitor summary ===' "${OUT}/monitor.log" 2>/dev/null; then
-    sed -n '/=== percept_monitor summary ===/,$p' "${OUT}/monitor.log"
-else
-    tail -n 30 "${OUT}/monitor.log" 2>/dev/null || true
-fi
+# ==================================================================
+
 echo "logs: ${OUT}"
-
-if [ "${APP_RC}" -ne 0 ] || [ "${MON_RC}" -ne 0 ]; then
-    echo "FAIL app_rc=${APP_RC} monitor_rc=${MON_RC}" >&2
+if [ "${FAIL}" -ne 0 ]; then
+    echo "FAIL" >&2
     exit 1
 fi
 echo "PASS"
