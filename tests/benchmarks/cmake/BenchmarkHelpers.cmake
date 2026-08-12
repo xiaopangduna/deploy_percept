@@ -89,6 +89,9 @@ function(add_percept_sigmastar_benchmark)
     if(NOT TARGET test_common)
         message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): test_common not built")
     endif()
+    if(NOT TARGET deploy_percept_core)
+        message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): deploy_percept_core not built")
+    endif()
     if(NOT TARGET sigmastar::mi)
         message(FATAL_ERROR "add_percept_sigmastar_benchmark(${PARSED_NAME}): sigmastar::mi missing")
     endif()
@@ -105,7 +108,13 @@ function(add_percept_sigmastar_benchmark)
 
     target_link_libraries(${PARSED_NAME} PRIVATE
         test_common
-        sigmastar::mi)
+        deploy_percept_core
+        sigmastar::mi
+        ${OpenCV_LIBS})
+
+    if(OpenCV_INCLUDE_DIRS)
+        target_include_directories(${PARSED_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
+    endif()
 
     percept_install_benchmark(${PARSED_NAME})
 endfunction()

@@ -40,7 +40,7 @@ mobilenetv2_classify_awnn mobilenetv2_a733.nb cat.jpg model_outputs.npz
 
 `unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz` 输入须为 `integration/awnn/cat.jpg`，单路 `output_0`（1000×FP32 logits），golden `class_id=281` 与 integration 一致。
 
-`integration/sigmastar/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640_ssd2355.img`（检测）+ `dog.jpg`、`yolov8n_seg_640x640_ssd2355.img`（分割）+ `bus.jpg`、`mobilenet_v2_224_ssd2355.img`（分类，ImageNet-1000）+ `apple.jpg`。集成测与 `benchmarks/bench_ipu_img`（无参自动扫本目录 `*.img`）需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
+`integration/sigmastar/`：CoMake Pi D1 / pcupid 开放模型 `yolov8n_640x640_ssd2355.img`（检测）+ `dog.jpg`、`yolov8n_seg_640x640_ssd2355.img`（分割）+ `bus.jpg`、`mobilenet_v2_224_ssd2355.img`（分类，ImageNet-1000）+ `apple.jpg`。集成测、`benchmarks/bench_ipu_img`（无参自动扫本目录 `*.img`）与全流程 `bench_yolov8` / `bench_yolov8_seg` / `bench_mobilenetv2_classify` 需板端 IPU 固件 `/config/dla/ipu_firmware.bin`。
 
 ## 路径 API
 
