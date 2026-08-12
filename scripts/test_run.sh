@@ -5,6 +5,9 @@
 # 依赖 install 布局自洽：RPATH=$ORIGIN/../lib，fixture 经 /proc/self/exe 解析。
 set -eu
 
+SEP_START='-------------------------------------------------------'
+SEP_END='#######################################################'
+
 usage() {
     echo "用法: sh $0 <dir>" >&2
     echo "  逐个执行 <dir> 下的可执行文件（无额外参数）" >&2
@@ -37,32 +40,44 @@ fail=0
 passed=0
 failed=0
 skipped=0
-found=0
+total=0
+i=0
 
 for f in *; do
     # 无匹配时字面量 "*"
     [ -e "${f}" ] || continue
     [ -f "${f}" ] && [ -x "${f}" ] || continue
-    found=1
-    echo ">>> ${DIR}/${f}"
+    total=$((total + 1))
+done
+
+if [ "${total}" -eq 0 ]; then
+    echo "skip: 目录下无可执行文件: ${DIR}"
+    skipped=1
+    echo "passed=${passed} failed=${failed} skipped=${skipped}"
+    exit 0
+fi
+
+for f in *; do
+    [ -e "${f}" ] || continue
+    [ -f "${f}" ] && [ -x "${f}" ] || continue
+    i=$((i + 1))
+    echo "${SEP_START}"
+    echo "[${i}/${total}] RUN ${DIR}/${f}"
     set +e
     "./${f}"
     rc=$?
     set -e
+    echo "${SEP_END}"
     if [ "${rc}" -eq 0 ]; then
-        echo "    PASS"
+        echo "[${i}/${total}] PASS"
         passed=$((passed + 1))
     else
-        echo "    FAIL (rc=${rc})"
+        echo "[${i}/${total}] FAIL (rc=${rc})"
         failed=$((failed + 1))
         fail=1
     fi
+    echo
 done
-
-if [ "${found}" -eq 0 ]; then
-    echo "skip: 目录下无可执行文件: ${DIR}"
-    skipped=1
-fi
 
 echo "passed=${passed} failed=${failed} skipped=${skipped}"
 exit "${fail}"
