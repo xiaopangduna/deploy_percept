@@ -58,9 +58,29 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
   --board root@192.168.1.101:/root/deploy_percept --full
 ```
 
-root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH 登录。`test.sh` 只编排正确性测试；profile 请按下述手跑（后续可加 `test_profile.sh`）。
+root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH 登录。`test.sh` 只编排正确性测试；资源画像用下面的 `profile_run.sh`。
 
-## 板端示例
+## 板端一键画像（推荐）
+
+在 install 根目录无参执行（命令写死在脚本内：先 app 后 monitor）：
+
+```bash
+cd /customer/tmp/deploy_percept
+sh scripts/profile_run.sh
+```
+
+主机编排也可：`bash scripts/test.sh --preset … --board … --profile`（在 tests/、可选 benchmarks/ 之后跑 `profile_run.sh`，日志 `ci-artifacts/board-logs/profile_run.log`）。
+
+当前第一组：
+
+1. `./bin/yolov8_detect_sigmastar --duration-sec 90` + sigmastar fixture  
+2. `./profiling/percept_monitor --name yolov8_detect_sigmastar --warmup-sec 10`（interval/wait 用默认）
+
+时间关系：app 墙钟 90s；monitor 前 10s 为预热（不进 summary），其后至进程退出为稳态采样（约 60s+）。monitor 本身跟目标进程退出，无单独「监控时长」参数。
+
+日志：`var/profile/<时间戳>/{app.log,monitor.log}`。
+
+## 板端手跑示例
 
 ### AWNN + mobilenetv2
 
@@ -83,7 +103,7 @@ cd /customer/tmp/deploy_percept
   share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
   share/percept/fixtures/integration/sigmastar/dog.jpg &
 
-./profiling/percept_monitor --name yolov8_detect_sigmastar --out /tmp/yolov8_ipu.csv
+./profiling/percept_monitor --name yolov8_detect_sigmastar
 ```
 
 有 `ipu_status` 时启动会打印 `ipu: enabled (ipu_status)`，summary 含 `ipu_util_avg` / `ipu_util_max`。

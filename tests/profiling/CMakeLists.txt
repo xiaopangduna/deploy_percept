@@ -5,3 +5,10 @@ add_percept_profiling_tool(
     NAME percept_monitor
     SOURCES percept_monitor.cpp
 )
+
+if(INSTALL_PROFILING)
+    install(
+        PROGRAMS "${CMAKE_SOURCE_DIR}/scripts/profile_run.sh"
+        DESTINATION scripts)
+endif()
+

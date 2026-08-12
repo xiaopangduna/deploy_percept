@@ -1,6 +1,7 @@
 #!/bin/bash
-# 主机编排：build+install →（可选 sync）→ 调 test_run.sh 跑 tests/（可选 benchmarks/）
+# 主机编排：build+install →（可选 sync）→ 调 test_run.sh 跑 tests/（可选 benchmarks/ / profile）
 # 单目录执行见 scripts/test_run.sh；同步见 scripts/sync_install_to_board.sh。
+# 资源画像见 scripts/profile_run.sh（由 --profile 触发）。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,13 +11,14 @@ PRESET="x86_64-debug"
 BOARD=""
 DEPLOY_FULL=0
 RUN_BENCH=0
+RUN_PROFILE=0
 
 SSH_WRAP=()
 SSH_HOST=""
 REMOTE_ABS=""
 
 show_help() {
-    echo "deploy_percept 测试编排（build+install → 可选同步 → test_run）"
+    echo "deploy_percept 测试编排（build+install → 可选同步 → test_run / profile）"
     echo ""
     echo "用法: bash $0 [选项]"
     echo ""
@@ -25,18 +27,19 @@ show_help() {
     echo "  --board <user@host:/abs/.../deploy_percept>  板端（绝对路径，basename=deploy_percept）"
     echo "  --full            全量同步（透传 sync_install_to_board.sh；默认 quick）"
     echo "  --bench           额外跑 install/.../benchmarks/（同 test_run，ELF 默认参数）"
+    echo "  --profile         额外跑 scripts/profile_run.sh（无参；需在 install 根，建议板端）"
     echo "  --help            显示帮助"
     echo ""
     echo "tests/、benchmarks/ 均由 scripts/test_run.sh 执行（无额外 ELF 参数）。"
-    echo "profile 请另行执行（不经本脚本）。"
+    echo "profile 由 scripts/profile_run.sh 执行（写死 app+monitor；约 90s 墙钟）。"
     echo ""
     echo "板端需: export SSHPASS='...'（sshpass）"
-    echo "新板 / CI 请加 --full。--bench 需构建时 ENABLE_BENCHMARKS=ON。"
+    echo "新板 / CI 请加 --full。--bench 需 ENABLE_BENCHMARKS=ON；--profile 需 ENABLE/INSTALL_PROFILING。"
     echo ""
     echo "示例:"
     echo "  bash $0 --preset x86_64-debug"
     echo "  bash $0 --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \\"
-    echo "    --board root@192.168.1.102:/customer/tmp/deploy_percept --full --bench"
+    echo "    --board root@192.168.1.102:/customer/tmp/deploy_percept --full --bench --profile"
 }
 
 setup_ssh_transport() {
@@ -112,17 +115,41 @@ run_remote_dir() {
     return "${rc}"
 }
 
+# profile_run.sh 须在 install 根目录无参执行
+run_local_profile() {
+    local install_dir="$1"
+    local log="$2"
+    echo "=== profile_run (local) ${install_dir} ==="
+    set +e
+    (
+        cd "${install_dir}"
+        sh ./scripts/profile_run.sh
+    ) 2>&1 | tee "${log}"
+    local rc=${PIPESTATUS[0]}
+    set -e
+    return "${rc}"
+}
+
+run_remote_profile() {
+    local log="$1"
+    echo "=== profile_run (remote) ${REMOTE_ABS} ==="
+    set +e
+    "${SSH_WRAP[@]}" "${SSH_HOST}" \
+        "cd $(printf '%q' "${REMOTE_ABS}") && sh ./scripts/profile_run.sh" \
+        2>&1 | tee "${log}"
+    local rc=${PIPESTATUS[0]}
+    set -e
+    return "${rc}"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --preset) PRESET="$2"; shift 2 ;;
         --board) BOARD="$2"; shift 2 ;;
         --full) DEPLOY_FULL=1; shift ;;
         --bench) RUN_BENCH=1; shift ;;
+        --profile) RUN_PROFILE=1; shift ;;
         --help) show_help; exit 0 ;;
-        --profile)
-            echo "错误: --profile 请另行执行（不经本脚本）" >&2
-            exit 1
-            ;;
         *)
             echo "错误: 未知参数: $1" >&2
             show_help
@@ -132,9 +159,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "${BOARD}" ]]; then
-    echo "test: preset=${PRESET} mode=board board=${BOARD} full=${DEPLOY_FULL} bench=${RUN_BENCH}"
+    echo "test: preset=${PRESET} mode=board board=${BOARD} full=${DEPLOY_FULL} bench=${RUN_BENCH} profile=${RUN_PROFILE}"
 else
-    echo "test: preset=${PRESET} mode=host bench=${RUN_BENCH}"
+    echo "test: preset=${PRESET} mode=host bench=${RUN_BENCH} profile=${RUN_PROFILE}"
 fi
 
 bash "${SCRIPT_DIR}/build.sh" --preset "${PRESET}" --install
@@ -146,6 +173,10 @@ if [[ ! -d "${INSTALL_DIR}/tests" ]]; then
 fi
 if [[ "${RUN_BENCH}" -eq 1 && ! -d "${INSTALL_DIR}/benchmarks" ]]; then
     echo "错误: --bench 但未找到 ${INSTALL_DIR}/benchmarks（需 ENABLE_BENCHMARKS=ON）" >&2
+    exit 1
+fi
+if [[ "${RUN_PROFILE}" -eq 1 && ! -f "${INSTALL_DIR}/scripts/profile_run.sh" ]]; then
+    echo "错误: --profile 但未找到 ${INSTALL_DIR}/scripts/profile_run.sh（需 ENABLE/INSTALL_PROFILING）" >&2
     exit 1
 fi
 
@@ -168,6 +199,7 @@ if [[ -n "${BOARD}" ]]; then
         echo "remote_abs=${REMOTE_ABS}"
         echo "deploy_full=${DEPLOY_FULL}"
         echo "bench=${RUN_BENCH}"
+        echo "profile=${RUN_PROFILE}"
         echo "started_at=$(date -Iseconds)"
     } >"${ARTIFACTS}/meta.txt"
 
@@ -175,6 +207,9 @@ if [[ -n "${BOARD}" ]]; then
     run_remote_dir "${REMOTE_ABS}/tests" "${ARTIFACTS}/test_run.log" || rc=$?
     if [[ "${RUN_BENCH}" -eq 1 ]]; then
         run_remote_dir "${REMOTE_ABS}/benchmarks" "${ARTIFACTS}/benchmarks.log" || rc=$?
+    fi
+    if [[ "${RUN_PROFILE}" -eq 1 ]]; then
+        run_remote_profile "${ARTIFACTS}/profile_run.log" || rc=$?
     fi
     echo "exit_code=${rc}" | tee -a "${ARTIFACTS}/meta.txt"
     echo "artifacts: ${ARTIFACTS}"
@@ -188,6 +223,7 @@ rm -rf "${ARTIFACTS:?}/"*
     echo "mode=host"
     echo "install_dir=${INSTALL_DIR}"
     echo "bench=${RUN_BENCH}"
+    echo "profile=${RUN_PROFILE}"
     echo "started_at=$(date -Iseconds)"
 } >"${ARTIFACTS}/meta.txt"
 
@@ -195,6 +231,9 @@ rc=0
 run_local_dir "${INSTALL_DIR}/tests" "${ARTIFACTS}/test_run.log" || rc=$?
 if [[ "${RUN_BENCH}" -eq 1 ]]; then
     run_local_dir "${INSTALL_DIR}/benchmarks" "${ARTIFACTS}/benchmarks.log" || rc=$?
+fi
+if [[ "${RUN_PROFILE}" -eq 1 ]]; then
+    run_local_profile "${INSTALL_DIR}" "${ARTIFACTS}/profile_run.log" || rc=$?
 fi
 echo "exit_code=${rc}" | tee -a "${ARTIFACTS}/meta.txt"
 echo "artifacts: ${ARTIFACTS}"

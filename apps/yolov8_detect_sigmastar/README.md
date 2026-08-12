@@ -61,16 +61,23 @@ cd /customer/deploy_percept
 
 ## 资源画像（`--duration-sec`）
 
-按墙钟循环推理（预处理只做一次），供 `profiling/percept_monitor` 旁路采样 CPU / RSS / IPU util。`T` 是 **app 循环墙钟**（建议 ≥60）；monitor 跟进程退出。
+按墙钟循环推理（预处理只做一次），供 `profiling/percept_monitor` 旁路采样。
+
+**推荐（无参编排）：**
 
 ```bash
 cd /customer/tmp/deploy_percept
-
-./bin/yolov8_detect_sigmastar --duration-sec 60 \
-  ./share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
-  ./share/percept/fixtures/integration/sigmastar/dog.jpg &
-
-./profiling/percept_monitor --name yolov8_detect_sigmastar --out /tmp/yolov8_ipu.csv
+sh scripts/profile_run.sh
 ```
 
-结束时打印 `done: frames=… wall=…s`，并用末帧结果写输出图。
+脚本内写死：先启 `./bin/yolov8_detect_sigmastar --duration-sec 90` + fixture，再启 `./profiling/percept_monitor --name yolov8_detect_sigmastar --warmup-sec 10`（interval/wait 用默认）。日志在 `var/profile/<时间戳>/`。
+
+手跑等价：
+
+```bash
+./bin/yolov8_detect_sigmastar --duration-sec 90 \
+  share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+  share/percept/fixtures/integration/sigmastar/dog.jpg &
+
+./profiling/percept_monitor --name yolov8_detect_sigmastar --warmup-sec 10
+```
