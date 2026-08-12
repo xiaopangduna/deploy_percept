@@ -23,13 +23,16 @@
  * | threads         | 线程数                 | /proc/<pid>/status               | Threads: |
  * | npu_load_percent| VIP ~30s 历史窗口占用率 | /sys/kernel/debug/viplite/core_loading |
  * |                 | %（debugfs，通常需 root）| 例: Core0: Inference Time=... ms (80%) |
+ * | ipu_util_percent| Sigmastar IPU 利用率 % | /proc/mi_modules/mi_ipu/debug_hal/ipu_status |
+ * |                 | （两次采样 Δbusy_us）  | 累计忙时 µs；util% = 100*Δus/(Δwall_sec*1e6) |
+ * |                 |                        | 对齐 SDK ipu_utilization；仅 core0；>100 钳制 |
  *
  * 生命周期：
  *   --wait-sec 内等到唯一同名进程 → attach 后按 --interval-ms 采样 →
  *   /proc/<pid> 消失则结束并打印 summary（前 --warmup-sec 不计入 summary）。
  *
- * NPU：仅 core_loading；无权限/无节点则跳过，不失败。不采频率/温度/整机 CPU。
- * 板端读 NPU：建议 root SSH（见 profiling/README）。
+ * NPU/IPU：无权限/无节点则各自跳过，不失败。不采频率/温度/整机 CPU。
+ * 板端读 VIP debugfs：建议 root SSH（见 profiling/README）。
  */
 #include <cmath>
 #include <cstdint>
@@ -75,6 +78,14 @@ struct NpuSample
     double load_percent{0.0};
 };
 
+/** Sigmastar IPU：相邻两拍 Δbusy_us 换算利用率；首拍仅记录计数。 */
+struct IpuSample
+{
+    bool ok{false};
+    double util_percent{0.0};
+    std::uint64_t busy_us{0};
+};
+
 struct Agg
 {
     std::uint64_t samples{0};
@@ -89,10 +100,15 @@ struct Agg
     std::uint64_t npu_load_samples{0};
     double npu_load_sum{0.0};
     double npu_load_max{0.0};
+
+    std::uint64_t ipu_util_samples{0};
+    double ipu_util_sum{0.0};
+    double ipu_util_max{0.0};
 };
 
 constexpr const char *kVipLiteDir = "/sys/kernel/debug/viplite";
 constexpr const char *kVipCoreLoading = "/sys/kernel/debug/viplite/core_loading";
+constexpr const char *kIpuStatusPath = "/proc/mi_modules/mi_ipu/debug_hal/ipu_status";
 
 void print_usage(const char *argv0)
 {
@@ -102,8 +118,8 @@ void print_usage(const char *argv0)
         "  %s --name <proc> [--interval-ms 100] [--warmup-sec 5]\n"
         "     [--wait-sec 60] [--out stats.csv]\n"
         "\n"
-        "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading，直至目标退出。\n"
-        "读 NPU 需要 root（板端建议 root SSH）。\n",
+        "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading / IPU util，直至目标退出。\n"
+        "读 VIP debugfs 需要 root；IPU 读 /proc/.../ipu_status（无节点则跳过）。\n",
         argv0);
 }
 
@@ -439,7 +455,12 @@ pid_t wait_for_unique_process(const Options &opt, pid_t self_pid)
     }
 }
 
-void add_sample(Agg &agg, double cpu_pct, const ProcSample &s, const NpuSample &npu)
+void add_sample(
+    Agg &agg,
+    double cpu_pct,
+    const ProcSample &s,
+    const NpuSample &npu,
+    const IpuSample &ipu)
 {
     ++agg.samples;
     agg.cpu_sum += cpu_pct;
@@ -469,6 +490,16 @@ void add_sample(Agg &agg, double cpu_pct, const ProcSample &s, const NpuSample &
         if (npu.load_percent > agg.npu_load_max)
         {
             agg.npu_load_max = npu.load_percent;
+        }
+    }
+
+    if (ipu.ok)
+    {
+        ++agg.ipu_util_samples;
+        agg.ipu_util_sum += ipu.util_percent;
+        if (ipu.util_percent > agg.ipu_util_max)
+        {
+            agg.ipu_util_max = ipu.util_percent;
         }
     }
 }
@@ -566,6 +597,100 @@ NpuSample read_npu_sample(NpuAccess &access)
     return npu;
 }
 
+bool read_ipu_busy_us(std::uint64_t &busy_us)
+{
+    std::ifstream in(kIpuStatusPath);
+    if (!in)
+    {
+        return false;
+    }
+    unsigned long long v = 0;
+    if (!(in >> v))
+    {
+        return false;
+    }
+    busy_us = static_cast<std::uint64_t>(v);
+    return true;
+}
+
+enum class IpuAccess
+{
+    Unknown,
+    Ok,
+    Unavailable, // 无节点/无权限/读失败 → 本轮会话不再重试
+};
+
+/**
+ * 对齐 SDK ipu_utilization：读累计忙时 µs，用墙钟间隔差分得利用率。
+ * 首拍（!have_prev 或 wall_dt<=0）只记录计数，不算 %。
+ * 回绕：本拍 ok=false 并刷新 prev；>100% 钳制并仅首次提示。
+ */
+IpuSample read_ipu_sample(
+    IpuAccess &access,
+    std::uint64_t &prev_busy_us,
+    bool &have_prev,
+    double wall_dt,
+    bool &clamp_warned)
+{
+    IpuSample ipu;
+    if (access == IpuAccess::Unavailable)
+    {
+        return ipu;
+    }
+
+    std::uint64_t busy_us = 0;
+    if (!read_ipu_busy_us(busy_us))
+    {
+        if (access == IpuAccess::Unknown)
+        {
+            std::fprintf(
+                stderr,
+                "提示: 无法读 %s，跳过 IPU 采样（需 mi_ipu debug_hal）\n",
+                kIpuStatusPath);
+            access = IpuAccess::Unavailable;
+        }
+        return ipu;
+    }
+
+    if (access == IpuAccess::Unknown)
+    {
+        std::printf("ipu: enabled (ipu_status)\n");
+        access = IpuAccess::Ok;
+    }
+
+    ipu.busy_us = busy_us;
+
+    if (!have_prev || wall_dt <= 0.0)
+    {
+        prev_busy_us = busy_us;
+        have_prev = true;
+        return ipu;
+    }
+
+    if (busy_us < prev_busy_us)
+    {
+        prev_busy_us = busy_us;
+        return ipu;
+    }
+
+    const double delta_us = static_cast<double>(busy_us - prev_busy_us);
+    double pct = 100.0 * delta_us / (wall_dt * 1e6);
+    if (pct > 100.0)
+    {
+        if (!clamp_warned)
+        {
+            std::fprintf(stderr, "提示: ipu_util_percent > 100，已钳制到 100\n");
+            clamp_warned = true;
+        }
+        pct = 100.0;
+    }
+
+    ipu.util_percent = pct;
+    ipu.ok = true;
+    prev_busy_us = busy_us;
+    return ipu;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -610,8 +735,13 @@ int main(int argc, char **argv)
     std::fflush(stdout);
 
     NpuAccess npu_access = NpuAccess::Unknown;
+    IpuAccess ipu_access = IpuAccess::Unknown;
+    std::uint64_t prev_ipu_busy_us = 0;
+    bool ipu_have_prev = false;
+    bool ipu_clamp_warned = false;
     // 探测一次：有权限则后续每拍采样，否则整段跳过
     (void)read_npu_sample(npu_access);
+    (void)read_ipu_sample(ipu_access, prev_ipu_busy_us, ipu_have_prev, 0.0, ipu_clamp_warned);
 
     FILE *csv = nullptr;
     if (!opt.out_path.empty())
@@ -624,7 +754,8 @@ int main(int argc, char **argv)
         }
         std::fprintf(
             csv,
-            "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,npu_load_percent\n");
+            "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,"
+            "npu_load_percent,ipu_util_percent\n");
     }
 
     ProcSample prev = read_sample(target);
@@ -665,6 +796,9 @@ int main(int argc, char **argv)
         const double elapsed =
             std::chrono::duration<double>(now - start_wall).count();
 
+        const IpuSample ipu = read_ipu_sample(
+            ipu_access, prev_ipu_busy_us, ipu_have_prev, wall_dt, ipu_clamp_warned);
+
         // cpu_percent：相邻两拍 Δ(utime+stime) / CLK_TCK / 墙钟间隔
         double cpu_pct = 0.0;
         if (wall_dt > 0.0 && cur.cpu_ticks >= prev.cpu_ticks)
@@ -681,7 +815,7 @@ int main(int argc, char **argv)
 
         if (!in_warmup)
         {
-            add_sample(run_agg, cpu_pct, cur, npu);
+            add_sample(run_agg, cpu_pct, cur, npu, ipu);
         }
 
         if (csv != nullptr)
@@ -697,7 +831,15 @@ int main(int argc, char **argv)
                 cur.threads);
             if (npu.load_ok)
             {
-                std::fprintf(csv, "%.1f\n", npu.load_percent);
+                std::fprintf(csv, "%.1f,", npu.load_percent);
+            }
+            else
+            {
+                std::fprintf(csv, ",");
+            }
+            if (ipu.ok)
+            {
+                std::fprintf(csv, "%.1f\n", ipu.util_percent);
             }
             else
             {
@@ -757,6 +899,14 @@ int main(int argc, char **argv)
             run_agg.npu_load_sum / static_cast<double>(run_agg.npu_load_samples),
             run_agg.npu_load_max,
             static_cast<unsigned long long>(run_agg.npu_load_samples));
+    }
+    if (run_agg.ipu_util_samples > 0)
+    {
+        std::printf(
+            "ipu_util_avg=%.1f%%  ipu_util_max=%.1f%%  (samples=%llu)\n",
+            run_agg.ipu_util_sum / static_cast<double>(run_agg.ipu_util_samples),
+            run_agg.ipu_util_max,
+            static_cast<unsigned long long>(run_agg.ipu_util_samples));
     }
     return 0;
 }

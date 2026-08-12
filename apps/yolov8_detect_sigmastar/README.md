@@ -56,3 +56,21 @@ cd /customer/deploy_percept
 | `argv[1]` | IPU 模型 `.img`（默认 `./yolov8n_640x640_ssd2355.img`） |
 | `argv[2]` | 输入图片（默认 `./dog.jpg`） |
 | `argv[3]` | 输出图片（默认 `./yolov8_detect_sigmastar_out.jpg`） |
+
+可选前缀：`--duration-sec T`（见下）。
+
+## 资源画像（`--duration-sec`）
+
+按墙钟循环推理（预处理只做一次），供 `profiling/percept_monitor` 旁路采样 CPU / RSS / IPU util。`T` 是 **app 循环墙钟**（建议 ≥60）；monitor 跟进程退出。
+
+```bash
+cd /customer/tmp/deploy_percept
+
+./bin/yolov8_detect_sigmastar --duration-sec 60 \
+  ./share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+  ./share/percept/fixtures/integration/sigmastar/dog.jpg &
+
+./profiling/percept_monitor --name yolov8_detect_sigmastar --out /tmp/yolov8_ipu.csv
+```
+
+结束时打印 `done: frames=… wall=…s`，并用末帧结果写输出图。

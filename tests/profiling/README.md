@@ -12,6 +12,7 @@
 | RSS / max / HWM | `/proc/<pid>/status` |
 | Threads | `/proc/<pid>/status` |
 | NPU load% | `/sys/kernel/debug/viplite/core_loading`（约 30s 历史窗口；debugfs 需 root） |
+| IPU util% | `/proc/mi_modules/mi_ipu/debug_hal/ipu_status`（累计忙时 µs 差分；Sigmastar） |
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
@@ -21,6 +22,8 @@
 | `--wait-sec` | 60 | 等待进程出现的超时 |
 | `--out` | 无 | 可选 CSV |
 
+### NPU（VIP / AWNN）
+
 `core_loading` 示例：
 
 ```text
@@ -29,6 +32,18 @@ History Loading -----> Core0: Inference Time=24063 ms (80%)
 ```
 
 解析括号内百分比为 `npu_load_percent`。无节点/无权限时跳过 NPU，CPU/RSS 仍正常。
+
+### IPU（Sigmastar）
+
+对齐 SDK `ipu_utilization`：读 `ipu_status` 累计忙时（µs），用相邻两拍墙钟间隔差分：
+
+```text
+ipu_util% = 100 * Δbusy_us / (Δwall_sec * 1e6)
+```
+
+仅 core0。无节点（如 AWNN 板）则跳过 IPU，不影响其它指标。短 `--interval-ms` 时单点可能较噪，summary 看 warmup 后 avg/max。
+
+与独立工具差异：`ipu_utilization -t 3` 常驻只打利用率；`percept_monitor` 旁路挂目标进程，随进程退出，并同时采 CPU/RSS 等。
 
 ## 板端用 root（读 NPU）
 
@@ -45,7 +60,9 @@ bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
 
 root 下 `percept_monitor` 可直接读 `core_loading`。`SSHPASS` 只用于 SSH 登录。`test.sh` 只编排正确性测试；profile 请按下述手跑（后续可加 `test_profile.sh`）。
 
-## 板端示例（与 mobilenetv2 demo）
+## 板端示例
+
+### AWNN + mobilenetv2
 
 ```bash
 cd /root/deploy_percept   # install prefix（root 会话）
@@ -56,6 +73,20 @@ cd /root/deploy_percept   # install prefix（root 会话）
 
 ./profiling/percept_monitor --name mobilenetv2_classify_awnn
 ```
+
+### Sigmastar + yolov8 detect
+
+```bash
+cd /customer/tmp/deploy_percept
+
+./bin/yolov8_detect_sigmastar --duration-sec 60 \
+  share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+  share/percept/fixtures/integration/sigmastar/dog.jpg &
+
+./profiling/percept_monitor --name yolov8_detect_sigmastar --out /tmp/yolov8_ipu.csv
+```
+
+有 `ipu_status` 时启动会打印 `ipu: enabled (ipu_status)`，summary 含 `ipu_util_avg` / `ipu_util_max`。
 
 app `--duration-sec T`：是 **app 循环墙钟时间**（默认推荐 **60**，配合 core_loading ~30s 窗口）。monitor 跟随目标进程退出。延迟分段请用 `benchmarks/bench_*`。
 
