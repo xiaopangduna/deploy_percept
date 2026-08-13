@@ -2,14 +2,15 @@
  * 旁路资源画像：按进程名定位目标，周期性读 /proc 采样，直至目标退出。
  *
  * 用法:
- *   percept_monitor --name <proc> [--interval-ms 100] [--warmup-sec 5]
+ *   percept_monitor --name <proc> [--interval-ms 1000] [--warmup-sec 5]
  *                   [--wait-sec 60] [--out stats.csv]
  *
  * 进程名匹配 /proc/<pid>/cmdline 的 argv[0] basename，或 /proc/<pid>/exe basename
  *（避免 TASK_COMM 15 字符截断）。找到后锁定该 PID 直至退出。
  *
  * ---------------------------------------------------------------------------
- * 监控指标与 /proc 字段（见 read_sample）
+ * 监控指标与数据源（read_stat / read_status / read_npu_sample / read_ipu_counters）
+ * cpu_percent、ipu_util_percent 由相邻两拍差分得到，不在 reader 内计算。
  * ---------------------------------------------------------------------------
  *
  * | 输出指标        | 单位/含义              | 读取位置                         | 字段 |
@@ -56,20 +57,24 @@ namespace
 struct Options
 {
     std::string name;
-    int interval_ms{100};
+    int interval_ms{1000};
     double warmup_sec{5.0};
     double wait_sec{60.0};
     std::string out_path;
 };
 
-/** 单次 /proc 快照；CPU% 需与上一拍的 cpu_ticks + 墙钟间隔在采样循环里计算。 */
-struct ProcSample
+struct StatSample
 {
     bool ok{false};
-    std::uint64_t cpu_ticks{0}; // /proc/<pid>/stat: utime + stime（clock ticks）
-    double rss_mb{0.0};         // /proc/<pid>/status: VmRSS
-    double hwm_mb{0.0};         // /proc/<pid>/status: VmHWM
-    int threads{0};             // /proc/<pid>/status: Threads
+    std::uint64_t cpu_ticks{0}; // utime + stime（clock ticks）
+};
+
+struct StatusSample
+{
+    bool ok{false};
+    double rss_mb{0.0}; // VmRSS
+    double hwm_mb{0.0}; // VmHWM
+    int threads{0};
 };
 
 struct NpuSample
@@ -78,12 +83,17 @@ struct NpuSample
     double load_percent{0.0};
 };
 
-/** Sigmastar IPU：相邻两拍 Δbusy_us 换算利用率；首拍仅记录计数。 */
+struct IpuCounters
+{
+    bool ok{false};
+    std::uint64_t busy_us{0};
+};
+
+/** 由相邻两拍 Δbusy_us 得到；首拍 / 回绕时 ok=false。 */
 struct IpuSample
 {
     bool ok{false};
     double util_percent{0.0};
-    std::uint64_t busy_us{0};
 };
 
 struct Agg
@@ -106,6 +116,34 @@ struct Agg
     double ipu_util_max{0.0};
 };
 
+enum class NpuAccess
+{
+    Unknown,
+    Ok,
+    Unavailable, // 无目录/无权限/解析失败 → 本轮会话不再重试
+};
+
+enum class IpuAccess
+{
+    Unknown,
+    Ok,
+    Unavailable, // 无节点/无权限/读失败 → 本轮会话不再重试
+};
+
+struct RunState
+{
+    NpuAccess npu_access{NpuAccess::Unknown};
+    IpuAccess ipu_access{IpuAccess::Unknown};
+    std::uint64_t prev_ipu_busy_us{0};
+    bool ipu_have_prev{false};
+    bool ipu_clamp_warned{false};
+    StatSample prev_stat{};
+    std::chrono::steady_clock::time_point prev_wall{};
+    std::chrono::steady_clock::time_point start_wall{};
+    Agg run_agg{};
+    std::uint64_t total_samples{0};
+};
+
 constexpr const char *kVipLiteDir = "/sys/kernel/debug/viplite";
 constexpr const char *kVipCoreLoading = "/sys/kernel/debug/viplite/core_loading";
 constexpr const char *kIpuStatusPath = "/proc/mi_modules/mi_ipu/debug_hal/ipu_status";
@@ -115,7 +153,7 @@ void print_usage(const char *argv0)
     std::fprintf(
         stderr,
         "用法:\n"
-        "  %s --name <proc> [--interval-ms 100] [--warmup-sec 5]\n"
+        "  %s --name <proc> [--interval-ms 1000] [--warmup-sec 5]\n"
         "     [--wait-sec 60] [--out stats.csv]\n"
         "\n"
         "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading / IPU util，直至目标退出。\n"
@@ -226,6 +264,25 @@ bool parse_args(int argc, char **argv, Options &opt)
     return true;
 }
 
+void print_config(const Options &opt)
+{
+    std::printf(
+        "percept_monitor\n"
+        "  name        : %s\n"
+        "  interval-ms : %d\n"
+        "  warmup-sec  : %.3f\n"
+        "  wait-sec    : %.3f\n",
+        opt.name.c_str(),
+        opt.interval_ms,
+        opt.warmup_sec,
+        opt.wait_sec);
+    if (!opt.out_path.empty())
+    {
+        std::printf("  out         : %s\n", opt.out_path.c_str());
+    }
+    std::fflush(stdout);
+}
+
 std::string basename_of(const std::string &path)
 {
     const auto pos = path.find_last_of('/');
@@ -316,105 +373,6 @@ bool process_alive(pid_t pid)
     return fs::exists("/proc/" + std::to_string(pid));
 }
 
-/**
- * 读取目标进程当前资源快照。
- *
- * /proc/<pid>/stat（man proc）：
- *   格式: pid (comm) state ppid ... utime stime ...
- *   - 第 14 字段 utime：用户态累计 CPU 时间（clock ticks）
- *   - 第 15 字段 stime：内核态累计 CPU 时间（clock ticks）
- *   comm 可能含空格，故从最后一个 ')' 之后切字段：
- *     after[0]=state(第3字段) … after[11]=utime … after[12]=stime
- *
- * /proc/<pid>/status：
- *   - VmRSS:  当前 RSS（kB）→ rss_mb
- *   - VmHWM:  峰值 RSS（kB）→ hwm_mb
- *   - Threads: 线程数
- */
-ProcSample read_sample(pid_t pid)
-{
-    ProcSample s;
-    const std::string base = "/proc/" + std::to_string(pid);
-
-    {
-        std::ifstream in(base + "/stat");
-        std::string content;
-        std::getline(in, content);
-        if (content.empty())
-        {
-            return s;
-        }
-        const auto rparen = content.rfind(')');
-        if (rparen == std::string::npos || rparen + 2 >= content.size())
-        {
-            return s;
-        }
-        std::vector<std::string> after;
-        std::size_t i = rparen + 2;
-        while (i < content.size())
-        {
-            while (i < content.size() && content[i] == ' ')
-            {
-                ++i;
-            }
-            if (i >= content.size())
-            {
-                break;
-            }
-            const auto j = content.find(' ', i);
-            if (j == std::string::npos)
-            {
-                after.push_back(content.substr(i));
-                break;
-            }
-            after.push_back(content.substr(i, j - i));
-            i = j + 1;
-        }
-        if (after.size() < 13)
-        {
-            return s;
-        }
-        const std::uint64_t utime = std::strtoull(after[11].c_str(), nullptr, 10);
-        const std::uint64_t stime = std::strtoull(after[12].c_str(), nullptr, 10);
-        s.cpu_ticks = utime + stime;
-    }
-
-    {
-        std::ifstream in(base + "/status");
-        std::string line;
-        while (std::getline(in, line))
-        {
-            if (line.rfind("VmRSS:", 0) == 0)
-            {
-                unsigned long kb = 0;
-                if (std::sscanf(line.c_str(), "VmRSS: %lu", &kb) == 1)
-                {
-                    s.rss_mb = static_cast<double>(kb) / 1024.0;
-                }
-            }
-            else if (line.rfind("VmHWM:", 0) == 0)
-            {
-                unsigned long kb = 0;
-                if (std::sscanf(line.c_str(), "VmHWM: %lu", &kb) == 1)
-                {
-                    s.hwm_mb = static_cast<double>(kb) / 1024.0;
-                }
-            }
-            else if (line.rfind("Threads:", 0) == 0)
-            {
-                int th = 0;
-                if (std::sscanf(line.c_str(), "Threads: %d", &th) == 1)
-                {
-                    s.threads = th;
-                }
-            }
-        }
-    }
-
-    s.ok = true;
-    return s;
-}
-
 pid_t wait_for_unique_process(const Options &opt, pid_t self_pid)
 {
     const auto deadline =
@@ -455,53 +413,11 @@ pid_t wait_for_unique_process(const Options &opt, pid_t self_pid)
     }
 }
 
-void add_sample(
-    Agg &agg,
-    double cpu_pct,
-    const ProcSample &s,
-    const NpuSample &npu,
-    const IpuSample &ipu)
+double wall_sec_between(
+    std::chrono::steady_clock::time_point a,
+    std::chrono::steady_clock::time_point b)
 {
-    ++agg.samples;
-    agg.cpu_sum += cpu_pct;
-    if (cpu_pct > agg.cpu_max)
-    {
-        agg.cpu_max = cpu_pct;
-    }
-    agg.rss_sum += s.rss_mb;
-    if (s.rss_mb > agg.rss_max)
-    {
-        agg.rss_max = s.rss_mb;
-    }
-    if (s.hwm_mb > agg.hwm_max)
-    {
-        agg.hwm_max = s.hwm_mb;
-    }
-    agg.threads_sum += static_cast<double>(s.threads);
-    if (s.threads > agg.threads_max)
-    {
-        agg.threads_max = s.threads;
-    }
-
-    if (npu.load_ok)
-    {
-        ++agg.npu_load_samples;
-        agg.npu_load_sum += npu.load_percent;
-        if (npu.load_percent > agg.npu_load_max)
-        {
-            agg.npu_load_max = npu.load_percent;
-        }
-    }
-
-    if (ipu.ok)
-    {
-        ++agg.ipu_util_samples;
-        agg.ipu_util_sum += ipu.util_percent;
-        if (ipu.util_percent > agg.ipu_util_max)
-        {
-            agg.ipu_util_max = ipu.util_percent;
-        }
-    }
+    return std::chrono::duration<double>(b - a).count();
 }
 
 std::string read_file_text(const char *path)
@@ -513,6 +429,131 @@ std::string read_file_text(const char *path)
     }
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
+
+// ---------------------------------------------------------------------------
+// /proc/<pid>/stat → cpu ticks；cpu_percent 用墙钟差分
+// ---------------------------------------------------------------------------
+
+/**
+ * /proc/<pid>/stat（man proc）：
+ *   格式: pid (comm) state ppid ... utime stime ...
+ *   comm 可能含空格，故从最后一个 ')' 之后切字段：
+ *     after[0]=state(第3字段) … after[11]=utime … after[12]=stime
+ */
+bool parse_stat_cpu_ticks(const std::string &content, std::uint64_t &ticks)
+{
+    const auto rparen = content.rfind(')');
+    if (rparen == std::string::npos || rparen + 2 >= content.size())
+    {
+        return false;
+    }
+    std::vector<std::string> after;
+    std::size_t i = rparen + 2;
+    while (i < content.size())
+    {
+        while (i < content.size() && content[i] == ' ')
+        {
+            ++i;
+        }
+        if (i >= content.size())
+        {
+            break;
+        }
+        const auto j = content.find(' ', i);
+        if (j == std::string::npos)
+        {
+            after.push_back(content.substr(i));
+            break;
+        }
+        after.push_back(content.substr(i, j - i));
+        i = j + 1;
+    }
+    if (after.size() < 13)
+    {
+        return false;
+    }
+    const std::uint64_t utime = std::strtoull(after[11].c_str(), nullptr, 10);
+    const std::uint64_t stime = std::strtoull(after[12].c_str(), nullptr, 10);
+    ticks = utime + stime;
+    return true;
+}
+
+StatSample read_stat(pid_t pid)
+{
+    StatSample s;
+    std::ifstream in("/proc/" + std::to_string(pid) + "/stat");
+    std::string content;
+    std::getline(in, content);
+    if (content.empty() || !parse_stat_cpu_ticks(content, s.cpu_ticks))
+    {
+        return s;
+    }
+    s.ok = true;
+    return s;
+}
+
+double cpu_percent(
+    std::uint64_t prev_ticks,
+    std::uint64_t cur_ticks,
+    double wall_dt,
+    long clk_tck)
+{
+    if (wall_dt <= 0.0 || cur_ticks < prev_ticks || clk_tck <= 0)
+    {
+        return 0.0;
+    }
+    const double cpu_sec =
+        static_cast<double>(cur_ticks - prev_ticks) / static_cast<double>(clk_tck);
+    return 100.0 * cpu_sec / wall_dt;
+}
+
+// ---------------------------------------------------------------------------
+// /proc/<pid>/status → VmRSS / VmHWM / Threads（瞬时值，无差分）
+// ---------------------------------------------------------------------------
+
+StatusSample read_status(pid_t pid)
+{
+    StatusSample s;
+    std::ifstream in("/proc/" + std::to_string(pid) + "/status");
+    if (!in)
+    {
+        return s;
+    }
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (line.rfind("VmRSS:", 0) == 0)
+        {
+            unsigned long kb = 0;
+            if (std::sscanf(line.c_str(), "VmRSS: %lu", &kb) == 1)
+            {
+                s.rss_mb = static_cast<double>(kb) / 1024.0;
+            }
+        }
+        else if (line.rfind("VmHWM:", 0) == 0)
+        {
+            unsigned long kb = 0;
+            if (std::sscanf(line.c_str(), "VmHWM: %lu", &kb) == 1)
+            {
+                s.hwm_mb = static_cast<double>(kb) / 1024.0;
+            }
+        }
+        else if (line.rfind("Threads:", 0) == 0)
+        {
+            int th = 0;
+            if (std::sscanf(line.c_str(), "Threads: %d", &th) == 1)
+            {
+                s.threads = th;
+            }
+        }
+    }
+    s.ok = true;
+    return s;
+}
+
+// ---------------------------------------------------------------------------
+// /sys/kernel/debug/viplite/core_loading → 内核已给出的窗口占用率
+// ---------------------------------------------------------------------------
 
 /**
  * 解析 core_loading，例如:
@@ -535,13 +576,6 @@ bool parse_core_loading(const std::string &text, double &load_percent)
     load_percent = static_cast<double>(pct);
     return true;
 }
-
-enum class NpuAccess
-{
-    Unknown,
-    Ok,
-    Unavailable, // 无目录/无权限/解析失败 → 本轮会话不再重试
-};
 
 NpuSample read_npu_sample(NpuAccess &access)
 {
@@ -597,6 +631,10 @@ NpuSample read_npu_sample(NpuAccess &access)
     return npu;
 }
 
+// ---------------------------------------------------------------------------
+// /proc/mi_modules/mi_ipu/debug_hal/ipu_status → 累计 busy µs；利用率差分另算
+// ---------------------------------------------------------------------------
+
 bool read_ipu_busy_us(std::uint64_t &busy_us)
 {
     std::ifstream in(kIpuStatusPath);
@@ -613,29 +651,12 @@ bool read_ipu_busy_us(std::uint64_t &busy_us)
     return true;
 }
 
-enum class IpuAccess
+IpuCounters read_ipu_counters(IpuAccess &access)
 {
-    Unknown,
-    Ok,
-    Unavailable, // 无节点/无权限/读失败 → 本轮会话不再重试
-};
-
-/**
- * 对齐 SDK ipu_utilization：读累计忙时 µs，用墙钟间隔差分得利用率。
- * 首拍（!have_prev 或 wall_dt<=0）只记录计数，不算 %。
- * 回绕：本拍 ok=false 并刷新 prev；>100% 钳制并仅首次提示。
- */
-IpuSample read_ipu_sample(
-    IpuAccess &access,
-    std::uint64_t &prev_busy_us,
-    bool &have_prev,
-    double wall_dt,
-    bool &clamp_warned)
-{
-    IpuSample ipu;
+    IpuCounters c;
     if (access == IpuAccess::Unavailable)
     {
-        return ipu;
+        return c;
     }
 
     std::uint64_t busy_us = 0;
@@ -649,7 +670,7 @@ IpuSample read_ipu_sample(
                 kIpuStatusPath);
             access = IpuAccess::Unavailable;
         }
-        return ipu;
+        return c;
     }
 
     if (access == IpuAccess::Unknown)
@@ -657,23 +678,43 @@ IpuSample read_ipu_sample(
         std::printf("ipu: enabled (ipu_status)\n");
         access = IpuAccess::Ok;
     }
+    c.ok = true;
+    c.busy_us = busy_us;
+    return c;
+}
 
-    ipu.busy_us = busy_us;
+/**
+ * 对齐 SDK ipu_utilization：累计忙时 µs 用墙钟间隔差分得利用率。
+ * 首拍（!have_prev 或 wall_dt<=0）只记录计数，不算 %。
+ * 回绕：本拍 ok=false 并刷新 prev；>100% 钳制并仅首次提示。
+ */
+IpuSample ipu_util_from_delta(
+    const IpuCounters &cur,
+    std::uint64_t &prev_busy_us,
+    bool &have_prev,
+    double wall_dt,
+    bool &clamp_warned)
+{
+    IpuSample ipu;
+    if (!cur.ok)
+    {
+        return ipu;
+    }
 
     if (!have_prev || wall_dt <= 0.0)
     {
-        prev_busy_us = busy_us;
+        prev_busy_us = cur.busy_us;
         have_prev = true;
         return ipu;
     }
 
-    if (busy_us < prev_busy_us)
+    if (cur.busy_us < prev_busy_us)
     {
-        prev_busy_us = busy_us;
+        prev_busy_us = cur.busy_us;
         return ipu;
     }
 
-    const double delta_us = static_cast<double>(busy_us - prev_busy_us);
+    const double delta_us = static_cast<double>(cur.busy_us - prev_busy_us);
     double pct = 100.0 * delta_us / (wall_dt * 1e6);
     if (pct > 100.0)
     {
@@ -687,8 +728,236 @@ IpuSample read_ipu_sample(
 
     ipu.util_percent = pct;
     ipu.ok = true;
-    prev_busy_us = busy_us;
+    prev_busy_us = cur.busy_us;
     return ipu;
+}
+
+void probe_accelerators(RunState &st)
+{
+    (void)read_npu_sample(st.npu_access);
+    const IpuCounters c = read_ipu_counters(st.ipu_access);
+    (void)ipu_util_from_delta(
+        c, st.prev_ipu_busy_us, st.ipu_have_prev, 0.0, st.ipu_clamp_warned);
+}
+
+// ---------------------------------------------------------------------------
+// 编排：聚合、CSV、一拍采样、summary
+// ---------------------------------------------------------------------------
+
+void add_sample(
+    Agg &agg,
+    double cpu_pct,
+    const StatusSample &st,
+    const NpuSample &npu,
+    const IpuSample &ipu)
+{
+    ++agg.samples;
+    agg.cpu_sum += cpu_pct;
+    if (cpu_pct > agg.cpu_max)
+    {
+        agg.cpu_max = cpu_pct;
+    }
+    agg.rss_sum += st.rss_mb;
+    if (st.rss_mb > agg.rss_max)
+    {
+        agg.rss_max = st.rss_mb;
+    }
+    if (st.hwm_mb > agg.hwm_max)
+    {
+        agg.hwm_max = st.hwm_mb;
+    }
+    agg.threads_sum += static_cast<double>(st.threads);
+    if (st.threads > agg.threads_max)
+    {
+        agg.threads_max = st.threads;
+    }
+
+    if (npu.load_ok)
+    {
+        ++agg.npu_load_samples;
+        agg.npu_load_sum += npu.load_percent;
+        if (npu.load_percent > agg.npu_load_max)
+        {
+            agg.npu_load_max = npu.load_percent;
+        }
+    }
+
+    if (ipu.ok)
+    {
+        ++agg.ipu_util_samples;
+        agg.ipu_util_sum += ipu.util_percent;
+        if (ipu.util_percent > agg.ipu_util_max)
+        {
+            agg.ipu_util_max = ipu.util_percent;
+        }
+    }
+}
+
+void csv_write_optional(FILE *csv, bool ok, double v, bool last)
+{
+    if (ok)
+    {
+        std::fprintf(csv, "%.1f", v);
+    }
+    std::fputc(last ? '\n' : ',', csv);
+}
+
+void write_csv_row(
+    FILE *csv,
+    double elapsed,
+    const char *phase,
+    double cpu_pct,
+    const StatusSample &st,
+    const NpuSample &npu,
+    const IpuSample &ipu)
+{
+    if (csv == nullptr)
+    {
+        return;
+    }
+    std::fprintf(
+        csv,
+        "%.3f,%s,%.2f,%.2f,%.2f,%d,",
+        elapsed,
+        phase,
+        cpu_pct,
+        st.rss_mb,
+        st.hwm_mb,
+        st.threads);
+    csv_write_optional(csv, npu.load_ok, npu.load_percent, false);
+    csv_write_optional(csv, ipu.ok, ipu.util_percent, true);
+}
+
+bool open_csv(const std::string &path, FILE *&csv)
+{
+    csv = nullptr;
+    if (path.empty())
+    {
+        return true;
+    }
+    csv = std::fopen(path.c_str(), "w");
+    if (csv == nullptr)
+    {
+        std::fprintf(stderr, "错误: 无法写入 %s\n", path.c_str());
+        return false;
+    }
+    std::fprintf(
+        csv,
+        "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,"
+        "npu_load_percent,ipu_util_percent\n");
+    return true;
+}
+
+void close_csv(FILE *&csv)
+{
+    if (csv != nullptr)
+    {
+        std::fclose(csv);
+        csv = nullptr;
+    }
+}
+
+bool sample_once(pid_t target, const Options &opt, long clk_tck, RunState &st, FILE *csv)
+{
+    const auto now = std::chrono::steady_clock::now();
+    const StatSample stat = read_stat(target);
+    if (!stat.ok)
+    {
+        return false;
+    }
+
+    const StatusSample status = read_status(target);
+    const NpuSample npu = read_npu_sample(st.npu_access);
+
+    const double wall_dt = wall_sec_between(st.prev_wall, now);
+    const double elapsed = wall_sec_between(st.start_wall, now);
+
+    const IpuCounters ipu_raw = read_ipu_counters(st.ipu_access);
+    const IpuSample ipu = ipu_util_from_delta(
+        ipu_raw, st.prev_ipu_busy_us, st.ipu_have_prev, wall_dt, st.ipu_clamp_warned);
+    const double cpu_pct =
+        cpu_percent(st.prev_stat.cpu_ticks, stat.cpu_ticks, wall_dt, clk_tck);
+
+    const bool in_warmup = elapsed < opt.warmup_sec;
+    const char *phase = in_warmup ? "warmup" : "run";
+    ++st.total_samples;
+
+    if (!in_warmup)
+    {
+        add_sample(st.run_agg, cpu_pct, status, npu, ipu);
+    }
+    write_csv_row(csv, elapsed, phase, cpu_pct, status, npu, ipu);
+
+    st.prev_stat = stat;
+    st.prev_wall = now;
+    return true;
+}
+
+void run_sampling_loop(pid_t target, const Options &opt, long clk_tck, RunState &st, FILE *csv)
+{
+    while (process_alive(target))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(opt.interval_ms));
+        if (!process_alive(target))
+        {
+            break;
+        }
+        if (!sample_once(target, opt, clk_tck, st, csv))
+        {
+            break;
+        }
+    }
+}
+
+void print_summary(const Options &opt, pid_t target, const RunState &st, double window)
+{
+    std::printf("\n=== percept_monitor summary ===\n");
+    std::printf(
+        "name=%s  pid=%d  total_samples=%llu  run_samples=%llu  interval=%dms  "
+        "window=%.1fs  warmup=%.1fs\n",
+        opt.name.c_str(),
+        static_cast<int>(target),
+        static_cast<unsigned long long>(st.total_samples),
+        static_cast<unsigned long long>(st.run_agg.samples),
+        opt.interval_ms,
+        window,
+        opt.warmup_sec);
+
+    if (st.run_agg.samples == 0)
+    {
+        std::printf("no run-phase samples (run the target longer or lower --warmup-sec)\n");
+        return;
+    }
+
+    const double n = static_cast<double>(st.run_agg.samples);
+    std::printf(
+        "cpu_avg=%.1f%%  cpu_max=%.1f%%\n"
+        "rss_avg=%.2fMB  rss_max=%.2fMB  rss_hwm=%.2fMB\n"
+        "threads_avg=%.1f  threads_max=%d\n",
+        st.run_agg.cpu_sum / n,
+        st.run_agg.cpu_max,
+        st.run_agg.rss_sum / n,
+        st.run_agg.rss_max,
+        st.run_agg.hwm_max,
+        st.run_agg.threads_sum / n,
+        st.run_agg.threads_max);
+
+    if (st.run_agg.npu_load_samples > 0)
+    {
+        std::printf(
+            "npu_load_avg=%.1f%%  npu_load_max=%.1f%%  (samples=%llu)\n",
+            st.run_agg.npu_load_sum / static_cast<double>(st.run_agg.npu_load_samples),
+            st.run_agg.npu_load_max,
+            static_cast<unsigned long long>(st.run_agg.npu_load_samples));
+    }
+    if (st.run_agg.ipu_util_samples > 0)
+    {
+        std::printf(
+            "ipu_util_avg=%.1f%%  ipu_util_max=%.1f%%  (samples=%llu)\n",
+            st.run_agg.ipu_util_sum / static_cast<double>(st.run_agg.ipu_util_samples),
+            st.run_agg.ipu_util_max,
+            static_cast<unsigned long long>(st.run_agg.ipu_util_samples));
+    }
 }
 
 } // namespace
@@ -710,21 +979,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf(
-        "percept_monitor\n"
-        "  name        : %s\n"
-        "  interval-ms : %d\n"
-        "  warmup-sec  : %.3f\n"
-        "  wait-sec    : %.3f\n",
-        opt.name.c_str(),
-        opt.interval_ms,
-        opt.warmup_sec,
-        opt.wait_sec);
-    if (!opt.out_path.empty())
-    {
-        std::printf("  out         : %s\n", opt.out_path.c_str());
-    }
-    std::fflush(stdout);
+    print_config(opt);
 
     const pid_t target = wait_for_unique_process(opt, self_pid);
     if (target < 0)
@@ -734,179 +989,29 @@ int main(int argc, char **argv)
     std::printf("attached pid=%d\n", static_cast<int>(target));
     std::fflush(stdout);
 
-    NpuAccess npu_access = NpuAccess::Unknown;
-    IpuAccess ipu_access = IpuAccess::Unknown;
-    std::uint64_t prev_ipu_busy_us = 0;
-    bool ipu_have_prev = false;
-    bool ipu_clamp_warned = false;
-    // 探测一次：有权限则后续每拍采样，否则整段跳过
-    (void)read_npu_sample(npu_access);
-    (void)read_ipu_sample(ipu_access, prev_ipu_busy_us, ipu_have_prev, 0.0, ipu_clamp_warned);
+    RunState st;
+    probe_accelerators(st);
 
     FILE *csv = nullptr;
-    if (!opt.out_path.empty())
+    if (!open_csv(opt.out_path, csv))
     {
-        csv = std::fopen(opt.out_path.c_str(), "w");
-        if (csv == nullptr)
-        {
-            std::fprintf(stderr, "错误: 无法写入 %s\n", opt.out_path.c_str());
-            return 1;
-        }
-        std::fprintf(
-            csv,
-            "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,"
-            "npu_load_percent,ipu_util_percent\n");
-    }
-
-    ProcSample prev = read_sample(target);
-    if (!prev.ok)
-    {
-        std::fprintf(stderr, "错误: 无法读取 /proc/%d\n", static_cast<int>(target));
-        if (csv != nullptr)
-        {
-            std::fclose(csv);
-        }
         return 1;
     }
-    auto prev_wall = std::chrono::steady_clock::now();
-    const auto start_wall = prev_wall;
 
-    Agg run_agg{};
-    std::uint64_t total_samples = 0;
-
-    while (process_alive(target))
+    st.prev_stat = read_stat(target);
+    if (!st.prev_stat.ok)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(opt.interval_ms));
-        if (!process_alive(target))
-        {
-            break;
-        }
-
-        const auto now = std::chrono::steady_clock::now();
-        const ProcSample cur = read_sample(target);
-        if (!cur.ok)
-        {
-            break;
-        }
-
-        const NpuSample npu = read_npu_sample(npu_access);
-
-        const double wall_dt =
-            std::chrono::duration<double>(now - prev_wall).count();
-        const double elapsed =
-            std::chrono::duration<double>(now - start_wall).count();
-
-        const IpuSample ipu = read_ipu_sample(
-            ipu_access, prev_ipu_busy_us, ipu_have_prev, wall_dt, ipu_clamp_warned);
-
-        // cpu_percent：相邻两拍 Δ(utime+stime) / CLK_TCK / 墙钟间隔
-        double cpu_pct = 0.0;
-        if (wall_dt > 0.0 && cur.cpu_ticks >= prev.cpu_ticks)
-        {
-            const double cpu_sec =
-                static_cast<double>(cur.cpu_ticks - prev.cpu_ticks) /
-                static_cast<double>(clk_tck);
-            cpu_pct = 100.0 * cpu_sec / wall_dt;
-        }
-
-        const bool in_warmup = elapsed < opt.warmup_sec;
-        const char *phase = in_warmup ? "warmup" : "run";
-        ++total_samples;
-
-        if (!in_warmup)
-        {
-            add_sample(run_agg, cpu_pct, cur, npu, ipu);
-        }
-
-        if (csv != nullptr)
-        {
-            std::fprintf(
-                csv,
-                "%.3f,%s,%.2f,%.2f,%.2f,%d,",
-                elapsed,
-                phase,
-                cpu_pct,
-                cur.rss_mb,
-                cur.hwm_mb,
-                cur.threads);
-            if (npu.load_ok)
-            {
-                std::fprintf(csv, "%.1f,", npu.load_percent);
-            }
-            else
-            {
-                std::fprintf(csv, ",");
-            }
-            if (ipu.ok)
-            {
-                std::fprintf(csv, "%.1f\n", ipu.util_percent);
-            }
-            else
-            {
-                std::fprintf(csv, "\n");
-            }
-        }
-
-        prev = cur;
-        prev_wall = now;
+        std::fprintf(stderr, "错误: 无法读取 /proc/%d/stat\n", static_cast<int>(target));
+        close_csv(csv);
+        return 1;
     }
+    st.prev_wall = std::chrono::steady_clock::now();
+    st.start_wall = st.prev_wall;
 
-    if (csv != nullptr)
-    {
-        std::fclose(csv);
-        csv = nullptr;
-    }
+    run_sampling_loop(target, opt, clk_tck, st, csv);
+    close_csv(csv);
 
-    const double window =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - start_wall)
-            .count();
-
-    std::printf("\n=== percept_monitor summary ===\n");
-    std::printf(
-        "name=%s  pid=%d  total_samples=%llu  run_samples=%llu  interval=%dms  "
-        "window=%.1fs  warmup=%.1fs\n",
-        opt.name.c_str(),
-        static_cast<int>(target),
-        static_cast<unsigned long long>(total_samples),
-        static_cast<unsigned long long>(run_agg.samples),
-        opt.interval_ms,
-        window,
-        opt.warmup_sec);
-
-    if (run_agg.samples == 0)
-    {
-        std::printf("no run-phase samples (increase --duration-sec or lower --warmup-sec)\n");
-        return 0;
-    }
-
-    const double n = static_cast<double>(run_agg.samples);
-    std::printf(
-        "cpu_avg=%.1f%%  cpu_max=%.1f%%\n"
-        "rss_avg=%.2fMB  rss_max=%.2fMB  rss_hwm=%.2fMB\n"
-        "threads_avg=%.1f  threads_max=%d\n",
-        run_agg.cpu_sum / n,
-        run_agg.cpu_max,
-        run_agg.rss_sum / n,
-        run_agg.rss_max,
-        run_agg.hwm_max,
-        run_agg.threads_sum / n,
-        run_agg.threads_max);
-
-    if (run_agg.npu_load_samples > 0)
-    {
-        std::printf(
-            "npu_load_avg=%.1f%%  npu_load_max=%.1f%%  (samples=%llu)\n",
-            run_agg.npu_load_sum / static_cast<double>(run_agg.npu_load_samples),
-            run_agg.npu_load_max,
-            static_cast<unsigned long long>(run_agg.npu_load_samples));
-    }
-    if (run_agg.ipu_util_samples > 0)
-    {
-        std::printf(
-            "ipu_util_avg=%.1f%%  ipu_util_max=%.1f%%  (samples=%llu)\n",
-            run_agg.ipu_util_sum / static_cast<double>(run_agg.ipu_util_samples),
-            run_agg.ipu_util_max,
-            static_cast<unsigned long long>(run_agg.ipu_util_samples));
-    }
+    const double window = wall_sec_between(st.start_wall, std::chrono::steady_clock::now());
+    print_summary(opt, target, st, window);
     return 0;
 }
