@@ -17,13 +17,96 @@ namespace deploy_percept
     namespace engine
     {
 
+        // ==================================================================
+        // Sigmastar 推理栈（本头文件）
+        //
+        //   SigmastarRuntime — 进程级 IPU：SYS_Init / CreateDevice / DestroyDevice / SYS_Exit
+        //   SigmastarEngine  — 模型级：CreateCHN、MMA 输入、run（每个模型一个实例）
+        //
+        // 使用约定：
+        //   1. 先构造 SigmastarRuntime，再构造 SigmastarEngine（可多个 Engine 共用）
+        //   2. SigmastarRuntime 须最后析构（作用域包住所有 SigmastarEngine）
+        //   3. 同一进程内多个 SigmastarRuntime 仍只 CreateDevice 一次（引用计数）
+        //
+        // CreateDevice 的 u32MaxVariableBufSize 取各模型 VariableBufferSize 的 **max，
+        // 不是求和**：该 buffer 是 IPU 推理时的共享 scratch，同一时刻只有一个 Invoke
+        // 占用它；权重 ROM 与 IO MMA 是 per-channel，在 CreateCHN 时另占。
+        // ==================================================================
+
+        /**
+         * MI_IPU 进程级运行时（SYS_Init + CreateDevice）的 RAII 封装。
+         * 与 SigmastarEngine 配套使用，见本文件顶部说明。
+         */
+        class SigmastarRuntime
+        {
+        public:
+            struct Params
+            {
+                /** IPU firmware 路径（板端默认布局） */
+                std::string firmware_path = "/config/dla/ipu_firmware.bin";
+                std::uint16_t soc_id = 0;
+                /**
+                 * CreateDevice 的 u32MaxVariableBufSize。
+                 * 0：从 model_paths 查询后取 max；非 0：与查询结果再取 max。
+                 */
+                std::uint32_t max_variable_buf_size = 0;
+                /**
+                 * 将要 CreateCHN 的 .img。CreateDevice 前只读文件头，
+                 * 用各模型 u32VariableBufferSize 的 max 作为共享 scratch。
+                 */
+                std::vector<std::string> model_paths;
+            };
+
+            explicit SigmastarRuntime(const Params &params);
+            ~SigmastarRuntime();
+
+            SigmastarRuntime(const SigmastarRuntime &) = delete;
+            SigmastarRuntime &operator=(const SigmastarRuntime &) = delete;
+            SigmastarRuntime(SigmastarRuntime &&) = delete;
+            SigmastarRuntime &operator=(SigmastarRuntime &&) = delete;
+
+            /** SYS_Init + CreateDevice 是否成功（或已由同进程其它实例完成） */
+            bool ok() const { return ok_; }
+
+            std::uint16_t soc_id() const { return created_soc_id_; }
+            std::uint32_t max_variable_buf_size() const { return created_max_variable_buf_size_; }
+
+            /** 进程内 Device 是否已创建（供 Engine 检查） */
+            static bool device_ready() { return device_created_ && ref_count_ > 0; }
+
+            static std::uint16_t process_soc_id() { return created_soc_id_; }
+            static std::uint32_t process_max_variable_buf_size()
+            {
+                return created_max_variable_buf_size_;
+            }
+
+            /** 读 .img 头中的 VariableBufferSize，不占 IPU Channel。失败返回 0。 */
+            static std::uint32_t queryVariableBufferSize(const std::string &model_path);
+
+        private:
+            bool initDevice(const Params &params);
+            void destroyDevice();
+            static std::uint32_t resolveMaxVariableBufSize(const Params &params, bool log_errors);
+
+            bool ok_{false};
+            bool acquired_{false};
+
+            static int ref_count_;
+            static bool sys_inited_;
+            static bool device_created_;
+            static std::uint16_t created_soc_id_;
+            static std::uint32_t created_max_variable_buf_size_;
+        };
+
         /**
          * Sigmastar MI_IPU 单模型推理引擎（离线 .img）。
          *
-         * Phase 1：ctor 内完成 SYS_Init / CreateDevice / CreateCHN / MMA 输入缓冲；
-         * 无独立 Runtime（CreateDevice 依赖模型 variable buffer size）。
+         * 前置条件：进程内已成功 CreateDevice（由同命名空间 SigmastarRuntime 保证）。
          *
          * 典型流程（默认 is_copy_host）：
+         *   SigmastarRuntime::Params runtime_params;
+         *   runtime_params.model_paths = {model_path};
+         *   SigmastarRuntime runtime(runtime_params);
          *   SigmastarEngine engine(params);
          *   engine.run(input, size);
          *   // 读 engine.getResult().tensor_views
@@ -39,9 +122,6 @@ namespace deploy_percept
             {
                 /** 离线模型 .img 路径 */
                 std::string model_path;
-                /** IPU firmware 路径（板端默认布局） */
-                std::string firmware_path = "/config/dla/ipu_firmware.bin";
-                std::uint16_t soc_id = 0;
                 /**
                  * true（默认）：run() 内将输出拷至 host 并 PutOutputTensors，
                  * tensor_views 指向 engine 自有 buffer。
@@ -103,7 +183,7 @@ namespace deploy_percept
             void releaseResult() override;
 
         private:
-            bool initDeviceAndChannel();
+            bool initChannel();
             bool fillInfoFromDesc(const MI_IPU_SubNet_InputOutputDesc_t &desc);
             bool prepareInputBuffer();
             void destroyAll();
@@ -118,8 +198,6 @@ namespace deploy_percept
             Result result_{};
 
             bool valid_{false};
-            bool sys_inited_{false};
-            bool device_created_{false};
             bool channel_created_{false};
             bool outputs_held_{false};
 

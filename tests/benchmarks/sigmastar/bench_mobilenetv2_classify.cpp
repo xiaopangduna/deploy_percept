@@ -29,6 +29,7 @@ namespace {
 
 using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::SigmastarEngine;
+using deploy_percept::engine::SigmastarRuntime;
 using deploy_percept::post_process::ClassificationPostProcessSigmastar;
 using percept::test::fixture_data;
 
@@ -408,6 +409,15 @@ int main(int argc, char **argv)
     if (!fs::is_regular_file(input_path))
     {
         std::fprintf(stderr, "input not found: %s\n", input_path.c_str());
+        return 1;
+    }
+
+    SigmastarRuntime::Params runtime_params;
+    runtime_params.model_paths = {model_path};
+    SigmastarRuntime runtime(runtime_params);
+    if (!runtime.ok())
+    {
+        std::fprintf(stderr, "SigmastarRuntime init failed (check IPU firmware)\n");
         return 1;
     }
 

@@ -1,5 +1,5 @@
 /**
- * Sigmastar YOLOv8 检测 demo（SigmastarEngine + YoloV8DetectPostProcessSigmastar）
+ * Sigmastar YOLOv8 检测 demo（SigmastarRuntime + SigmastarEngine + YoloV8DetectPostProcessSigmastar）
  *
  * 用法：
  *   yolov8_detect_sigmastar [--duration-sec T] [model.img] [input.jpg] [output.jpg]
@@ -28,6 +28,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
+using deploy_percept::engine::SigmastarRuntime;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using deploy_percept::data::kCoco80Labels;
 using deploy_percept::utils::drawDetectionResults;
@@ -229,6 +230,15 @@ int main(int argc, char **argv)
     if (!fs::is_regular_file(input_path))
     {
         std::fprintf(stderr, "input not found: %s\n", input_path);
+        return 1;
+    }
+
+    SigmastarRuntime::Params runtime_params;
+    runtime_params.model_paths = {model_path};
+    SigmastarRuntime runtime(runtime_params);
+    if (!runtime.ok())
+    {
+        std::fprintf(stderr, "SigmastarRuntime init failed (check IPU firmware)\n");
         return 1;
     }
 

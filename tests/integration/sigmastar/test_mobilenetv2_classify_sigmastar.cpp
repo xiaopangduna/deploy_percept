@@ -17,6 +17,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
+using deploy_percept::engine::SigmastarRuntime;
 using deploy_percept::post_process::ClassificationPostProcessSigmastar;
 using percept::test::fixture_data;
 
@@ -186,6 +187,14 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
     const fs::path input_path =
         fixture_data("integration/sigmastar/apple.jpg");
     skip_unless_fixture_ready(model_path, input_path);
+
+    SigmastarRuntime::Params runtime_params;
+    runtime_params.model_paths = {model_path.string()};
+    SigmastarRuntime runtime(runtime_params);
+    if (!runtime.ok())
+    {
+        GTEST_SKIP() << "SigmastarRuntime init failed (need IPU + firmware)";
+    }
 
     SigmastarEngine::Params engine_params;
     engine_params.model_path = model_path.string();

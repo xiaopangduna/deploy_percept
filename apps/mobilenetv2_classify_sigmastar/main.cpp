@@ -1,5 +1,5 @@
 /**
- * Sigmastar MobileNetV2 分类 demo（SigmastarEngine + ClassificationPostProcessSigmastar）
+ * Sigmastar MobileNetV2 分类 demo（SigmastarRuntime + SigmastarEngine + ClassificationPostProcessSigmastar）
  *
  * 用法：
  *   mobilenetv2_classify_sigmastar [model.img] [input.jpg]
@@ -26,6 +26,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
+using deploy_percept::engine::SigmastarRuntime;
 using deploy_percept::post_process::ClassificationPostProcessSigmastar;
 
 namespace
@@ -225,6 +226,15 @@ int main(int argc, char **argv)
     if (!fs::is_regular_file(input_path))
     {
         std::fprintf(stderr, "input not found: %s\n", input_path);
+        return 1;
+    }
+
+    SigmastarRuntime::Params runtime_params;
+    runtime_params.model_paths = {model_path};
+    SigmastarRuntime runtime(runtime_params);
+    if (!runtime.ok())
+    {
+        std::fprintf(stderr, "SigmastarRuntime init failed (check IPU firmware)\n");
         return 1;
     }
 

@@ -19,6 +19,7 @@
 namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
+using deploy_percept::engine::SigmastarRuntime;
 using deploy_percept::Detection;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using percept::test::fixture_data;
@@ -197,6 +198,14 @@ TEST(YoloV8DetectSigmastarIntegration, DogDetectionsMatchGolden)
     const fs::path input_path =
         fixture_data("integration/sigmastar/dog.jpg");
     skip_unless_fixture_ready(model_path, input_path);
+
+    SigmastarRuntime::Params runtime_params;
+    runtime_params.model_paths = {model_path.string()};
+    SigmastarRuntime runtime(runtime_params);
+    if (!runtime.ok())
+    {
+        GTEST_SKIP() << "SigmastarRuntime init failed (need IPU + firmware)";
+    }
 
     SigmastarEngine::Params engine_params;
     engine_params.model_path = model_path.string();
