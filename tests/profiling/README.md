@@ -87,14 +87,16 @@ sh scripts/profile_run.sh
 
 主机编排也可：`bash scripts/test.sh --preset … --board … --profile`（在 tests/、可选 benchmarks/ 之后跑 `profile_run.sh`，日志 `ci-artifacts/board-logs/profile_run.log`）。
 
-当前两组依次（各 app 90s，合计约 180s+）：
+当前三组依次（各 app 90s，合计约 270s+）：
 
 1. `./bin/yolov8_detect_sigmastar --duration-sec 90` + sigmastar fixture  
    `./profiling/percept_monitor --name yolov8_detect_sigmastar --warmup-sec 10`
 2. `./bin/mobilenetv2_classify_sigmastar --duration-sec 90` + sigmastar fixture  
    `./profiling/percept_monitor --name mobilenetv2_classify_sigmastar --warmup-sec 10`
+3. `./bin/yolo_cls_sigmastar --duration-sec 90` + 检测/分类 fixture（同进程双模型）  
+   `./profiling/percept_monitor --name yolo_cls_sigmastar --warmup-sec 10`
 
-每组：app 墙钟 90s；monitor 前 10s 为预热（不进 summary），其后至进程退出为稳态采样（约 60s+）。monitor 本身跟目标进程退出，无单独「监控时长」参数。两组串行，不是双模型同进程。
+每组：app 墙钟 90s；monitor 前 10s 为预热（不进 summary），其后至进程退出为稳态采样（约 60s+）。monitor 本身跟目标进程退出，无单独「监控时长」参数。前两组是单模型进程；第三组才是同进程双 Channel。
 
 日志：`var/profile/<时间戳>/{app_<tag>.log,monitor_<tag>.log}`。
 
@@ -134,6 +136,20 @@ cd /customer/tmp/deploy_percept
   share/percept/fixtures/integration/sigmastar/apple.jpg &
 
 ./profiling/percept_monitor --name mobilenetv2_classify_sigmastar
+```
+
+### Sigmastar + yolo_cls（同进程双模型）
+
+```bash
+cd /customer/tmp/deploy_percept
+
+./bin/yolo_cls_sigmastar --duration-sec 60 \
+  share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+  share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+  share/percept/fixtures/integration/sigmastar/dog.jpg \
+  share/percept/fixtures/integration/sigmastar/apple.jpg &
+
+./profiling/percept_monitor --name yolo_cls_sigmastar
 ```
 
 有 `ipu_status` 时启动会打印 `ipu: enabled (ipu_status)`，summary 含 `ipu_util_avg` / `ipu_util_max`。

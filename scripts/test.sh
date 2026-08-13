@@ -31,7 +31,7 @@ show_help() {
     echo "  --help            显示帮助"
     echo ""
     echo "tests/、benchmarks/ 均由 scripts/test_run.sh 执行（无额外 ELF 参数）。"
-    echo "profile 由 scripts/profile_run.sh 执行（写死 app+monitor；两组各约 90s 墙钟，合计约 180s+）。"
+    echo "profile 由 scripts/profile_run.sh 执行（写死 app+monitor；三组各约 90s 墙钟，合计约 270s+）。"
     echo ""
     echo "板端需: export SSHPASS='...'（sshpass）"
     echo "新板 / CI 请加 --full。--bench 需 ENABLE_BENCHMARKS=ON；--profile 需 ENABLE/INSTALL_PROFILING。"

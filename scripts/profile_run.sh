@@ -80,7 +80,7 @@ run_one() {
 echo "=== profile_run out=${OUT} ==="
 
 # ========== 场景列表（依次执行；新增一组再写一条 run_one）==========
-# app 90s / 组；monitor 预热 10s（summary 不含），稳态约 60s+；两组依次约 180s+
+# app 90s / 组；monitor 预热 10s（summary 不含），稳态约 60s+；三组依次约 270s+
 
 run_one yolov8_detect_sigmastar yolov8_detect \
     ./bin/yolov8_detect_sigmastar --duration-sec 90 \
@@ -90,6 +90,13 @@ run_one yolov8_detect_sigmastar yolov8_detect \
 run_one mobilenetv2_classify_sigmastar mobilenetv2_classify \
     ./bin/mobilenetv2_classify_sigmastar --duration-sec 90 \
     share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+    share/percept/fixtures/integration/sigmastar/apple.jpg
+
+run_one yolo_cls_sigmastar yolo_cls \
+    ./bin/yolo_cls_sigmastar --duration-sec 90 \
+    share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+    share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+    share/percept/fixtures/integration/sigmastar/dog.jpg \
     share/percept/fixtures/integration/sigmastar/apple.jpg
 
 # 示例：再加一组时复制上面，改 name / tag / 命令即可（app 需支持 --duration-sec）
