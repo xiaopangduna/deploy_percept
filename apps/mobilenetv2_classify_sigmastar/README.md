@@ -2,7 +2,7 @@
 
 Sigmastar IPU MobileNetV2 分类 demo（CoMake Pi D1 / SSD2355 / pcupid）。
 
-使用 `SigmastarEngine` + `ClassificationPostProcessSigmastar`（INT16 × `fScalar` → Softmax → Top-1），对齐 OpenDLA `classification` 样例。
+使用 `SigmastarRuntime` + `SigmastarEngine` + `ClassificationPostProcessSigmastar`（INT16 × `fScalar` → Softmax → Top-1），对齐 OpenDLA `classification` 样例。
 
 板端开放模型：`mobilenet_v2_224_ssd2355.img`（`share/percept/fixtures/integration/sigmastar/`）。输出为 ImageNet-1000；OpenDLA demo 源文件名仍为 `mobilenet_v2_224.img`。
 
@@ -72,3 +72,28 @@ cd /customer/deploy_percept
 |----------|------|
 | `argv[1]` | IPU 模型 `.img`（默认 `./mobilenet_v2_224_ssd2355.img`） |
 | `argv[2]` | 输入图片（默认 `./apple.jpg`） |
+
+可选前缀：`--duration-sec T`（见下）。
+
+## 资源画像（`--duration-sec`）
+
+按墙钟循环推理（预处理只做一次），供 `profiling/percept_monitor` 旁路采样。
+
+**推荐（无参编排）：**
+
+```bash
+cd /customer/tmp/deploy_percept
+sh scripts/profile_run.sh
+```
+
+脚本内写死：先 YOLO 检测一组，再分类一组。分类为 `./bin/mobilenetv2_classify_sigmastar --duration-sec 90` + fixture，monitor `--name mobilenetv2_classify_sigmastar --warmup-sec 10`。日志在 `var/profile/<时间戳>/`。
+
+手跑等价：
+
+```bash
+./bin/mobilenetv2_classify_sigmastar --duration-sec 90 \
+  share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+  share/percept/fixtures/integration/sigmastar/apple.jpg &
+
+./profiling/percept_monitor --name mobilenetv2_classify_sigmastar --warmup-sec 10
+```

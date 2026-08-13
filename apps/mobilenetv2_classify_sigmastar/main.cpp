@@ -2,15 +2,18 @@
  * Sigmastar MobileNetV2 分类 demo（SigmastarRuntime + SigmastarEngine + ClassificationPostProcessSigmastar）
  *
  * 用法：
- *   mobilenetv2_classify_sigmastar [model.img] [input.jpg]
+ *   mobilenetv2_classify_sigmastar [--duration-sec T] [model.img] [input.jpg]
  *
+ * --duration-sec：按墙钟循环推理，供 tests/profiling/percept_monitor 旁路采样
  * 默认：./mobilenet_v2_224_ssd2355.img  ./apple.jpg
  *
  * 对齐 OpenDLA classification：INT16 × fScalar → Softmax → Top-1。
  * SDK 开放模型为 5 类：apple / butternut / pizza / goldfish / sea snake。
  */
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -209,14 +212,31 @@ const char *label_name(int class_id, int num_classes)
 
 int main(int argc, char **argv)
 {
-    const std::string model_path_str = (argc > 1) ? argv[1] : kDefaultModel;
-    const std::string input_path_str = (argc > 2) ? argv[2] : kDefaultInput;
+    double duration_sec = 0.0;
+    int argi = 1;
+    if (argi + 1 < argc && std::strcmp(argv[argi], "--duration-sec") == 0)
+    {
+        duration_sec = std::atof(argv[argi + 1]);
+        if (duration_sec <= 0.0)
+        {
+            std::fprintf(stderr, "invalid --duration-sec: %s\n", argv[argi + 1]);
+            return 1;
+        }
+        argi += 2;
+    }
+
+    const std::string model_path_str = (argi < argc) ? argv[argi] : kDefaultModel;
+    const std::string input_path_str = (argi + 1 < argc) ? argv[argi + 1] : kDefaultInput;
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
 
     std::printf("mobilenetv2_classify_sigmastar\n");
     std::printf("  model : %s\n", model_path);
     std::printf("  input : %s\n", input_path);
+    if (duration_sec > 0.0)
+    {
+        std::printf("  duration-sec: %.3f\n", duration_sec);
+    }
 
     if (!fs::is_regular_file(model_path))
     {
@@ -280,28 +300,38 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!engine.run(input_buffer.data(), input_buffer.size()))
-    {
-        std::fprintf(stderr, "SigmastarEngine::run failed\n");
-        return 1;
-    }
-
-    const auto &tensor_views = engine.getResult().tensor_views;
-    if (tensor_views.empty())
-    {
-        std::fprintf(stderr, "SigmastarEngine output tensors unavailable\n");
-        return 1;
-    }
-
     ClassificationPostProcessSigmastar processor({
         .num_classes = num_classes,
         .output_scalar = info.output_scalars[0],
     });
-    if (!processor.run(tensor_views))
+
+    const auto t0 = std::chrono::steady_clock::now();
+    std::uint64_t frames = 0;
+    do
     {
-        std::fprintf(stderr, "post process failed\n");
-        return 1;
-    }
+        if (!engine.run(input_buffer.data(), input_buffer.size()))
+        {
+            std::fprintf(stderr, "SigmastarEngine::run failed\n");
+            return 1;
+        }
+
+        const auto &tensor_views = engine.getResult().tensor_views;
+        if (tensor_views.empty())
+        {
+            std::fprintf(stderr, "SigmastarEngine output tensors unavailable\n");
+            return 1;
+        }
+
+        if (!processor.run(tensor_views))
+        {
+            std::fprintf(stderr, "post process failed\n");
+            return 1;
+        }
+        engine.releaseResult();
+        ++frames;
+    } while (duration_sec > 0.0 &&
+             std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() <
+                 duration_sec);
 
     const auto &result = processor.getResult();
     const char *name = label_name(result.class_id, num_classes);
@@ -316,6 +346,15 @@ int main(int argc, char **argv)
     else
     {
         std::printf("top1: class_id=%d score=%.4f\n", result.class_id, result.score);
+    }
+    if (duration_sec > 0.0)
+    {
+        const double wall =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf(
+            "done: frames=%llu wall=%.3fs\n",
+            static_cast<unsigned long long>(frames),
+            wall);
     }
 
     return 0;

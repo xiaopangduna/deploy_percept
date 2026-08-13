@@ -9,7 +9,8 @@
  *（避免 TASK_COMM 15 字符截断）。找到后锁定该 PID 直至退出。
  *
  * ---------------------------------------------------------------------------
- * 监控指标与数据源（read_stat / read_status / read_npu_sample / read_ipu_counters）
+ * 监控指标与数据源（read_stat / read_status / read_npu_sample / read_ipu_counters /
+ * read_mma_sample）
  * cpu_percent、ipu_util_percent 由相邻两拍差分得到，不在 reader 内计算。
  * ---------------------------------------------------------------------------
  *
@@ -27,12 +28,16 @@
  * | ipu_util_percent| Sigmastar IPU 利用率 % | /proc/mi_modules/mi_ipu/debug_hal/ipu_status |
  * |                 | （两次采样 Δbusy_us）  | 累计忙时 µs；util% = 100*Δus/(Δwall_sec*1e6) |
  * |                 |                        | 对齐 SDK ipu_utilization；仅 core0；>100 钳制 |
+ * | mma_used_mb     | MMA 堆已用             | /proc/mi_modules/mi_sys_mma/mma_heap_name0 |
+ * | mma_avail_mb    | MMA 堆剩余             | heap_info.length / avail（十六进制） |
+ * | mma_used_percent| used/total × 100       | used = length - avail；整机共享堆（含 GUI） |
+ * |                 |                        | 无节点（如 AWNN）则跳过；不解析 chunk 表 |
  *
  * 生命周期：
  *   --wait-sec 内等到唯一同名进程 → attach 后按 --interval-ms 采样 →
  *   /proc/<pid> 消失则结束并打印 summary（前 --warmup-sec 不计入 summary）。
  *
- * NPU/IPU：无权限/无节点则各自跳过，不失败。不采频率/温度/整机 CPU。
+ * NPU/IPU/MMA：无权限/无节点则各自跳过，不失败。不采频率/温度/整机 CPU。
  * 板端读 VIP debugfs：建议 root SSH（见 profiling/README）。
  */
 #include <cmath>
@@ -96,6 +101,18 @@ struct IpuSample
     double util_percent{0.0};
 };
 
+/** MMA 堆水位（瞬时值）。peak_ok 为 kernel HighPeak 是否解析到。 */
+struct MmaSample
+{
+    bool ok{false};
+    double total_mb{0.0};
+    double used_mb{0.0};
+    double avail_mb{0.0};
+    double used_percent{0.0};
+    bool peak_ok{false};
+    double kernel_peak_mb{0.0};
+};
+
 struct Agg
 {
     std::uint64_t samples{0};
@@ -114,6 +131,17 @@ struct Agg
     std::uint64_t ipu_util_samples{0};
     double ipu_util_sum{0.0};
     double ipu_util_max{0.0};
+
+    std::uint64_t mma_samples{0};
+    double mma_used_sum{0.0};
+    double mma_used_max{0.0};
+    double mma_avail_sum{0.0};
+    double mma_avail_min{0.0};
+    bool mma_avail_min_set{false};
+    double mma_used_percent_max{0.0};
+    double mma_total_mb{0.0};
+    double mma_kernel_peak_max{0.0};
+    bool mma_kernel_peak_set{false};
 };
 
 enum class NpuAccess
@@ -130,10 +158,18 @@ enum class IpuAccess
     Unavailable, // 无节点/无权限/读失败 → 本轮会话不再重试
 };
 
+enum class MmaAccess
+{
+    Unknown,
+    Ok,
+    Unavailable, // 无节点/无权限/解析失败 → 本轮会话不再重试
+};
+
 struct RunState
 {
     NpuAccess npu_access{NpuAccess::Unknown};
     IpuAccess ipu_access{IpuAccess::Unknown};
+    MmaAccess mma_access{MmaAccess::Unknown};
     std::uint64_t prev_ipu_busy_us{0};
     bool ipu_have_prev{false};
     bool ipu_clamp_warned{false};
@@ -147,6 +183,7 @@ struct RunState
 constexpr const char *kVipLiteDir = "/sys/kernel/debug/viplite";
 constexpr const char *kVipCoreLoading = "/sys/kernel/debug/viplite/core_loading";
 constexpr const char *kIpuStatusPath = "/proc/mi_modules/mi_ipu/debug_hal/ipu_status";
+constexpr const char *kMmaHeapPath = "/proc/mi_modules/mi_sys_mma/mma_heap_name0";
 
 void print_usage(const char *argv0)
 {
@@ -156,8 +193,8 @@ void print_usage(const char *argv0)
         "  %s --name <proc> [--interval-ms 1000] [--warmup-sec 5]\n"
         "     [--wait-sec 60] [--out stats.csv]\n"
         "\n"
-        "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading / IPU util，直至目标退出。\n"
-        "读 VIP debugfs 需要 root；IPU 读 /proc/.../ipu_status（无节点则跳过）。\n",
+        "按进程名旁路采样 CPU%% / RSS / threads / NPU core_loading / IPU util / MMA，直至目标退出。\n"
+        "读 VIP debugfs 需要 root；IPU 读 ipu_status、MMA 读 mma_heap_name0（无节点则跳过）。\n",
         argv0);
 }
 
@@ -732,12 +769,160 @@ IpuSample ipu_util_from_delta(
     return ipu;
 }
 
+// ---------------------------------------------------------------------------
+// /proc/mi_modules/mi_sys_mma/mma_heap_name0 → 堆 used / avail（瞬时值）
+// ---------------------------------------------------------------------------
+
+std::string trim_copy(const std::string &s)
+{
+    std::size_t b = 0;
+    while (b < s.size() && (s[b] == ' ' || s[b] == '\t' || s[b] == '\r'))
+    {
+        ++b;
+    }
+    std::size_t e = s.size();
+    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r'))
+    {
+        --e;
+    }
+    return s.substr(b, e - b);
+}
+
+/** section 标题的下一行是表头，再下一行是数据。找不到返回空。 */
+std::string section_data_line(const std::string &text, const char *section)
+{
+    const auto pos = text.find(section);
+    if (pos == std::string::npos)
+    {
+        return {};
+    }
+    auto nl = text.find('\n', pos);
+    if (nl == std::string::npos)
+    {
+        return {};
+    }
+    auto nl2 = text.find('\n', nl + 1);
+    if (nl2 == std::string::npos)
+    {
+        return {};
+    }
+    const auto start = nl2 + 1;
+    const auto nl3 = text.find('\n', start);
+    const auto line =
+        (nl3 == std::string::npos) ? text.substr(start) : text.substr(start, nl3 - start);
+    return trim_copy(line);
+}
+
+/**
+ * 解析 heap_info 数据行，可选 main_chunk_mgr 的 HighPeak。
+ * 例:
+ *   mma_heap_name0  4e800000  10000000  e4bb200
+ * used = length - avail。不扫 chunk 表。
+ */
+bool parse_mma_heap_text(const std::string &text, MmaSample &out)
+{
+    const std::string heap_line = section_data_line(text, "heap_info:");
+    if (heap_line.empty())
+    {
+        return false;
+    }
+
+    char name[128] = {};
+    unsigned long long pa = 0;
+    unsigned long long length = 0;
+    unsigned long long avail = 0;
+    if (std::sscanf(heap_line.c_str(), "%127s %llx %llx %llx", name, &pa, &length, &avail) != 4)
+    {
+        return false;
+    }
+    if (length == 0 || avail > length)
+    {
+        return false;
+    }
+
+    const unsigned long long used = length - avail;
+    constexpr double kBytesPerMb = 1024.0 * 1024.0;
+    out.total_mb = static_cast<double>(length) / kBytesPerMb;
+    out.used_mb = static_cast<double>(used) / kBytesPerMb;
+    out.avail_mb = static_cast<double>(avail) / kBytesPerMb;
+    out.used_percent = 100.0 * static_cast<double>(used) / static_cast<double>(length);
+    out.ok = true;
+
+    const std::string peak_line = section_data_line(text, "main_chunk_mgr:");
+    unsigned long long vpa = 0;
+    unsigned long long mgr_len = 0;
+    unsigned long long mgr_avail = 0;
+    unsigned long long mgr_used = 0;
+    unsigned long long high_peak = 0;
+    unsigned long long low_peak = 0;
+    if (!peak_line.empty() &&
+        std::sscanf(
+            peak_line.c_str(),
+            "%llx %llx %llx %llx %llx %llx",
+            &vpa,
+            &mgr_len,
+            &mgr_avail,
+            &mgr_used,
+            &high_peak,
+            &low_peak) == 6)
+    {
+        out.peak_ok = true;
+        out.kernel_peak_mb = static_cast<double>(high_peak) / kBytesPerMb;
+    }
+    return true;
+}
+
+MmaSample read_mma_sample(MmaAccess &access)
+{
+    MmaSample mma;
+    if (access == MmaAccess::Unavailable)
+    {
+        return mma;
+    }
+
+    const std::string text = read_file_text(kMmaHeapPath);
+    if (text.empty())
+    {
+        if (access == MmaAccess::Unknown)
+        {
+            std::fprintf(
+                stderr,
+                "提示: 无法读 %s，跳过 MMA 采样（需 Sigmastar mi_sys_mma）\n",
+                kMmaHeapPath);
+            access = MmaAccess::Unavailable;
+        }
+        return mma;
+    }
+
+    if (!parse_mma_heap_text(text, mma))
+    {
+        if (access == MmaAccess::Unknown)
+        {
+            std::fprintf(stderr, "提示: mma_heap_name0 解析失败，跳过 MMA 采样\n");
+            access = MmaAccess::Unavailable;
+        }
+        mma = {};
+        return mma;
+    }
+
+    if (access == MmaAccess::Unknown)
+    {
+        std::printf(
+            "mma: enabled (%s  total=%.2fMB)\n",
+            kMmaHeapPath,
+            mma.total_mb);
+        access = MmaAccess::Ok;
+    }
+    return mma;
+}
+
 void probe_accelerators(RunState &st)
 {
     (void)read_npu_sample(st.npu_access);
     const IpuCounters c = read_ipu_counters(st.ipu_access);
     (void)ipu_util_from_delta(
         c, st.prev_ipu_busy_us, st.ipu_have_prev, 0.0, st.ipu_clamp_warned);
+    (void)read_mma_sample(st.mma_access);
 }
 
 // ---------------------------------------------------------------------------
@@ -749,7 +934,8 @@ void add_sample(
     double cpu_pct,
     const StatusSample &st,
     const NpuSample &npu,
-    const IpuSample &ipu)
+    const IpuSample &ipu,
+    const MmaSample &mma)
 {
     ++agg.samples;
     agg.cpu_sum += cpu_pct;
@@ -791,13 +977,42 @@ void add_sample(
             agg.ipu_util_max = ipu.util_percent;
         }
     }
+
+    if (mma.ok)
+    {
+        ++agg.mma_samples;
+        agg.mma_total_mb = mma.total_mb;
+        agg.mma_used_sum += mma.used_mb;
+        if (mma.used_mb > agg.mma_used_max)
+        {
+            agg.mma_used_max = mma.used_mb;
+        }
+        agg.mma_avail_sum += mma.avail_mb;
+        if (!agg.mma_avail_min_set || mma.avail_mb < agg.mma_avail_min)
+        {
+            agg.mma_avail_min = mma.avail_mb;
+            agg.mma_avail_min_set = true;
+        }
+        if (mma.used_percent > agg.mma_used_percent_max)
+        {
+            agg.mma_used_percent_max = mma.used_percent;
+        }
+        if (mma.peak_ok)
+        {
+            if (!agg.mma_kernel_peak_set || mma.kernel_peak_mb > agg.mma_kernel_peak_max)
+            {
+                agg.mma_kernel_peak_max = mma.kernel_peak_mb;
+                agg.mma_kernel_peak_set = true;
+            }
+        }
+    }
 }
 
-void csv_write_optional(FILE *csv, bool ok, double v, bool last)
+void csv_write_optional(FILE *csv, bool ok, double v, bool last, int decimals)
 {
     if (ok)
     {
-        std::fprintf(csv, "%.1f", v);
+        std::fprintf(csv, "%.*f", decimals, v);
     }
     std::fputc(last ? '\n' : ',', csv);
 }
@@ -809,7 +1024,8 @@ void write_csv_row(
     double cpu_pct,
     const StatusSample &st,
     const NpuSample &npu,
-    const IpuSample &ipu)
+    const IpuSample &ipu,
+    const MmaSample &mma)
 {
     if (csv == nullptr)
     {
@@ -824,8 +1040,11 @@ void write_csv_row(
         st.rss_mb,
         st.hwm_mb,
         st.threads);
-    csv_write_optional(csv, npu.load_ok, npu.load_percent, false);
-    csv_write_optional(csv, ipu.ok, ipu.util_percent, true);
+    csv_write_optional(csv, npu.load_ok, npu.load_percent, false, 1);
+    csv_write_optional(csv, ipu.ok, ipu.util_percent, false, 1);
+    csv_write_optional(csv, mma.ok, mma.used_mb, false, 2);
+    csv_write_optional(csv, mma.ok, mma.avail_mb, false, 2);
+    csv_write_optional(csv, mma.ok, mma.used_percent, true, 1);
 }
 
 bool open_csv(const std::string &path, FILE *&csv)
@@ -844,7 +1063,8 @@ bool open_csv(const std::string &path, FILE *&csv)
     std::fprintf(
         csv,
         "elapsed_sec,phase,cpu_percent,rss_mb,hwm_mb,threads,"
-        "npu_load_percent,ipu_util_percent\n");
+        "npu_load_percent,ipu_util_percent,"
+        "mma_used_mb,mma_avail_mb,mma_used_percent\n");
     return true;
 }
 
@@ -875,6 +1095,7 @@ bool sample_once(pid_t target, const Options &opt, long clk_tck, RunState &st, F
     const IpuCounters ipu_raw = read_ipu_counters(st.ipu_access);
     const IpuSample ipu = ipu_util_from_delta(
         ipu_raw, st.prev_ipu_busy_us, st.ipu_have_prev, wall_dt, st.ipu_clamp_warned);
+    const MmaSample mma = read_mma_sample(st.mma_access);
     const double cpu_pct =
         cpu_percent(st.prev_stat.cpu_ticks, stat.cpu_ticks, wall_dt, clk_tck);
 
@@ -884,9 +1105,9 @@ bool sample_once(pid_t target, const Options &opt, long clk_tck, RunState &st, F
 
     if (!in_warmup)
     {
-        add_sample(st.run_agg, cpu_pct, status, npu, ipu);
+        add_sample(st.run_agg, cpu_pct, status, npu, ipu, mma);
     }
-    write_csv_row(csv, elapsed, phase, cpu_pct, status, npu, ipu);
+    write_csv_row(csv, elapsed, phase, cpu_pct, status, npu, ipu, mma);
 
     st.prev_stat = stat;
     st.prev_wall = now;
@@ -957,6 +1178,23 @@ void print_summary(const Options &opt, pid_t target, const RunState &st, double 
             st.run_agg.ipu_util_sum / static_cast<double>(st.run_agg.ipu_util_samples),
             st.run_agg.ipu_util_max,
             static_cast<unsigned long long>(st.run_agg.ipu_util_samples));
+    }
+    if (st.run_agg.mma_samples > 0)
+    {
+        const double mn = static_cast<double>(st.run_agg.mma_samples);
+        std::printf(
+            "mma_used_avg=%.2fMB  mma_used_max=%.2fMB  mma_avail_min=%.2fMB  "
+            "mma_used_percent_max=%.1f%%  total=%.2fMB  (samples=%llu)\n",
+            st.run_agg.mma_used_sum / mn,
+            st.run_agg.mma_used_max,
+            st.run_agg.mma_avail_min,
+            st.run_agg.mma_used_percent_max,
+            st.run_agg.mma_total_mb,
+            static_cast<unsigned long long>(st.run_agg.mma_samples));
+        if (st.run_agg.mma_kernel_peak_set)
+        {
+            std::printf("mma_kernel_peak=%.2fMB\n", st.run_agg.mma_kernel_peak_max);
+        }
     }
 }
 
