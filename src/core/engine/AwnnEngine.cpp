@@ -286,8 +286,8 @@ namespace deploy_percept
 
         AwnnEngine::AwnnEngine(const Params &params) : params_(params)
         {
-            valid_ = createNetwork();
-            if (!valid_)
+            ok_ = createNetwork();
+            if (!ok_)
             {
                 destroyNetwork();
             }
@@ -300,7 +300,7 @@ namespace deploy_percept
 
         bool AwnnEngine::run(const void *input_buffer, std::size_t input_byte_size)
         {
-            if (!valid_ || input_buffer == nullptr || input_buffers_.empty())
+            if (!ok_ || input_buffer == nullptr || input_buffers_.empty())
             {
                 return false;
             }
@@ -480,7 +480,7 @@ namespace deploy_percept
             input_buffers_.clear();
             output_buffers_vip_.clear();
             output_data_.clear();
-            valid_ = false;
+            ok_ = false;
         }
 
         bool AwnnEngine::copyInput(const void *user_input, std::size_t input_byte_size)

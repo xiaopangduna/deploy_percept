@@ -100,7 +100,7 @@ int main(int argc, char **argv)
     // engine_params.is_copy_host = false;
 
     AwnnEngine engine(engine_params);
-    if (!engine.is_valid())
+    if (!engine.ok())
     {
         std::fprintf(stderr, "AwnnEngine init failed\n");
         return 1;

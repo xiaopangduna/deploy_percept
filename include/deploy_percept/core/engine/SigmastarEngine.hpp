@@ -86,6 +86,8 @@ namespace deploy_percept
 
             /** SYS_Init + CreateDevice 是否成功 */
             bool ok() const { return ok_; }
+            /** 同 ok()，供 if (runtime) 使用 */
+            explicit operator bool() const { return ok(); }
 
             /**
              * CreateDevice 生效配置（内部副本）。
@@ -180,7 +182,10 @@ namespace deploy_percept
             const Params &getParams() const { return params_; }
             const Info &getInfo() const { return info_; }
             const Result &getResult() const override { return result_; }
-            bool is_valid() const { return valid_; }
+            /** 构造是否成功（CreateCHN、MMA 输入） */
+            bool ok() const { return ok_; }
+            /** 同 ok()，供 if (engine) 使用 */
+            explicit operator bool() const { return ok(); }
 
             std::string dump_info() const;
 
@@ -208,7 +213,7 @@ namespace deploy_percept
             Info info_{};
             Result result_{};
 
-            bool valid_{false};
+            bool ok_{false};
             bool channel_created_{false};
             bool outputs_held_{false};
 

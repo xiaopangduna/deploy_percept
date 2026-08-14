@@ -225,7 +225,7 @@ int main(int argc, char **argv)
     engine_params.model_path = model_path;
 
     SigmastarEngine engine(runtime, engine_params);
-    if (!engine.is_valid())
+    if (!engine.ok())
     {
         std::fprintf(stderr, "SigmastarEngine init failed\n");
         return 1;

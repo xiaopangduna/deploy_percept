@@ -123,7 +123,7 @@ int main(int argc, char **argv)
     engine_params.model_path = model_path;
 
     AwnnEngine engine(engine_params);
-    if (!engine.is_valid())
+    if (!engine.ok())
     {
         std::fprintf(stderr, "AwnnEngine init failed\n");
         return 1;

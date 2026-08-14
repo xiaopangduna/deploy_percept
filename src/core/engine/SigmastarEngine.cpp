@@ -228,8 +228,8 @@ namespace deploy_percept
         SigmastarEngine::SigmastarEngine(SigmastarRuntime &runtime, const Params &params)
             : runtime_(runtime), params_(params)
         {
-            valid_ = initChannel() && prepareInputBuffer();
-            if (!valid_)
+            ok_ = initChannel() && prepareInputBuffer();
+            if (!ok_)
             {
                 destroyAll();
             }
@@ -242,7 +242,7 @@ namespace deploy_percept
 
         bool SigmastarEngine::run(const void *input_buffer, std::size_t input_byte_size)
         {
-            if (!valid_ || input_buffer == nullptr || info_.input_byte_sizes.empty())
+            if (!ok_ || input_buffer == nullptr || info_.input_byte_sizes.empty())
             {
                 return false;
             }
@@ -576,7 +576,7 @@ namespace deploy_percept
             release_outputs();
             result_.tensor_views.clear();
             host_output_storage_.clear();
-            valid_ = false;
+            ok_ = false;
 
             if (input_virt_ != nullptr)
             {

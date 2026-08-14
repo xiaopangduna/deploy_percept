@@ -200,7 +200,7 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
     engine_params.model_path = model_path.string();
 
     SigmastarEngine engine(runtime, engine_params);
-    if (!engine.is_valid())
+    if (!engine.ok())
     {
         GTEST_SKIP() << "SigmastarEngine init failed (need IPU + firmware)";
     }

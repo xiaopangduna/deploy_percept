@@ -311,7 +311,7 @@ int main(int argc, char **argv)
     SigmastarEngine::Params yolo_params;
     yolo_params.model_path = yolo_path;
     SigmastarEngine yolo(runtime, yolo_params);
-    if (!yolo.is_valid())
+    if (!yolo.ok())
     {
         std::fprintf(stderr, "YOLOv8 SigmastarEngine init failed\n");
         return 1;
@@ -320,7 +320,7 @@ int main(int argc, char **argv)
     SigmastarEngine::Params cls_params;
     cls_params.model_path = cls_path;
     SigmastarEngine cls(runtime, cls_params);
-    if (!cls.is_valid())
+    if (!cls.ok())
     {
         std::fprintf(stderr, "MobileNetV2 SigmastarEngine init failed\n");
         return 1;

@@ -43,6 +43,8 @@ namespace deploy_percept
 
             /** vip_init 是否成功（或已由同进程其它实例完成 init） */
             bool ok() const { return ok_; }
+            /** 同 ok()，供 if (runtime) 使用 */
+            explicit operator bool() const { return ok(); }
 
         private:
             bool ok_{false};
@@ -122,7 +124,9 @@ namespace deploy_percept
             const Result &getResult() const override { return result_; }
 
             /** 构造是否成功（模型加载、IO 准备、vip_prepare_network） */
-            bool is_valid() const { return valid_; }
+            bool ok() const { return ok_; }
+            /** 同 ok()，供 if (engine) 使用 */
+            explicit operator bool() const { return ok(); }
 
             /** 格式化 VIP IO 元信息，供日志/调试；不写入 stdout */
             std::string dump_info() const;
@@ -150,7 +154,7 @@ namespace deploy_percept
             Info info_{};
             Result result_{};
 
-            bool valid_{false};
+            bool ok_{false};
             bool network_prepared_{false};
             void *network_{nullptr};
 

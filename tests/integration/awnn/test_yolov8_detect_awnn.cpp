@@ -86,7 +86,7 @@ TEST(YoloV8DetectAwnnIntegration, DogDetectionsMatchGolden)
     engine_params.model_path = model_path.string();
 
     AwnnEngine engine(engine_params);
-    if (!engine.is_valid())
+    if (!engine.ok())
     {
         GTEST_SKIP() << "AwnnEngine init failed";
     }

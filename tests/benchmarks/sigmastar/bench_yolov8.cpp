@@ -454,7 +454,7 @@ int main(int argc, char **argv)
         params.is_copy_host = row.is_copy_host;
 
         SigmastarEngine engine(runtime, params);
-        if (!engine.is_valid())
+        if (!engine.ok())
         {
             std::fprintf(stderr, "SigmastarEngine init failed for tag=%s\n", row.tag);
             continue;
