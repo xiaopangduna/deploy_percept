@@ -26,7 +26,8 @@ namespace deploy_percept
         // 使用约定：
         //   1. 先构造 SigmastarRuntime，再构造 SigmastarEngine（传入 Runtime 引用）
         //   2. SigmastarEngine 不得长于传入的 SigmastarRuntime（作用域包住所有 Engine）
-        //   3. 同一进程同时只允许一个 SigmastarRuntime；析构后再构造可重新 CreateDevice
+        //   3. CreateDevice 为进程级；析构后再构造可重新 CreateDevice。
+        //      同时存活多个 Runtime 是否可行取决于 SDK / soc_id，本类不再拦截。
         //
         // CreateDevice 的 u32MaxVariableBufSize 取各模型 VariableBufferSize 的 **max，
         // 不是求和**：该 buffer 是 IPU 推理时的共享 scratch，同一时刻只有一个 Invoke
@@ -104,8 +105,6 @@ namespace deploy_percept
             bool ok_{false};
             bool sys_inited_{false};
             bool device_created_{false};
-
-            static SigmastarRuntime *live_;
         };
 
         /**

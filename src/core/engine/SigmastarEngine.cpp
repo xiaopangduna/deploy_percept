@@ -119,8 +119,6 @@ namespace deploy_percept
 
         } // namespace
 
-        SigmastarRuntime *SigmastarRuntime::live_ = nullptr;
-
         bool SigmastarRuntime::resolveMaxVariableBufSize()
         {
             for (const auto &path : params_.model_paths)
@@ -149,19 +147,11 @@ namespace deploy_percept
 
         SigmastarRuntime::SigmastarRuntime(const Params &params) : params_(params)
         {
-            if (live_ != nullptr)
-            {
-                std::fprintf(
-                    stderr,
-                    "SigmastarRuntime: already created (one Runtime per process)\n");
-                return;
-            }
             if (!initDevice())
             {
                 destroyDevice();
                 return;
             }
-            live_ = this;
             ok_ = true;
         }
 
@@ -173,7 +163,6 @@ namespace deploy_percept
             }
             ok_ = false;
             destroyDevice();
-            live_ = nullptr;
         }
 
         bool SigmastarRuntime::initDevice()
@@ -194,9 +183,6 @@ namespace deploy_percept
             MI_IPU_DevAttr_t dev_attr{};
             // 共享 scratch：同一时刻只有一个 Invoke，取各模型 var 的 max 而非求和
             dev_attr.u32MaxVariableBufSize = params_.max_variable_buf_size;
-            dev_attr.u32YUV420_W_Pitch_Alignment = 16;
-            dev_attr.u32YUV420_H_Pitch_Alignment = 2;
-            dev_attr.u32XRGB_W_Pitch_Alignment = 16;
 
             if (MI_IPU_CreateDevice(&dev_attr, nullptr, firmware_path.data(), 0) != MI_SUCCESS)
             {
