@@ -270,30 +270,32 @@ int main(int argc, char **argv)
 
     std::printf("%s", engine.dump_info().c_str());
 
-    const auto &info = engine.getInfo();
-    if (info.input_sizes.empty() || info.input_byte_sizes.empty() || info.input_elm_formats.empty())
+    const auto &desc = engine.getInfo().desc;
+    if (desc.u32InputTensorCount < 1u)
     {
         std::fprintf(stderr, "SigmastarEngine has no input tensors\n");
         return 1;
     }
-    if (info.output_sizes.empty() || info.output_scalars.empty())
+    if (desc.u32OutputTensorCount < 1u)
     {
         std::fprintf(stderr, "SigmastarEngine has no output tensors\n");
         return 1;
     }
 
     // IPU shape：常见为 shape[1]=H, shape[2]=W；分类输出 shape[1]=num_classes
-    const int model_h = static_cast<int>(info.input_sizes[0][1]);
-    const int model_w = static_cast<int>(info.input_sizes[0][2]);
-    const std::size_t buffer_bytes = info.input_byte_sizes[0];
-    const int num_classes = static_cast<int>(info.output_sizes[0][1]);
+    const auto &in0 = desc.astMI_InputTensorDescs[0];
+    const auto &out0 = desc.astMI_OutputTensorDescs[0];
+    const int model_h = static_cast<int>(in0.u32TensorShape[1]);
+    const int model_w = static_cast<int>(in0.u32TensorShape[2]);
+    const std::size_t buffer_bytes = in0.u32BufSize;
+    const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
 
     std::vector<std::uint8_t> input_buffer;
     if (!prepare_model_input(
             input_path,
             model_w,
             model_h,
-            info.input_elm_formats[0],
+            static_cast<std::uint32_t>(in0.eElmFormat),
             buffer_bytes,
             input_buffer))
     {
@@ -302,7 +304,7 @@ int main(int argc, char **argv)
 
     ClassificationPostProcessSigmastar processor({
         .num_classes = num_classes,
-        .output_scalar = info.output_scalars[0],
+        .output_scalar = out0.fScalar,
     });
 
     const auto t0 = std::chrono::steady_clock::now();

@@ -205,17 +205,16 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
         GTEST_SKIP() << "SigmastarEngine init failed (need IPU + firmware)";
     }
 
-    const auto &info = engine.getInfo();
-    ASSERT_FALSE(info.input_sizes.empty());
-    ASSERT_FALSE(info.input_byte_sizes.empty());
-    ASSERT_FALSE(info.input_elm_formats.empty());
-    ASSERT_FALSE(info.output_sizes.empty());
-    ASSERT_FALSE(info.output_scalars.empty());
+    const auto &desc = engine.getInfo().desc;
+    ASSERT_GE(desc.u32InputTensorCount, 1u);
+    ASSERT_GE(desc.u32OutputTensorCount, 1u);
 
-    const int model_h = static_cast<int>(info.input_sizes[0][1]);
-    const int model_w = static_cast<int>(info.input_sizes[0][2]);
-    const std::size_t buffer_bytes = info.input_byte_sizes[0];
-    const int num_classes = static_cast<int>(info.output_sizes[0][1]);
+    const auto &in0 = desc.astMI_InputTensorDescs[0];
+    const auto &out0 = desc.astMI_OutputTensorDescs[0];
+    const int model_h = static_cast<int>(in0.u32TensorShape[1]);
+    const int model_w = static_cast<int>(in0.u32TensorShape[2]);
+    const std::size_t buffer_bytes = in0.u32BufSize;
+    const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
     ASSERT_GT(num_classes, 0);
 
     std::vector<std::uint8_t> input_buffer;
@@ -223,10 +222,11 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
         input_path.string(),
         model_w,
         model_h,
-        info.input_elm_formats[0],
+        static_cast<std::uint32_t>(in0.eElmFormat),
         buffer_bytes,
         input_buffer))
-        << "failed to prepare input (elm_format=" << info.input_elm_formats[0] << ")";
+        << "failed to prepare input (elm_format=" << static_cast<std::uint32_t>(in0.eElmFormat)
+        << ")";
 
     ASSERT_TRUE(engine.run(input_buffer.data(), input_buffer.size()));
 
@@ -235,7 +235,7 @@ TEST(MobileNetV2ClassifySigmastarIntegration, RunsTop1InRange)
 
     ClassificationPostProcessSigmastar processor({
         .num_classes = num_classes,
-        .output_scalar = info.output_scalars[0],
+        .output_scalar = out0.fScalar,
     });
     ASSERT_TRUE(processor.run(tensor_views));
 

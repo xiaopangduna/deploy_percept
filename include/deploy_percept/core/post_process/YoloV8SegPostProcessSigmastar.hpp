@@ -34,7 +34,7 @@ namespace deploy_percept
                 int num_classes = 80;
                 int obj_numb_max_size = 128;
 
-                /** 与 run() 的 inputs 下标对齐（来自 engine.getInfo()） */
+                /** 与 run() 的 inputs 下标对齐（ipu_output_shapes / ipu_output_scalars(desc)） */
                 std::vector<std::array<std::uint32_t, 6>> output_shapes;
                 std::vector<float> output_scalars;
             };

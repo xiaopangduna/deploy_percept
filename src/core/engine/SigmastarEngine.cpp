@@ -57,49 +57,6 @@ namespace deploy_percept
                 return buf;
             }
 
-            void appendTensorDesc(
-                SigmastarEngine::Info &info,
-                bool is_output,
-                const MI_IPU_TensorDesc_t &desc)
-            {
-                std::array<std::uint32_t, 6> sizes{};
-                const std::uint32_t dims =
-                    desc.u32TensorDim > 6u ? 6u : desc.u32TensorDim;
-                for (std::uint32_t i = 0; i < dims; ++i)
-                {
-                    sizes[i] = desc.u32TensorShape[i];
-                }
-
-                const TensorDtype dtype = dtypeFromElmFormat(desc.eElmFormat);
-                const std::uint32_t byte_size = desc.u32BufSize;
-                const std::string name = desc.name;
-
-                if (is_output)
-                {
-                    info.output_num_dims.push_back(desc.u32TensorDim);
-                    info.output_sizes.push_back(sizes);
-                    info.output_dtypes.push_back(dtype);
-                    info.output_elm_formats.push_back(
-                        static_cast<std::uint32_t>(desc.eElmFormat));
-                    info.output_scalars.push_back(desc.fScalar);
-                    info.output_zero_points.push_back(desc.s64ZeroPoint);
-                    info.output_byte_sizes.push_back(byte_size);
-                    info.output_names.push_back(name);
-                }
-                else
-                {
-                    info.input_num_dims.push_back(desc.u32TensorDim);
-                    info.input_sizes.push_back(sizes);
-                    info.input_dtypes.push_back(dtype);
-                    info.input_elm_formats.push_back(
-                        static_cast<std::uint32_t>(desc.eElmFormat));
-                    info.input_scalars.push_back(desc.fScalar);
-                    info.input_zero_points.push_back(desc.s64ZeroPoint);
-                    info.input_byte_sizes.push_back(byte_size);
-                    info.input_names.push_back(name);
-                }
-            }
-
             /** 读 .img 头中的 VariableBufferSize，不占 IPU Channel。失败返回 0。 */
             std::uint32_t queryVariableBufferSize(const std::string &model_path)
             {
@@ -228,7 +185,7 @@ namespace deploy_percept
 
         bool SigmastarEngine::run(const void *input_buffer, std::size_t input_byte_size)
         {
-            if (!ok_ || input_buffer == nullptr || info_.input_byte_sizes.empty())
+            if (!ok_ || input_buffer == nullptr || info_.desc.u32InputTensorCount < 1u)
             {
                 return false;
             }
@@ -259,13 +216,14 @@ namespace deploy_percept
             }
 
             result_.tensor_views.clear();
-            result_.tensor_views.reserve(info_.output_byte_sizes.size());
-            for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
+            result_.tensor_views.reserve(info_.desc.u32OutputTensorCount);
+            for (MI_U32 i = 0; i < info_.desc.u32OutputTensorCount; ++i)
             {
+                const auto &t = info_.desc.astMI_OutputTensorDescs[i];
                 TensorView view{};
-                view.byte_size = info_.output_byte_sizes[i];
+                view.byte_size = t.u32BufSize;
                 view.data = output_tensor_vector_.astArrayTensors[i].ptTensorData[0];
-                view.dtype = info_.output_dtypes[i];
+                view.dtype = dtypeFromElmFormat(t.eElmFormat);
                 result_.tensor_views.push_back(view);
             }
             return true;
@@ -282,71 +240,49 @@ namespace deploy_percept
         {
             std::string out = "SigmastarEngine Info:\n";
             auto dump_side = [&](const char *tag,
-                                 const std::vector<std::array<std::uint32_t, 6>> &sizes,
-                                 const std::vector<std::uint32_t> &num_dims,
-                                 const std::vector<TensorDtype> &dtypes,
-                                 const std::vector<std::uint32_t> &bytes,
-                                 const std::vector<std::string> &names,
-                                 const std::vector<std::uint32_t> &elm_fmts,
-                                 const std::vector<float> &scalars) {
-                if (sizes.empty())
+                                 const MI_IPU_TensorDesc_t *descs,
+                                 MI_U32 count) {
+                if (count == 0)
                 {
                     out += "  (no ";
                     out += tag;
                     out += "s)\n";
                     return;
                 }
-                for (std::size_t i = 0; i < sizes.size(); ++i)
+                for (MI_U32 i = 0; i < count; ++i)
                 {
                     char line[512];
-                    const char *name =
-                        (i < names.size() && !names[i].empty()) ? names[i].c_str() : "?";
-                    const std::uint32_t dims = (i < num_dims.size()) ? num_dims[i] : 0u;
-                    const TensorDtype dtype =
-                        (i < dtypes.size()) ? dtypes[i] : TensorDtype::FP32;
-                    const std::uint32_t n = (i < bytes.size()) ? bytes[i] : 0u;
-                    const std::uint32_t elm =
-                        (i < elm_fmts.size()) ? elm_fmts[i] : 0u;
-                    const float scale = (i < scalars.size()) ? scalars[i] : 0.f;
+                    const auto &t = descs[i];
+                    const char *name = t.name[0] != '\0' ? t.name : "?";
                     std::snprintf(
                         line,
                         sizeof(line),
-                        "  %s[%zu] %s: dims=%u shape=[%u,%u,%u,%u] dtype=%s "
+                        "  %s[%u] %s: dims=%u shape=[%u,%u,%u,%u] dtype=%s "
                         "elm=%u scalar=%g bytes=%u\n",
                         tag,
                         i,
                         name,
-                        dims,
-                        sizes[i][0],
-                        sizes[i][1],
-                        sizes[i][2],
-                        sizes[i][3],
-                        dtypeToString(dtype),
-                        elm,
-                        static_cast<double>(scale),
-                        n);
+                        t.u32TensorDim,
+                        t.u32TensorShape[0],
+                        t.u32TensorShape[1],
+                        t.u32TensorShape[2],
+                        t.u32TensorShape[3],
+                        dtypeToString(dtypeFromElmFormat(t.eElmFormat)),
+                        static_cast<unsigned>(t.eElmFormat),
+                        static_cast<double>(t.fScalar),
+                        t.u32BufSize);
                     out += line;
                 }
             };
 
             dump_side(
                 "input",
-                info_.input_sizes,
-                info_.input_num_dims,
-                info_.input_dtypes,
-                info_.input_byte_sizes,
-                info_.input_names,
-                info_.input_elm_formats,
-                info_.input_scalars);
+                info_.desc.astMI_InputTensorDescs,
+                info_.desc.u32InputTensorCount);
             dump_side(
                 "output",
-                info_.output_sizes,
-                info_.output_num_dims,
-                info_.output_dtypes,
-                info_.output_byte_sizes,
-                info_.output_names,
-                info_.output_elm_formats,
-                info_.output_scalars);
+                info_.desc.astMI_OutputTensorDescs,
+                info_.desc.u32OutputTensorCount);
             return out;
         }
 
@@ -400,40 +336,26 @@ namespace deploy_percept
             }
             channel_created_ = true;
 
-            std::memset(&model_desc_, 0, sizeof(model_desc_));
-            if (MI_IPU_GetInOutTensorDesc(channel_id_, &model_desc_) != MI_SUCCESS)
+            info_.desc = {};
+            if (MI_IPU_GetInOutTensorDesc(channel_id_, &info_.desc) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: GetInOutTensorDesc failed\n");
                 return false;
             }
 
-            if (model_desc_.u32InputTensorCount < 1u)
+            if (info_.desc.u32InputTensorCount < 1u)
             {
                 std::fprintf(stderr, "SigmastarEngine: model has no inputs\n");
                 return false;
             }
 
-            return fillInfoFromDesc(model_desc_);
-        }
-
-        bool SigmastarEngine::fillInfoFromDesc(const MI_IPU_SubNet_InputOutputDesc_t &desc)
-        {
-            info_ = {};
-            for (MI_U32 i = 0; i < desc.u32InputTensorCount; ++i)
-            {
-                appendTensorDesc(info_, false, desc.astMI_InputTensorDescs[i]);
-            }
-            for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
-            {
-                appendTensorDesc(info_, true, desc.astMI_OutputTensorDescs[i]);
-            }
-            return !info_.input_byte_sizes.empty();
+            return true;
         }
 
         bool SigmastarEngine::prepareInputBuffer()
         {
-            input_buf_size_ = info_.input_byte_sizes[0];
-            if (input_buf_size_ == 0)
+            const MI_U32 input_buf_size = info_.desc.astMI_InputTensorDescs[0].u32BufSize;
+            if (input_buf_size == 0)
             {
                 std::fprintf(stderr, "SigmastarEngine: input byte size is 0\n");
                 return false;
@@ -442,14 +364,14 @@ namespace deploy_percept
             if (MI_SYS_MMA_Alloc(
                     runtime_.params().soc_id,
                     nullptr,
-                    input_buf_size_,
+                    input_buf_size,
                     &input_phy_) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: MMA_Alloc failed\n");
                 return false;
             }
 
-            if (MI_SYS_Mmap(input_phy_, input_buf_size_, &input_virt_, TRUE) != MI_SUCCESS)
+            if (MI_SYS_Mmap(input_phy_, input_buf_size, &input_virt_, TRUE) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: Mmap failed\n");
                 MI_SYS_MMA_Free(runtime_.params().soc_id, input_phy_);
@@ -457,24 +379,25 @@ namespace deploy_percept
                 return false;
             }
 
-            std::memset(input_virt_, 0, input_buf_size_);
+            std::memset(input_virt_, 0, input_buf_size);
             return true;
         }
 
         bool SigmastarEngine::copyInput(const void *user_input, std::size_t input_byte_size)
         {
-            if (input_virt_ == nullptr || input_byte_size != input_buf_size_)
+            const MI_U32 input_buf_size = info_.desc.astMI_InputTensorDescs[0].u32BufSize;
+            if (input_virt_ == nullptr || input_byte_size != input_buf_size)
             {
                 std::fprintf(
                     stderr,
                     "SigmastarEngine: input size mismatch (got %zu, expect %u)\n",
                     input_byte_size,
-                    input_buf_size_);
+                    input_buf_size);
                 return false;
             }
 
             std::memcpy(input_virt_, user_input, input_byte_size);
-            if (MI_SYS_FlushInvCache(input_virt_, input_buf_size_) != MI_SUCCESS)
+            if (MI_SYS_FlushInvCache(input_virt_, input_buf_size) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: FlushInvCache failed\n");
                 return false;
@@ -485,7 +408,7 @@ namespace deploy_percept
         bool SigmastarEngine::invokeAndTakeOutputs()
         {
             MI_IPU_TensorVector_t input_vector{};
-            input_vector.u32TensorCount = model_desc_.u32InputTensorCount;
+            input_vector.u32TensorCount = info_.desc.u32InputTensorCount;
             input_vector.astArrayTensors[0].phyTensorAddr[0] = input_phy_;
             input_vector.astArrayTensors[0].ptTensorData[0] = input_virt_;
 
@@ -503,13 +426,13 @@ namespace deploy_percept
                 return false;
             }
 
-            if (output_tensor_vector_.u32TensorCount != info_.output_byte_sizes.size())
+            if (output_tensor_vector_.u32TensorCount != info_.desc.u32OutputTensorCount)
             {
                 std::fprintf(
                     stderr,
-                    "SigmastarEngine: output count mismatch (%u vs %zu)\n",
+                    "SigmastarEngine: output count mismatch (%u vs %u)\n",
                     output_tensor_vector_.u32TensorCount,
-                    info_.output_byte_sizes.size());
+                    info_.desc.u32OutputTensorCount);
                 return false;
             }
 
@@ -518,25 +441,25 @@ namespace deploy_percept
 
         bool SigmastarEngine::copyMappedOutputsToHost()
         {
-            host_output_storage_.assign(info_.output_byte_sizes.size(), {});
+            host_output_storage_.assign(info_.desc.u32OutputTensorCount, {});
             result_.tensor_views.clear();
-            result_.tensor_views.reserve(info_.output_byte_sizes.size());
+            result_.tensor_views.reserve(info_.desc.u32OutputTensorCount);
 
-            for (std::size_t i = 0; i < info_.output_byte_sizes.size(); ++i)
+            for (MI_U32 i = 0; i < info_.desc.u32OutputTensorCount; ++i)
             {
-                const std::uint32_t n = info_.output_byte_sizes[i];
+                const auto &t = info_.desc.astMI_OutputTensorDescs[i];
                 void *src = output_tensor_vector_.astArrayTensors[i].ptTensorData[0];
-                if (src == nullptr || n == 0)
+                if (src == nullptr || t.u32BufSize == 0)
                 {
                     return false;
                 }
-                host_output_storage_[i].resize(n);
-                std::memcpy(host_output_storage_[i].data(), src, n);
+                host_output_storage_[i].resize(t.u32BufSize);
+                std::memcpy(host_output_storage_[i].data(), src, t.u32BufSize);
 
                 TensorView view{};
                 view.data = host_output_storage_[i].data();
-                view.byte_size = n;
-                view.dtype = info_.output_dtypes[i];
+                view.byte_size = t.u32BufSize;
+                view.dtype = dtypeFromElmFormat(t.eElmFormat);
                 result_.tensor_views.push_back(view);
             }
             return true;
@@ -566,7 +489,7 @@ namespace deploy_percept
 
             if (input_virt_ != nullptr)
             {
-                MI_SYS_Munmap(input_virt_, input_buf_size_);
+                MI_SYS_Munmap(input_virt_, info_.desc.astMI_InputTensorDescs[0].u32BufSize);
                 input_virt_ = nullptr;
             }
             if (input_phy_ != 0)
@@ -574,7 +497,6 @@ namespace deploy_percept
                 MI_SYS_MMA_Free(runtime_.params().soc_id, input_phy_);
                 input_phy_ = 0;
             }
-            input_buf_size_ = 0;
 
             if (channel_created_)
             {

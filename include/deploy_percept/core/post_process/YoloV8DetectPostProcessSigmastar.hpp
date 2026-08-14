@@ -19,7 +19,7 @@ namespace deploy_percept
          *   - 3 路：CPU DFL decode（每层 INT16/FP32）
          *   - 5 路：Pure IPU 输出（bboxes/class/score/index/num）
          *
-         * 调用前请用 SigmastarEngine::Info 填写 output_shapes / output_scalars。
+         * 调用前用 ipu_output_shapes / ipu_output_scalars(engine.getInfo().desc) 填写。
          */
         class YoloV8DetectPostProcessSigmastar : public YoloDetectPostProcess
         {
@@ -33,7 +33,7 @@ namespace deploy_percept
                 int obj_numb_max_size = 128;
                 int reg_max = 16;
 
-                /** 与 run() 的 inputs 下标对齐（来自 engine.getInfo()） */
+                /** 与 run() 的 inputs 下标对齐（ipu_output_shapes / ipu_output_scalars(desc)） */
                 std::vector<std::array<std::uint32_t, 6>> output_shapes;
                 std::vector<float> output_scalars;
             };

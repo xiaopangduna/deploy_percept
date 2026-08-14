@@ -29,6 +29,8 @@ namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
+using deploy_percept::engine::ipu_output_scalars;
+using deploy_percept::engine::ipu_output_shapes;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using deploy_percept::data::kCoco80Labels;
 using deploy_percept::utils::drawDetectionResults;
@@ -252,17 +254,18 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const auto &info = engine.getInfo();
-    if (info.input_sizes.empty() || info.input_byte_sizes.empty() || info.input_elm_formats.empty())
+    const auto &desc = engine.getInfo().desc;
+    if (desc.u32InputTensorCount < 1u)
     {
         std::fprintf(stderr, "SigmastarEngine has no input tensors\n");
         return 1;
     }
 
     // IPU shape：常见为 shape[1]=H, shape[2]=W
-    const int model_h = static_cast<int>(info.input_sizes[0][1]);
-    const int model_w = static_cast<int>(info.input_sizes[0][2]);
-    const std::size_t buffer_bytes = info.input_byte_sizes[0];
+    const auto &in0 = desc.astMI_InputTensorDescs[0];
+    const int model_h = static_cast<int>(in0.u32TensorShape[1]);
+    const int model_w = static_cast<int>(in0.u32TensorShape[2]);
+    const std::size_t buffer_bytes = in0.u32BufSize;
 
     cv::Mat model_input_bgr;
     std::vector<std::uint8_t> input_buffer;
@@ -270,7 +273,7 @@ int main(int argc, char **argv)
             input_path,
             model_w,
             model_h,
-            info.input_elm_formats[0],
+            static_cast<std::uint32_t>(in0.eElmFormat),
             buffer_bytes,
             model_input_bgr,
             input_buffer))
@@ -281,8 +284,8 @@ int main(int argc, char **argv)
     YoloV8DetectPostProcessSigmastar::Params post_params;
     post_params.model_in_w = model_w;
     post_params.model_in_h = model_h;
-    post_params.output_shapes = info.output_sizes;
-    post_params.output_scalars = info.output_scalars;
+    post_params.output_shapes = ipu_output_shapes(desc);
+    post_params.output_scalars = ipu_output_scalars(desc);
 
     YoloV8DetectPostProcessSigmastar processor(post_params);
 

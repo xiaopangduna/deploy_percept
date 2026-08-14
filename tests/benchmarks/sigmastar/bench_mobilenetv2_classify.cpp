@@ -460,24 +460,25 @@ int main(int argc, char **argv)
             continue;
         }
 
-        const auto &info = engine.getInfo();
-        if (info.input_sizes.empty() || info.input_byte_sizes.empty() ||
-            info.input_elm_formats.empty())
+        const auto &desc = engine.getInfo().desc;
+        if (desc.u32InputTensorCount < 1u)
         {
             std::fprintf(stderr, "SigmastarEngine has no input tensors for tag=%s\n", row.tag);
             continue;
         }
-        if (info.output_sizes.empty() || info.output_scalars.empty())
+        if (desc.u32OutputTensorCount < 1u)
         {
             std::fprintf(stderr, "SigmastarEngine has no output tensors for tag=%s\n", row.tag);
             continue;
         }
 
-        model_h = static_cast<int>(info.input_sizes[0][1]);
-        model_w = static_cast<int>(info.input_sizes[0][2]);
-        elm_format = info.input_elm_formats[0];
-        buffer_bytes = info.input_byte_sizes[0];
-        const int num_classes = static_cast<int>(info.output_sizes[0][1]);
+        const auto &in0 = desc.astMI_InputTensorDescs[0];
+        const auto &out0 = desc.astMI_OutputTensorDescs[0];
+        model_h = static_cast<int>(in0.u32TensorShape[1]);
+        model_w = static_cast<int>(in0.u32TensorShape[2]);
+        elm_format = static_cast<std::uint32_t>(in0.eElmFormat);
+        buffer_bytes = in0.u32BufSize;
+        const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
 
         if (results.empty())
         {
@@ -494,7 +495,7 @@ int main(int argc, char **argv)
         {
             processor.emplace(ClassificationPostProcessSigmastar({
                 .num_classes = num_classes,
-                .output_scalar = info.output_scalars[0],
+                .output_scalar = out0.fScalar,
             }));
         }
 

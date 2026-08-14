@@ -140,30 +140,12 @@ namespace deploy_percept
             };
 
             /**
-             * IPU IO 元信息（GetInOutTensorDesc）。
-             * 同侧各 vector 下标对齐；input_sizes/output_sizes 为 shape 前 6 维
-             * （常见布局：shape[1]=H, shape[2]=W，以模型实际 layout 为准）。
+             * 构造后固定的 IO 元信息。desc 为 GetInOutTensorDesc 原样。
+             * 常见布局：shape[1]=H, shape[2]=W（以模型实际 layout 为准）。
              */
             struct Info
             {
-                std::vector<std::uint32_t> input_num_dims;
-                std::vector<std::array<std::uint32_t, 6>> input_sizes;
-                std::vector<TensorDtype> input_dtypes;
-                /** MI_IPU_ELEMENT_FORMAT 原值 */
-                std::vector<std::uint32_t> input_elm_formats;
-                std::vector<float> input_scalars;
-                std::vector<std::int64_t> input_zero_points;
-                std::vector<std::uint32_t> input_byte_sizes;
-                std::vector<std::string> input_names;
-
-                std::vector<std::uint32_t> output_num_dims;
-                std::vector<std::array<std::uint32_t, 6>> output_sizes;
-                std::vector<TensorDtype> output_dtypes;
-                std::vector<std::uint32_t> output_elm_formats;
-                std::vector<float> output_scalars;
-                std::vector<std::int64_t> output_zero_points;
-                std::vector<std::uint32_t> output_byte_sizes;
-                std::vector<std::string> output_names;
+                MI_IPU_SubNet_InputOutputDesc_t desc{};
             };
 
             struct Result : BaseEngine::Result
@@ -190,7 +172,7 @@ namespace deploy_percept
 
             /**
              * 拷贝 host 输入 → Invoke → 填充 getResult().tensor_views。
-             * 输入须与 getInfo().input_byte_sizes[0] 一致（Phase 1 单输入）。
+             * 输入须与 getInfo().desc.astMI_InputTensorDescs[0].u32BufSize 一致（Phase 1 单输入）。
              */
             bool run(const void *input_buffer, std::size_t input_byte_size);
 
@@ -198,7 +180,6 @@ namespace deploy_percept
 
         private:
             bool initChannel();
-            bool fillInfoFromDesc(const MI_IPU_SubNet_InputOutputDesc_t &desc);
             bool prepareInputBuffer();
             void destroyAll();
 
@@ -217,15 +198,41 @@ namespace deploy_percept
             bool outputs_held_{false};
 
             MI_IPU_CHN channel_id_{0};
-            MI_IPU_SubNet_InputOutputDesc_t model_desc_{};
 
             void *input_virt_{nullptr};
             MI_PHY input_phy_{0};
-            MI_U32 input_buf_size_{0};
 
             MI_IPU_TensorVector_t output_tensor_vector_{};
             std::vector<std::vector<std::uint8_t>> host_output_storage_;
         };
+
+        /** 从 desc 抄输出 shape 前 6 维，供后处理 Params.output_shapes */
+        inline std::vector<std::array<std::uint32_t, 6>> ipu_output_shapes(
+            const MI_IPU_SubNet_InputOutputDesc_t &desc)
+        {
+            std::vector<std::array<std::uint32_t, 6>> out(desc.u32OutputTensorCount);
+            for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
+            {
+                const auto &t = desc.astMI_OutputTensorDescs[i];
+                const MI_U32 dims = t.u32TensorDim > 6u ? 6u : t.u32TensorDim;
+                for (MI_U32 d = 0; d < dims; ++d)
+                {
+                    out[i][d] = t.u32TensorShape[d];
+                }
+            }
+            return out;
+        }
+
+        /** 从 desc 抄 fScalar，供后处理 Params.output_scalars */
+        inline std::vector<float> ipu_output_scalars(const MI_IPU_SubNet_InputOutputDesc_t &desc)
+        {
+            std::vector<float> out(desc.u32OutputTensorCount);
+            for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
+            {
+                out[i] = desc.astMI_OutputTensorDescs[i].fScalar;
+            }
+            return out;
+        }
 
     } // namespace engine
 } // namespace deploy_percept

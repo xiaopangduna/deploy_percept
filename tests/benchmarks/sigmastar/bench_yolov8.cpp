@@ -29,6 +29,8 @@ namespace {
 using deploy_percept::engine::EngineResultGuard;
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
+using deploy_percept::engine::ipu_output_scalars;
+using deploy_percept::engine::ipu_output_shapes;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using percept::test::fixture_data;
 
@@ -460,26 +462,26 @@ int main(int argc, char **argv)
             continue;
         }
 
-        const auto &info = engine.getInfo();
-        if (info.input_sizes.empty() || info.input_byte_sizes.empty() ||
-            info.input_elm_formats.empty())
+        const auto &desc = engine.getInfo().desc;
+        if (desc.u32InputTensorCount < 1u)
         {
             std::fprintf(stderr, "SigmastarEngine has no input tensors for tag=%s\n", row.tag);
             continue;
         }
 
-        model_h = static_cast<int>(info.input_sizes[0][1]);
-        model_w = static_cast<int>(info.input_sizes[0][2]);
-        elm_format = info.input_elm_formats[0];
-        buffer_bytes = info.input_byte_sizes[0];
+        const auto &in0 = desc.astMI_InputTensorDescs[0];
+        model_h = static_cast<int>(in0.u32TensorShape[1]);
+        model_w = static_cast<int>(in0.u32TensorShape[2]);
+        elm_format = static_cast<std::uint32_t>(in0.eElmFormat);
+        buffer_bytes = in0.u32BufSize;
 
         if (!processor_ready)
         {
             YoloV8DetectPostProcessSigmastar::Params post_params;
             post_params.model_in_w = model_w;
             post_params.model_in_h = model_h;
-            post_params.output_shapes = info.output_sizes;
-            post_params.output_scalars = info.output_scalars;
+            post_params.output_shapes = ipu_output_shapes(desc);
+            post_params.output_scalars = ipu_output_scalars(desc);
             processor = YoloV8DetectPostProcessSigmastar(post_params);
             processor_ready = true;
             std::printf(

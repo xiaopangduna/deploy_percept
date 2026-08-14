@@ -35,6 +35,8 @@ namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
+using deploy_percept::engine::ipu_output_scalars;
+using deploy_percept::engine::ipu_output_shapes;
 using deploy_percept::post_process::ClassificationPostProcessSigmastar;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using deploy_percept::data::kCoco80Labels;
@@ -212,9 +214,7 @@ bool require_file(const char *path, const char *what)
 
 bool require_input_info(const SigmastarEngine &engine, const char *tag)
 {
-    const auto &info = engine.getInfo();
-    if (info.input_sizes.empty() || info.input_byte_sizes.empty() ||
-        info.input_elm_formats.empty())
+    if (engine.getInfo().desc.u32InputTensorCount < 1u)
     {
         std::fprintf(stderr, "%s: SigmastarEngine has no input tensors\n", tag);
         return false;
@@ -331,19 +331,21 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const auto &yolo_info = yolo.getInfo();
-    const auto &cls_info = cls.getInfo();
-    if (cls_info.output_sizes.empty() || cls_info.output_scalars.empty())
+    const auto &yolo_in = yolo.getInfo().desc.astMI_InputTensorDescs[0];
+    const auto &cls_desc = cls.getInfo().desc;
+    if (cls_desc.u32OutputTensorCount < 1u)
     {
         std::fprintf(stderr, "cls: SigmastarEngine has no output tensors\n");
         return 1;
     }
+    const auto &cls_in = cls_desc.astMI_InputTensorDescs[0];
+    const auto &cls_out0 = cls_desc.astMI_OutputTensorDescs[0];
 
-    const int yolo_h = static_cast<int>(yolo_info.input_sizes[0][1]);
-    const int yolo_w = static_cast<int>(yolo_info.input_sizes[0][2]);
-    const int cls_h = static_cast<int>(cls_info.input_sizes[0][1]);
-    const int cls_w = static_cast<int>(cls_info.input_sizes[0][2]);
-    const int num_classes = static_cast<int>(cls_info.output_sizes[0][1]);
+    const int yolo_h = static_cast<int>(yolo_in.u32TensorShape[1]);
+    const int yolo_w = static_cast<int>(yolo_in.u32TensorShape[2]);
+    const int cls_h = static_cast<int>(cls_in.u32TensorShape[1]);
+    const int cls_w = static_cast<int>(cls_in.u32TensorShape[2]);
+    const int num_classes = static_cast<int>(cls_out0.u32TensorShape[1]);
 
     cv::Mat yolo_bgr;
     std::vector<std::uint8_t> yolo_buf;
@@ -351,8 +353,8 @@ int main(int argc, char **argv)
             detect_input,
             yolo_w,
             yolo_h,
-            yolo_info.input_elm_formats[0],
-            yolo_info.input_byte_sizes[0],
+            static_cast<std::uint32_t>(yolo_in.eElmFormat),
+            yolo_in.u32BufSize,
             yolo_bgr,
             yolo_buf))
     {
@@ -365,8 +367,8 @@ int main(int argc, char **argv)
             cls_input,
             cls_w,
             cls_h,
-            cls_info.input_elm_formats[0],
-            cls_info.input_byte_sizes[0],
+            static_cast<std::uint32_t>(cls_in.eElmFormat),
+            cls_in.u32BufSize,
             cls_bgr,
             cls_buf))
     {
@@ -377,13 +379,13 @@ int main(int argc, char **argv)
     YoloV8DetectPostProcessSigmastar::Params yolo_post_params;
     yolo_post_params.model_in_w = yolo_w;
     yolo_post_params.model_in_h = yolo_h;
-    yolo_post_params.output_shapes = yolo_info.output_sizes;
-    yolo_post_params.output_scalars = yolo_info.output_scalars;
+    yolo_post_params.output_shapes = ipu_output_shapes(yolo.getInfo().desc);
+    yolo_post_params.output_scalars = ipu_output_scalars(yolo.getInfo().desc);
     YoloV8DetectPostProcessSigmastar yolo_post(yolo_post_params);
 
     ClassificationPostProcessSigmastar cls_post({
         .num_classes = num_classes,
-        .output_scalar = cls_info.output_scalars[0],
+        .output_scalar = cls_out0.fScalar,
     });
 
     const auto t0 = std::chrono::steady_clock::now();
