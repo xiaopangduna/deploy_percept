@@ -119,15 +119,11 @@ namespace deploy_percept
 
         } // namespace
 
-        bool SigmastarRuntime::sys_inited_ = false;
-        bool SigmastarRuntime::device_created_ = false;
-        std::uint16_t SigmastarRuntime::created_soc_id_ = 0;
-        std::uint32_t SigmastarRuntime::created_max_variable_buf_size_ = 0;
+        SigmastarRuntime *SigmastarRuntime::live_ = nullptr;
 
-        std::uint32_t SigmastarRuntime::resolveMaxVariableBufSize(const Params &params)
+        bool SigmastarRuntime::resolveMaxVariableBufSize()
         {
-            std::uint32_t needed = params.max_variable_buf_size;
-            for (const auto &path : params.model_paths)
+            for (const auto &path : params_.model_paths)
             {
                 const std::uint32_t var = queryVariableBufferSize(path);
                 if (var == 0)
@@ -136,27 +132,36 @@ namespace deploy_percept
                         stderr,
                         "SigmastarRuntime: GetOfflineModeStaticInfo failed (%s)\n",
                         path.c_str());
-                    return 0;
+                    return false;
                 }
-                needed = std::max(needed, var);
+                params_.max_variable_buf_size = std::max(params_.max_variable_buf_size, var);
             }
-            return needed;
+            if (params_.max_variable_buf_size == 0)
+            {
+                std::fprintf(
+                    stderr,
+                    "SigmastarRuntime: need model_paths or max_variable_buf_size "
+                    "for CreateDevice\n");
+                return false;
+            }
+            return true;
         }
 
-        SigmastarRuntime::SigmastarRuntime(const Params &params)
+        SigmastarRuntime::SigmastarRuntime(const Params &params) : params_(params)
         {
-            if (device_created_)
+            if (live_ != nullptr)
             {
                 std::fprintf(
                     stderr,
                     "SigmastarRuntime: already created (one Runtime per process)\n");
                 return;
             }
-            if (!initDevice(params))
+            if (!initDevice())
             {
                 destroyDevice();
                 return;
             }
+            live_ = this;
             ok_ = true;
         }
 
@@ -168,32 +173,27 @@ namespace deploy_percept
             }
             ok_ = false;
             destroyDevice();
+            live_ = nullptr;
         }
 
-        bool SigmastarRuntime::initDevice(const Params &params)
+        bool SigmastarRuntime::initDevice()
         {
-            if (MI_SYS_Init(params.soc_id) != MI_SUCCESS)
+            if (MI_SYS_Init(params_.soc_id) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarRuntime: MI_SYS_Init failed\n");
                 return false;
             }
             sys_inited_ = true;
-            created_soc_id_ = params.soc_id;
 
-            const std::uint32_t needed = resolveMaxVariableBufSize(params);
-            if (needed == 0)
+            if (!resolveMaxVariableBufSize())
             {
-                std::fprintf(
-                    stderr,
-                    "SigmastarRuntime: need model_paths or max_variable_buf_size "
-                    "for CreateDevice\n");
                 return false;
             }
 
-            auto firmware_path = mutableCStr(params.firmware_path);
+            auto firmware_path = mutableCStr(params_.firmware_path);
             MI_IPU_DevAttr_t dev_attr{};
             // 共享 scratch：同一时刻只有一个 Invoke，取各模型 var 的 max 而非求和
-            dev_attr.u32MaxVariableBufSize = needed;
+            dev_attr.u32MaxVariableBufSize = params_.max_variable_buf_size;
             dev_attr.u32YUV420_W_Pitch_Alignment = 16;
             dev_attr.u32YUV420_H_Pitch_Alignment = 2;
             dev_attr.u32XRGB_W_Pitch_Alignment = 16;
@@ -203,12 +203,11 @@ namespace deploy_percept
                 std::fprintf(
                     stderr,
                     "SigmastarRuntime: CreateDevice failed (firmware=%s var=%u)\n",
-                    params.firmware_path.c_str(),
-                    needed);
+                    params_.firmware_path.c_str(),
+                    params_.max_variable_buf_size);
                 return false;
             }
             device_created_ = true;
-            created_max_variable_buf_size_ = needed;
             return true;
         }
 
@@ -219,16 +218,15 @@ namespace deploy_percept
                 MI_IPU_DestroyDevice();
                 device_created_ = false;
             }
-            created_max_variable_buf_size_ = 0;
             if (sys_inited_)
             {
-                MI_SYS_Exit(created_soc_id_);
+                MI_SYS_Exit(params_.soc_id);
                 sys_inited_ = false;
             }
-            created_soc_id_ = 0;
         }
 
-        SigmastarEngine::SigmastarEngine(const Params &params) : params_(params)
+        SigmastarEngine::SigmastarEngine(SigmastarRuntime &runtime, const Params &params)
+            : runtime_(runtime), params_(params)
         {
             valid_ = initChannel() && prepareInputBuffer();
             if (!valid_)
@@ -374,7 +372,7 @@ namespace deploy_percept
                 return false;
             }
 
-            if (!SigmastarRuntime::device_ready())
+            if (!runtime_.ok())
             {
                 std::fprintf(
                     stderr,
@@ -391,14 +389,14 @@ namespace deploy_percept
                     params_.model_path.c_str());
                 return false;
             }
-            if (var > SigmastarRuntime::process_max_variable_buf_size())
+            if (var > runtime_.params().max_variable_buf_size)
             {
                 std::fprintf(
                     stderr,
                     "SigmastarEngine: model var %u exceeds Runtime max %u "
                     "(%s); pass this .img in SigmastarRuntime model_paths\n",
                     var,
-                    SigmastarRuntime::process_max_variable_buf_size(),
+                    runtime_.params().max_variable_buf_size,
                     params_.model_path.c_str());
                 return false;
             }
@@ -456,7 +454,7 @@ namespace deploy_percept
             }
 
             if (MI_SYS_MMA_Alloc(
-                    SigmastarRuntime::process_soc_id(),
+                    runtime_.params().soc_id,
                     nullptr,
                     input_buf_size_,
                     &input_phy_) != MI_SUCCESS)
@@ -468,7 +466,7 @@ namespace deploy_percept
             if (MI_SYS_Mmap(input_phy_, input_buf_size_, &input_virt_, TRUE) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: Mmap failed\n");
-                MI_SYS_MMA_Free(SigmastarRuntime::process_soc_id(), input_phy_);
+                MI_SYS_MMA_Free(runtime_.params().soc_id, input_phy_);
                 input_phy_ = 0;
                 return false;
             }
@@ -587,7 +585,7 @@ namespace deploy_percept
             }
             if (input_phy_ != 0)
             {
-                MI_SYS_MMA_Free(SigmastarRuntime::process_soc_id(), input_phy_);
+                MI_SYS_MMA_Free(runtime_.params().soc_id, input_phy_);
                 input_phy_ = 0;
             }
             input_buf_size_ = 0;

@@ -199,7 +199,7 @@ TEST(YoloV8SegSigmastarIntegration, BusHasDetectionsAndMask)
     SigmastarEngine::Params engine_params;
     engine_params.model_path = model_path.string();
 
-    SigmastarEngine engine(engine_params);
+    SigmastarEngine engine(runtime, engine_params);
     if (!engine.is_valid())
     {
         GTEST_SKIP() << "SigmastarEngine init failed (need IPU + firmware)";

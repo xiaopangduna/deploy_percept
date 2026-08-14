@@ -453,7 +453,7 @@ int main(int argc, char **argv)
         params.model_path = model_path;
         params.is_copy_host = row.is_copy_host;
 
-        SigmastarEngine engine(params);
+        SigmastarEngine engine(runtime, params);
         if (!engine.is_valid())
         {
             std::fprintf(stderr, "SigmastarEngine init failed for tag=%s\n", row.tag);

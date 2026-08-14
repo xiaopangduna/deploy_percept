@@ -304,13 +304,13 @@ int main(int argc, char **argv)
     }
     std::printf(
         "  CreateDevice var: %u bytes (%.3f MB)\n",
-        SigmastarRuntime::process_max_variable_buf_size(),
-        static_cast<double>(SigmastarRuntime::process_max_variable_buf_size()) /
+        runtime.params().max_variable_buf_size,
+        static_cast<double>(runtime.params().max_variable_buf_size) /
             (1024.0 * 1024.0));
 
     SigmastarEngine::Params yolo_params;
     yolo_params.model_path = yolo_path;
-    SigmastarEngine yolo(yolo_params);
+    SigmastarEngine yolo(runtime, yolo_params);
     if (!yolo.is_valid())
     {
         std::fprintf(stderr, "YOLOv8 SigmastarEngine init failed\n");
@@ -319,7 +319,7 @@ int main(int argc, char **argv)
 
     SigmastarEngine::Params cls_params;
     cls_params.model_path = cls_path;
-    SigmastarEngine cls(cls_params);
+    SigmastarEngine cls(runtime, cls_params);
     if (!cls.is_valid())
     {
         std::fprintf(stderr, "MobileNetV2 SigmastarEngine init failed\n");

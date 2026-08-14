@@ -24,8 +24,8 @@ namespace deploy_percept
         //   SigmastarEngine  — 模型级：CreateCHN、MMA 输入、run（每个模型一个实例）
         //
         // 使用约定：
-        //   1. 先构造 SigmastarRuntime，再构造 SigmastarEngine（可多个 Engine 共用）
-        //   2. SigmastarRuntime 须最后析构（作用域包住所有 SigmastarEngine）
+        //   1. 先构造 SigmastarRuntime，再构造 SigmastarEngine（传入 Runtime 引用）
+        //   2. SigmastarEngine 不得长于传入的 SigmastarRuntime（作用域包住所有 Engine）
         //   3. 同一进程同时只允许一个 SigmastarRuntime；析构后再构造可重新 CreateDevice
         //
         // CreateDevice 的 u32MaxVariableBufSize 取各模型 VariableBufferSize 的 **max，
@@ -42,17 +42,28 @@ namespace deploy_percept
         public:
             struct Params
             {
-                /** IPU firmware 路径（板端默认布局） */
+                /**
+                 * IPU 固件 .bin，传给 MI_IPU_CreateDevice。
+                 * 默认 /config/dla/ipu_firmware.bin 为板端常见布局。
+                 */
                 std::string firmware_path = "/config/dla/ipu_firmware.bin";
+                /**
+                 * MI_SYS_Init 的芯片/SYS 实例号；后续 MMA_Alloc / MMA_Free 也用此 id。
+                 * 单 SoC 保持 0。
+                 */
                 std::uint16_t soc_id = 0;
                 /**
-                 * CreateDevice 的 u32MaxVariableBufSize。
-                 * 0：从 model_paths 查询后取 max；非 0：与查询结果再取 max。
+                 * CreateDevice 共享 scratch（u32MaxVariableBufSize）的下限。
+                 * 0：完全由 model_paths 各 .img 头 VariableBufferSize 取 max；
+                 * 非 0：再与查询结果取 max（预留更大空间，或暂时列不出全部 .img）。
+                 * 与 model_paths 至少提供其一，否则 CreateDevice 失败。
+                 * Runtime::params() 里该字段为抬升后的生效值。
                  */
                 std::uint32_t max_variable_buf_size = 0;
                 /**
-                 * 将要 CreateCHN 的 .img。CreateDevice 前只读文件头，
-                 * 用各模型 u32VariableBufferSize 的 max 作为共享 scratch。
+                 * 本进程将要 CreateCHN 的 .img。此处只读文件头、不占 Channel，
+                 * 用各模型 u32VariableBufferSize 的 max（不是求和）作为共享 scratch。
+                 * 须列全；漏掉更大的模型会导致后续 Engine 初始化失败。
                  */
                 std::vector<std::string> model_paths;
             };
@@ -76,38 +87,35 @@ namespace deploy_percept
             /** SYS_Init + CreateDevice 是否成功 */
             bool ok() const { return ok_; }
 
-            /** 进程内 Device 是否已创建（供 Engine 检查） */
-            static bool device_ready() { return device_created_; }
-
-            static std::uint16_t process_soc_id() { return created_soc_id_; }
-            static std::uint32_t process_max_variable_buf_size()
-            {
-                return created_max_variable_buf_size_;
-            }
+            /**
+             * CreateDevice 生效配置（内部副本）。
+             * max_variable_buf_size 已按 model_paths 就地抬升；调用方传入的 Params 不被改写。
+             */
+            const Params &params() const { return params_; }
 
         private:
-            bool initDevice(const Params &params);
+            bool initDevice();
             void destroyDevice();
-            static std::uint32_t resolveMaxVariableBufSize(const Params &params);
+            bool resolveMaxVariableBufSize();
 
+            Params params_{};
             bool ok_{false};
+            bool sys_inited_{false};
+            bool device_created_{false};
 
-            static bool sys_inited_;
-            static bool device_created_;
-            static std::uint16_t created_soc_id_;
-            static std::uint32_t created_max_variable_buf_size_;
+            static SigmastarRuntime *live_;
         };
 
         /**
          * Sigmastar MI_IPU 单模型推理引擎（离线 .img）。
          *
-         * 前置条件：进程内已成功 CreateDevice（由同命名空间 SigmastarRuntime 保证）。
+         * 前置条件：传入的 SigmastarRuntime 已 ok()。Engine 不得长于该 Runtime。
          *
          * 典型流程（默认 is_copy_host）：
          *   SigmastarRuntime::Params runtime_params;
          *   runtime_params.model_paths = {model_path};
          *   SigmastarRuntime runtime(runtime_params);
-         *   SigmastarEngine engine(params);
+         *   SigmastarEngine engine(runtime, params);
          *   engine.run(input, size);
          *   // 读 engine.getResult().tensor_views
          *   engine.releaseResult();
@@ -161,11 +169,13 @@ namespace deploy_percept
             {
             };
 
-            explicit SigmastarEngine(const Params &params);
+            explicit SigmastarEngine(SigmastarRuntime &runtime, const Params &params);
             ~SigmastarEngine() override;
 
             SigmastarEngine(const SigmastarEngine &) = delete;
             SigmastarEngine &operator=(const SigmastarEngine &) = delete;
+            SigmastarEngine(SigmastarEngine &&) = delete;
+            SigmastarEngine &operator=(SigmastarEngine &&) = delete;
 
             const Params &getParams() const { return params_; }
             const Info &getInfo() const { return info_; }
@@ -193,6 +203,7 @@ namespace deploy_percept
             bool copyMappedOutputsToHost();
             void release_outputs();
 
+            SigmastarRuntime &runtime_;
             Params params_;
             Info info_{};
             Result result_{};
