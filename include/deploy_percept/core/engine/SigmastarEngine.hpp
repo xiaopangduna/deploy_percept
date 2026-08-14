@@ -26,7 +26,7 @@ namespace deploy_percept
         // 使用约定：
         //   1. 先构造 SigmastarRuntime，再构造 SigmastarEngine（可多个 Engine 共用）
         //   2. SigmastarRuntime 须最后析构（作用域包住所有 SigmastarEngine）
-        //   3. 同一进程内多个 SigmastarRuntime 仍只 CreateDevice 一次（引用计数）
+        //   3. 同一进程同时只允许一个 SigmastarRuntime；析构后再构造可重新 CreateDevice
         //
         // CreateDevice 的 u32MaxVariableBufSize 取各模型 VariableBufferSize 的 **max，
         // 不是求和**：该 buffer 是 IPU 推理时的共享 scratch，同一时刻只有一个 Invoke
@@ -60,19 +60,24 @@ namespace deploy_percept
             explicit SigmastarRuntime(const Params &params);
             ~SigmastarRuntime();
 
+            /**
+             * 禁止拷贝 / 移动（Rule of Five：自定义析构后须显式处理这四者）。
+             * 本对象独占进程级 Device，没有可「移交」的所有权。
+             */
+            /** 禁止拷贝构造（Runtime b = a）。默认拷贝后两个对象都会在析构时 DestroyDevice。 */
             SigmastarRuntime(const SigmastarRuntime &) = delete;
+            /** 禁止拷贝赋值（b = a）。默认赋值不释放左边已有 Device，且与右边双重销毁。 */
             SigmastarRuntime &operator=(const SigmastarRuntime &) = delete;
+            /** 禁止移动构造（Runtime b = std::move(a)）。默认移动不把源 ok_ 置 false，两边析构会 double-destroy。 */
             SigmastarRuntime(SigmastarRuntime &&) = delete;
+            /** 禁止移动赋值（b = std::move(a)）。同上：源对象所有权未交出，左边原 Device 也无法正确释放。 */
             SigmastarRuntime &operator=(SigmastarRuntime &&) = delete;
 
-            /** SYS_Init + CreateDevice 是否成功（或已由同进程其它实例完成） */
+            /** SYS_Init + CreateDevice 是否成功 */
             bool ok() const { return ok_; }
 
-            std::uint16_t soc_id() const { return created_soc_id_; }
-            std::uint32_t max_variable_buf_size() const { return created_max_variable_buf_size_; }
-
             /** 进程内 Device 是否已创建（供 Engine 检查） */
-            static bool device_ready() { return device_created_ && ref_count_ > 0; }
+            static bool device_ready() { return device_created_; }
 
             static std::uint16_t process_soc_id() { return created_soc_id_; }
             static std::uint32_t process_max_variable_buf_size()
@@ -80,18 +85,13 @@ namespace deploy_percept
                 return created_max_variable_buf_size_;
             }
 
-            /** 读 .img 头中的 VariableBufferSize，不占 IPU Channel。失败返回 0。 */
-            static std::uint32_t queryVariableBufferSize(const std::string &model_path);
-
         private:
             bool initDevice(const Params &params);
             void destroyDevice();
-            static std::uint32_t resolveMaxVariableBufSize(const Params &params, bool log_errors);
+            static std::uint32_t resolveMaxVariableBufSize(const Params &params);
 
             bool ok_{false};
-            bool acquired_{false};
 
-            static int ref_count_;
             static bool sys_inited_;
             static bool device_created_;
             static std::uint16_t created_soc_id_;

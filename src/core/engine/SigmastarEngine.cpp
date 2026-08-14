@@ -100,32 +100,31 @@ namespace deploy_percept
                 }
             }
 
+            /** 读 .img 头中的 VariableBufferSize，不占 IPU Channel。失败返回 0。 */
+            std::uint32_t queryVariableBufferSize(const std::string &model_path)
+            {
+                if (model_path.empty())
+                {
+                    return 0;
+                }
+                auto path = mutableCStr(model_path);
+                MI_IPU_OfflineModelStaticInfo_t offline_info{};
+                if (MI_IPU_GetOfflineModeStaticInfo(nullptr, path.data(), &offline_info) !=
+                    MI_SUCCESS)
+                {
+                    return 0;
+                }
+                return offline_info.u32VariableBufferSize;
+            }
+
         } // namespace
 
-        int SigmastarRuntime::ref_count_ = 0;
         bool SigmastarRuntime::sys_inited_ = false;
         bool SigmastarRuntime::device_created_ = false;
         std::uint16_t SigmastarRuntime::created_soc_id_ = 0;
         std::uint32_t SigmastarRuntime::created_max_variable_buf_size_ = 0;
 
-        std::uint32_t SigmastarRuntime::queryVariableBufferSize(const std::string &model_path)
-        {
-            if (model_path.empty())
-            {
-                return 0;
-            }
-            auto path = mutableCStr(model_path);
-            MI_IPU_OfflineModelStaticInfo_t offline_info{};
-            if (MI_IPU_GetOfflineModeStaticInfo(nullptr, path.data(), &offline_info) != MI_SUCCESS)
-            {
-                return 0;
-            }
-            return offline_info.u32VariableBufferSize;
-        }
-
-        std::uint32_t SigmastarRuntime::resolveMaxVariableBufSize(
-            const Params &params,
-            bool log_errors)
+        std::uint32_t SigmastarRuntime::resolveMaxVariableBufSize(const Params &params)
         {
             std::uint32_t needed = params.max_variable_buf_size;
             for (const auto &path : params.model_paths)
@@ -133,13 +132,10 @@ namespace deploy_percept
                 const std::uint32_t var = queryVariableBufferSize(path);
                 if (var == 0)
                 {
-                    if (log_errors)
-                    {
-                        std::fprintf(
-                            stderr,
-                            "SigmastarRuntime: GetOfflineModeStaticInfo failed (%s)\n",
-                            path.c_str());
-                    }
+                    std::fprintf(
+                        stderr,
+                        "SigmastarRuntime: GetOfflineModeStaticInfo failed (%s)\n",
+                        path.c_str());
                     return 0;
                 }
                 needed = std::max(needed, var);
@@ -149,54 +145,29 @@ namespace deploy_percept
 
         SigmastarRuntime::SigmastarRuntime(const Params &params)
         {
-            if (ref_count_++ == 0)
+            if (device_created_)
             {
-                if (!initDevice(params))
-                {
-                    destroyDevice();
-                    --ref_count_;
-                    return;
-                }
+                std::fprintf(
+                    stderr,
+                    "SigmastarRuntime: already created (one Runtime per process)\n");
+                return;
             }
-            else
+            if (!initDevice(params))
             {
-                const std::uint32_t needed = resolveMaxVariableBufSize(params, true);
-                if (!params.model_paths.empty() || params.max_variable_buf_size > 0)
-                {
-                    if (needed == 0)
-                    {
-                        --ref_count_;
-                        return;
-                    }
-                    if (needed > created_max_variable_buf_size_)
-                    {
-                        std::fprintf(
-                            stderr,
-                            "SigmastarRuntime: model var %u exceeds CreateDevice max %u "
-                            "(recreate Runtime with all model_paths)\n",
-                            needed,
-                            created_max_variable_buf_size_);
-                        --ref_count_;
-                        return;
-                    }
-                }
+                destroyDevice();
+                return;
             }
-            acquired_ = true;
             ok_ = true;
         }
 
         SigmastarRuntime::~SigmastarRuntime()
         {
-            if (!acquired_)
+            if (!ok_)
             {
                 return;
             }
-            acquired_ = false;
             ok_ = false;
-            if (ref_count_ > 0 && --ref_count_ == 0)
-            {
-                destroyDevice();
-            }
+            destroyDevice();
         }
 
         bool SigmastarRuntime::initDevice(const Params &params)
@@ -209,7 +180,7 @@ namespace deploy_percept
             sys_inited_ = true;
             created_soc_id_ = params.soc_id;
 
-            const std::uint32_t needed = resolveMaxVariableBufSize(params, true);
+            const std::uint32_t needed = resolveMaxVariableBufSize(params);
             if (needed == 0)
             {
                 std::fprintf(
@@ -411,8 +382,7 @@ namespace deploy_percept
                 return false;
             }
 
-            const std::uint32_t var =
-                SigmastarRuntime::queryVariableBufferSize(params_.model_path);
+            const std::uint32_t var = queryVariableBufferSize(params_.model_path);
             if (var == 0)
             {
                 std::fprintf(

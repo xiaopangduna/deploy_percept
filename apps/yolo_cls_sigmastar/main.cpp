@@ -304,8 +304,9 @@ int main(int argc, char **argv)
     }
     std::printf(
         "  CreateDevice var: %u bytes (%.3f MB)\n",
-        runtime.max_variable_buf_size(),
-        static_cast<double>(runtime.max_variable_buf_size()) / (1024.0 * 1024.0));
+        SigmastarRuntime::process_max_variable_buf_size(),
+        static_cast<double>(SigmastarRuntime::process_max_variable_buf_size()) /
+            (1024.0 * 1024.0));
 
     SigmastarEngine::Params yolo_params;
     yolo_params.model_path = yolo_path;
