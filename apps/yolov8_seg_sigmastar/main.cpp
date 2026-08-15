@@ -26,8 +26,8 @@ namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
-using deploy_percept::engine::ipu_output_scalars;
-using deploy_percept::engine::ipu_output_shapes;
+using deploy_percept::engine::extract_fscalars_from_MI_IPU_TensorDesc_t;
+using deploy_percept::engine::extract_shapes_from_MI_IPU_TensorDesc_t;
 using deploy_percept::post_process::YoloV8SegPostProcessSigmastar;
 using deploy_percept::data::kCoco80Labels;
 using deploy_percept::utils::drawSegmentationResults;
@@ -285,8 +285,10 @@ int main(int argc, char **argv)
     YoloV8SegPostProcessSigmastar::Params post_params;
     post_params.model_in_w = model_w;
     post_params.model_in_h = model_h;
-    post_params.output_shapes = ipu_output_shapes(desc);
-    post_params.output_scalars = ipu_output_scalars(desc);
+    post_params.output_shapes = extract_shapes_from_MI_IPU_TensorDesc_t(
+        desc.astMI_OutputTensorDescs, desc.u32OutputTensorCount);
+    post_params.output_scalars = extract_fscalars_from_MI_IPU_TensorDesc_t(
+        desc.astMI_OutputTensorDescs, desc.u32OutputTensorCount);
 
     YoloV8SegPostProcessSigmastar processor(post_params);
     if (!processor.run(tensor_views))

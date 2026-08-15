@@ -7,7 +7,6 @@
 #include "mi_ipu.h"
 #include "mi_sys.h"
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -103,8 +102,8 @@ namespace deploy_percept
 
             Params params_{};
             bool ok_{false};
-            bool sys_inited_{false};
-            bool device_created_{false};
+            bool has_sys_{false};
+            bool has_device_{false};
         };
 
         /**
@@ -140,12 +139,14 @@ namespace deploy_percept
             };
 
             /**
-             * 构造后固定的 IO 元信息。desc 为 GetInOutTensorDesc 原样。
-             * 常见布局：shape[1]=H, shape[2]=W（以模型实际 layout 为准）。
+             * 构造成功后固定的实例事实（调用方只读）。
+             * desc：GetInOutTensorDesc 原样；常见 layout 为 shape[1]=H, shape[2]=W。
+             * channel_id：CreateCHN 写回的 SDK 句柄，析构 DestroyCHN 后清零。
              */
             struct Info
             {
                 MI_IPU_SubNet_InputOutputDesc_t desc{};
+                MI_IPU_CHN channel_id{0};
             };
 
             struct Result : BaseEngine::Result
@@ -194,10 +195,8 @@ namespace deploy_percept
             Result result_{};
 
             bool ok_{false};
-            bool channel_created_{false};
-            bool outputs_held_{false};
-
-            MI_IPU_CHN channel_id_{0};
+            bool has_channel_{false};
+            bool has_outputs_{false};
 
             void *input_virt_{nullptr};
             MI_PHY input_phy_{0};
@@ -206,30 +205,39 @@ namespace deploy_percept
             std::vector<std::vector<std::uint8_t>> host_output_storage_;
         };
 
-        /** 从 desc 抄输出 shape 前 6 维，供后处理 Params.output_shapes */
-        inline std::vector<std::array<std::uint32_t, 6>> ipu_output_shapes(
-            const MI_IPU_SubNet_InputOutputDesc_t &desc)
+        /** 从 TensorDesc 数组抽出 u32TensorShape[0..u32TensorDim)（输入/输出侧均可） */
+        inline std::vector<std::vector<std::uint32_t>> extract_shapes_from_MI_IPU_TensorDesc_t(
+            const MI_IPU_TensorDesc_t *descs, MI_U32 count)
         {
-            std::vector<std::array<std::uint32_t, 6>> out(desc.u32OutputTensorCount);
-            for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
+            if (descs == nullptr || count == 0)
             {
-                const auto &t = desc.astMI_OutputTensorDescs[i];
-                const MI_U32 dims = t.u32TensorDim > 6u ? 6u : t.u32TensorDim;
-                for (MI_U32 d = 0; d < dims; ++d)
+                return {};
+            }
+            std::vector<std::vector<std::uint32_t>> out(count);
+            for (MI_U32 i = 0; i < count; ++i)
+            {
+                MI_U32 dims = descs[i].u32TensorDim;
+                if (dims > MI_IPU_MAX_TENSOR_DIM)
                 {
-                    out[i][d] = t.u32TensorShape[d];
+                    dims = MI_IPU_MAX_TENSOR_DIM;
                 }
+                out[i].assign(descs[i].u32TensorShape, descs[i].u32TensorShape + dims);
             }
             return out;
         }
 
-        /** 从 desc 抄 fScalar，供后处理 Params.output_scalars */
-        inline std::vector<float> ipu_output_scalars(const MI_IPU_SubNet_InputOutputDesc_t &desc)
+        /** 从 TensorDesc 数组抽出 fScalar（输入/输出侧均可） */
+        inline std::vector<float> extract_fscalars_from_MI_IPU_TensorDesc_t(
+            const MI_IPU_TensorDesc_t *descs, MI_U32 count)
         {
-            std::vector<float> out(desc.u32OutputTensorCount);
-            for (MI_U32 i = 0; i < desc.u32OutputTensorCount; ++i)
+            if (descs == nullptr || count == 0)
             {
-                out[i] = desc.astMI_OutputTensorDescs[i].fScalar;
+                return {};
+            }
+            std::vector<float> out(count);
+            for (MI_U32 i = 0; i < count; ++i)
+            {
+                out[i] = descs[i].fScalar;
             }
             return out;
         }

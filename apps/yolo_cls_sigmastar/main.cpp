@@ -35,8 +35,8 @@ namespace fs = std::filesystem;
 
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
-using deploy_percept::engine::ipu_output_scalars;
-using deploy_percept::engine::ipu_output_shapes;
+using deploy_percept::engine::extract_fscalars_from_MI_IPU_TensorDesc_t;
+using deploy_percept::engine::extract_shapes_from_MI_IPU_TensorDesc_t;
 using deploy_percept::post_process::ClassificationPostProcessSigmastar;
 using deploy_percept::post_process::YoloV8DetectPostProcessSigmastar;
 using deploy_percept::data::kCoco80Labels;
@@ -379,8 +379,11 @@ int main(int argc, char **argv)
     YoloV8DetectPostProcessSigmastar::Params yolo_post_params;
     yolo_post_params.model_in_w = yolo_w;
     yolo_post_params.model_in_h = yolo_h;
-    yolo_post_params.output_shapes = ipu_output_shapes(yolo.getInfo().desc);
-    yolo_post_params.output_scalars = ipu_output_scalars(yolo.getInfo().desc);
+    const auto &yolo_desc = yolo.getInfo().desc;
+    yolo_post_params.output_shapes = extract_shapes_from_MI_IPU_TensorDesc_t(
+        yolo_desc.astMI_OutputTensorDescs, yolo_desc.u32OutputTensorCount);
+    yolo_post_params.output_scalars = extract_fscalars_from_MI_IPU_TensorDesc_t(
+        yolo_desc.astMI_OutputTensorDescs, yolo_desc.u32OutputTensorCount);
     YoloV8DetectPostProcessSigmastar yolo_post(yolo_post_params);
 
     ClassificationPostProcessSigmastar cls_post({

@@ -3,7 +3,6 @@
 #include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 #include "deploy_percept/common/types.hpp"
 
-#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -34,8 +33,9 @@ namespace deploy_percept
                 int num_classes = 80;
                 int obj_numb_max_size = 128;
 
-                /** 与 run() 的 inputs 下标对齐（ipu_output_shapes / ipu_output_scalars(desc)） */
-                std::vector<std::array<std::uint32_t, 6>> output_shapes;
+                /** 与 run() 的 inputs 下标对齐（extract_shapes_from_MI_IPU_TensorDesc_t /
+                 *  extract_fscalars_from_MI_IPU_TensorDesc_t） */
+                std::vector<std::vector<std::uint32_t>> output_shapes;
                 std::vector<float> output_scalars;
             };
 

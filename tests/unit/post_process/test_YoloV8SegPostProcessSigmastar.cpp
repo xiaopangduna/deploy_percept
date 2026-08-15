@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -16,7 +15,7 @@ TEST(YoloV8SegPostProcessSigmastarTest, RejectsWrongOutputCount)
     YoloV8SegPostProcessSigmastar processor({
         .model_in_h = 640,
         .model_in_w = 640,
-        .output_shapes = {std::array<std::uint32_t, 6>{1, 116, 8400, 0, 0, 0}},
+        .output_shapes = {{1, 116, 8400}},
         .output_scalars = {1.f},
     });
 
@@ -62,8 +61,8 @@ TEST(YoloV8SegPostProcessSigmastarTest, FusedFp32OneBoxWithMask)
         .num_classes = kNumClasses,
         .output_shapes =
             {
-                std::array<std::uint32_t, 6>{1, static_cast<std::uint32_t>(kChannels), kNumBoxes, 0, 0, 0},
-                std::array<std::uint32_t, 6>{1, kMaskH, kMaskW, static_cast<std::uint32_t>(kMaskC), 0, 0},
+                {1, static_cast<std::uint32_t>(kChannels), kNumBoxes},
+                {1, kMaskH, kMaskW, static_cast<std::uint32_t>(kMaskC)},
             },
         .output_scalars = {1.f, 1.f},
     });

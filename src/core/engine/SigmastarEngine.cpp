@@ -129,7 +129,7 @@ namespace deploy_percept
                 std::fprintf(stderr, "SigmastarRuntime: MI_SYS_Init failed\n");
                 return false;
             }
-            sys_inited_ = true;
+            has_sys_ = true;
 
             if (!resolveMaxVariableBufSize())
             {
@@ -150,21 +150,21 @@ namespace deploy_percept
                     params_.max_variable_buf_size);
                 return false;
             }
-            device_created_ = true;
+            has_device_ = true;
             return true;
         }
 
         void SigmastarRuntime::destroyDevice()
         {
-            if (device_created_)
+            if (has_device_)
             {
                 MI_IPU_DestroyDevice();
-                device_created_ = false;
+                has_device_ = false;
             }
-            if (sys_inited_)
+            if (has_sys_)
             {
                 MI_SYS_Exit(params_.soc_id);
-                sys_inited_ = false;
+                has_sys_ = false;
             }
         }
 
@@ -239,6 +239,11 @@ namespace deploy_percept
         std::string SigmastarEngine::dump_info() const
         {
             std::string out = "SigmastarEngine Info:\n";
+            {
+                char line[64];
+                std::snprintf(line, sizeof(line), "  channel_id=%u\n", info_.channel_id);
+                out += line;
+            }
             auto dump_side = [&](const char *tag,
                                  const MI_IPU_TensorDesc_t *descs,
                                  MI_U32 count) {
@@ -328,16 +333,16 @@ namespace deploy_percept
             chn_attr.u32InputBufDepth = 0;
             chn_attr.u32OutputBufDepth = 1;
 
-            if (MI_IPU_CreateCHN(&channel_id_, &chn_attr, nullptr, model_path.data()) !=
+            if (MI_IPU_CreateCHN(&info_.channel_id, &chn_attr, nullptr, model_path.data()) !=
                 MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: CreateCHN failed\n");
                 return false;
             }
-            channel_created_ = true;
+            has_channel_ = true;
 
             info_.desc = {};
-            if (MI_IPU_GetInOutTensorDesc(channel_id_, &info_.desc) != MI_SUCCESS)
+            if (MI_IPU_GetInOutTensorDesc(info_.channel_id, &info_.desc) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: GetInOutTensorDesc failed\n");
                 return false;
@@ -413,14 +418,14 @@ namespace deploy_percept
             input_vector.astArrayTensors[0].ptTensorData[0] = input_virt_;
 
             std::memset(&output_tensor_vector_, 0, sizeof(output_tensor_vector_));
-            if (MI_IPU_GetOutputTensors(channel_id_, &output_tensor_vector_) != MI_SUCCESS)
+            if (MI_IPU_GetOutputTensors(info_.channel_id, &output_tensor_vector_) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: GetOutputTensors failed\n");
                 return false;
             }
-            outputs_held_ = true;
+            has_outputs_ = true;
 
-            if (MI_IPU_Invoke(channel_id_, &input_vector, &output_tensor_vector_) != MI_SUCCESS)
+            if (MI_IPU_Invoke(info_.channel_id, &input_vector, &output_tensor_vector_) != MI_SUCCESS)
             {
                 std::fprintf(stderr, "SigmastarEngine: Invoke failed\n");
                 return false;
@@ -467,10 +472,10 @@ namespace deploy_percept
 
         void SigmastarEngine::release_outputs()
         {
-            if (outputs_held_)
+            if (has_outputs_)
             {
-                MI_IPU_PutOutputTensors(channel_id_, &output_tensor_vector_);
-                outputs_held_ = false;
+                MI_IPU_PutOutputTensors(info_.channel_id, &output_tensor_vector_);
+                has_outputs_ = false;
                 std::memset(&output_tensor_vector_, 0, sizeof(output_tensor_vector_));
             }
 
@@ -498,11 +503,11 @@ namespace deploy_percept
                 input_phy_ = 0;
             }
 
-            if (channel_created_)
+            if (has_channel_)
             {
-                MI_IPU_DestroyCHN(channel_id_);
-                channel_created_ = false;
-                channel_id_ = 0;
+                MI_IPU_DestroyCHN(info_.channel_id);
+                has_channel_ = false;
+                info_.channel_id = 0;
             }
         }
 

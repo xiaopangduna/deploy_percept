@@ -2,7 +2,6 @@
 
 #include "deploy_percept/core/post_process/YoloDetectPostProcess.hpp"
 
-#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -19,7 +18,8 @@ namespace deploy_percept
          *   - 3 路：CPU DFL decode（每层 INT16/FP32）
          *   - 5 路：Pure IPU 输出（bboxes/class/score/index/num）
          *
-         * 调用前用 ipu_output_shapes / ipu_output_scalars(engine.getInfo().desc) 填写。
+         * 调用前用 extract_shapes_from_MI_IPU_TensorDesc_t /
+         * extract_fscalars_from_MI_IPU_TensorDesc_t 填写。
          */
         class YoloV8DetectPostProcessSigmastar : public YoloDetectPostProcess
         {
@@ -33,8 +33,9 @@ namespace deploy_percept
                 int obj_numb_max_size = 128;
                 int reg_max = 16;
 
-                /** 与 run() 的 inputs 下标对齐（ipu_output_shapes / ipu_output_scalars(desc)） */
-                std::vector<std::array<std::uint32_t, 6>> output_shapes;
+                /** 与 run() 的 inputs 下标对齐（extract_shapes_from_MI_IPU_TensorDesc_t /
+                 *  extract_fscalars_from_MI_IPU_TensorDesc_t） */
+                std::vector<std::vector<std::uint32_t>> output_shapes;
                 std::vector<float> output_scalars;
             };
 
