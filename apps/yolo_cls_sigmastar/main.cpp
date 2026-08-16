@@ -30,6 +30,7 @@
 #include "deploy_percept/core/post_process/YoloV8DetectPostProcessSigmastar.hpp"
 #include "deploy_percept/data/class_labels.hpp"
 #include "deploy_percept/utils/vis_draw.hpp"
+#include "deploy_percept/version.hpp"
 
 namespace fs = std::filesystem;
 
@@ -277,7 +278,8 @@ int main(int argc, char **argv)
     const char *cls_input = cls_in_str.c_str();
     const char *output_path = (argi + 4 < argc) ? argv[argi + 4] : kDefaultOutput;
 
-    std::printf("yolo_cls_sigmastar\n");
+    std::printf("yolo_cls_sigmastar  deploy_percept %s\n",
+                DEPLOY_PERCEPT_VERSION_STRING);
     std::printf("  yolo   : %s\n", yolo_path);
     std::printf("  cls    : %s\n", cls_path);
     std::printf("  detect : %s\n", detect_input);
@@ -311,6 +313,7 @@ int main(int argc, char **argv)
     SigmastarEngine::Params yolo_params;
     yolo_params.model_path = yolo_path;
     SigmastarEngine yolo(runtime, yolo_params);
+    std::printf("yolo: %s\n", yolo.dump_info().c_str());
     if (!yolo.ok())
     {
         std::fprintf(stderr, "YOLOv8 SigmastarEngine init failed\n");
@@ -320,6 +323,7 @@ int main(int argc, char **argv)
     SigmastarEngine::Params cls_params;
     cls_params.model_path = cls_path;
     SigmastarEngine cls(runtime, cls_params);
+    std::printf("cls: %s\n", cls.dump_info().c_str());
     if (!cls.ok())
     {
         std::fprintf(stderr, "MobileNetV2 SigmastarEngine init failed\n");

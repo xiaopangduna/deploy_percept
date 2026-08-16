@@ -14,10 +14,15 @@ option(INSTALL_PROFILING "Install profiling tools to profiling/ (requires ENABLE
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+configure_file(
+    ${CMAKE_SOURCE_DIR}/include/deploy_percept/version.hpp.in
+    ${CMAKE_BINARY_DIR}/generated/deploy_percept/version.hpp
+    @ONLY)
 
 # 工具链/平台变量见各 toolchain 文件；此处仅打印 project() 之后的工程配置
 message(STATUS "==============================================================================")
 message(STATUS "项目配置:")
+message(STATUS "  PROJECT_VERSION            = ${PROJECT_VERSION}")
 message(STATUS "  CMAKE_BUILD_TYPE           = ${CMAKE_BUILD_TYPE}")
 message(STATUS "  CMAKE_CXX_STANDARD         = ${CMAKE_CXX_STANDARD}")
 message(STATUS "  CMAKE_CROSSCOMPILING       = ${CMAKE_CROSSCOMPILING}")
