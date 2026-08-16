@@ -71,23 +71,8 @@ namespace deploy_percept
             explicit SigmastarRuntime(const Params &params);
             ~SigmastarRuntime();
 
-            /**
-             * 禁止拷贝 / 移动（Rule of Five：自定义析构后须显式处理这四者）。
-             * 本对象独占进程级 Device，没有可「移交」的所有权。
-             */
-            /** 禁止拷贝构造（Runtime b = a）。默认拷贝后两个对象都会在析构时 DestroyDevice。 */
-            SigmastarRuntime(const SigmastarRuntime &) = delete;
-            /** 禁止拷贝赋值（b = a）。默认赋值不释放左边已有 Device，且与右边双重销毁。 */
-            SigmastarRuntime &operator=(const SigmastarRuntime &) = delete;
-            /** 禁止移动构造（Runtime b = std::move(a)）。默认移动不把源 ok_ 置 false，两边析构会 double-destroy。 */
-            SigmastarRuntime(SigmastarRuntime &&) = delete;
-            /** 禁止移动赋值（b = std::move(a)）。同上：源对象所有权未交出，左边原 Device 也无法正确释放。 */
-            SigmastarRuntime &operator=(SigmastarRuntime &&) = delete;
-
             /** SYS_Init + CreateDevice 是否成功 */
             bool ok() const { return ok_; }
-            /** 同 ok()，供 if (runtime) 使用 */
-            explicit operator bool() const { return ok(); }
 
             /**
              * CreateDevice 生效配置（内部副本）。
@@ -156,18 +141,11 @@ namespace deploy_percept
             explicit SigmastarEngine(SigmastarRuntime &runtime, const Params &params);
             ~SigmastarEngine() override;
 
-            SigmastarEngine(const SigmastarEngine &) = delete;
-            SigmastarEngine &operator=(const SigmastarEngine &) = delete;
-            SigmastarEngine(SigmastarEngine &&) = delete;
-            SigmastarEngine &operator=(SigmastarEngine &&) = delete;
-
             const Params &getParams() const { return params_; }
             const Info &getInfo() const { return info_; }
             const Result &getResult() const override { return result_; }
             /** 构造是否成功（CreateCHN、MMA 输入） */
             bool ok() const { return ok_; }
-            /** 同 ok()，供 if (engine) 使用 */
-            explicit operator bool() const { return ok(); }
 
             std::string dump_info() const;
 

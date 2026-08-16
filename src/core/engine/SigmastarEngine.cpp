@@ -50,6 +50,11 @@ namespace deploy_percept
                 }
             }
 
+            TensorView makeOutputView(const MI_IPU_TensorDesc_t &t, const void *data)
+            {
+                return {data, t.u32BufSize, dtypeFromElmFormat(t.eElmFormat)};
+            }
+
             std::vector<char> mutableCStr(const std::string &s)
             {
                 std::vector<char> buf(s.begin(), s.end());
@@ -219,12 +224,9 @@ namespace deploy_percept
             result_.tensor_views.reserve(info_.desc.u32OutputTensorCount);
             for (MI_U32 i = 0; i < info_.desc.u32OutputTensorCount; ++i)
             {
-                const auto &t = info_.desc.astMI_OutputTensorDescs[i];
-                TensorView view{};
-                view.byte_size = t.u32BufSize;
-                view.data = output_tensor_vector_.astArrayTensors[i].ptTensorData[0];
-                view.dtype = dtypeFromElmFormat(t.eElmFormat);
-                result_.tensor_views.push_back(view);
+                result_.tensor_views.push_back(makeOutputView(
+                    info_.desc.astMI_OutputTensorDescs[i],
+                    output_tensor_vector_.astArrayTensors[i].ptTensorData[0]));
             }
             return true;
         }
@@ -460,12 +462,7 @@ namespace deploy_percept
                 }
                 host_output_storage_[i].resize(t.u32BufSize);
                 std::memcpy(host_output_storage_[i].data(), src, t.u32BufSize);
-
-                TensorView view{};
-                view.data = host_output_storage_[i].data();
-                view.byte_size = t.u32BufSize;
-                view.dtype = dtypeFromElmFormat(t.eElmFormat);
-                result_.tensor_views.push_back(view);
+                result_.tensor_views.push_back(makeOutputView(t, host_output_storage_[i].data()));
             }
             return true;
         }
