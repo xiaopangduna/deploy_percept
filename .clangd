@@ -1,0 +1,26 @@
+# clangd 从工程根目录的 compile_commands.json 读编译命令。
+# GCC 的 -march=armv7-a+neon-vfpv4 不被 clang 识别，去掉以免 driver 报错、AST 不完整。
+CompileFlags:
+  Remove:
+    - -march=armv7-a+neon-vfpv4
+
+---
+# 这些源文件整文件包在 #ifdef SIGMASTAR_FOUND 中。
+# 未命中 compile_commands 时会被当成未激活，F12 无法跳转。
+# PathMatch 为 POSIX 正则（不支持 (?i)）。
+If:
+  PathMatch: .*[Ss]igmastar.*
+CompileFlags:
+  Add:
+    - -DSIGMASTAR_FOUND=1
+    - -I/workspace/deep_learning/src/deploy_percept/include
+    - -I/workspace/deep_learning/src/deploy_percept/third_party/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355/sigmastar/release/include
+    - -I/workspace/deep_learning/src/deploy_percept/third_party/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355/sigmastar/release/include/ipu/pcupid
+
+---
+If:
+  PathMatch: .*[Aa]wnn.*
+CompileFlags:
+  Add:
+    - -DAWNN_FOUND=1
+    - -I/workspace/deep_learning/src/deploy_percept/include

@@ -6,5 +6,11 @@
     "--output-on-failure",
     "-V"
   ],
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json"
+  "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+  "clangd.arguments": [
+    "--query-driver=/opt/toolchains/**/bin/*g++,/opt/toolchains/**/bin/*gcc",
+    "--background-index"
+  ]
 }

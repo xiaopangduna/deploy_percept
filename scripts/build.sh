@@ -80,7 +80,10 @@ echo "==============================="
 ##########################################################################
 # 核心构建逻辑
 cmake --preset="${PRESET}"
+# clangd 从工程根目录读 compile_commands.json（.gitignore，不入库）
+ln -sfn "build/${PRESET}/compile_commands.json" "${PROJECT_ROOT}/compile_commands.json"
 cmake --build --preset="${PRESET}"
+
 
 echo ""
 echo "构建完成: ${BUILD_DIR}"
