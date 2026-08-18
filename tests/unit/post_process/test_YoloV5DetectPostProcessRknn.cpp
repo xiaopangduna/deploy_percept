@@ -34,9 +34,9 @@ protected:
         processor = std::make_unique<YoloV5DetectPostProcessRknn>(YoloV5DetectPostProcessRknn::Params{});
 
         model_outputs_npz = cnpy::npz_load(
-            fixture_data("unit/post_process/yolov5_detect/model_outputs.npz").string());
+            fixture_data("unit/post_process/yolov5_detect_rknn.npz").string());
 
-        img = cv::imread(fixture_data("unit/post_process/yolov5_detect/bus.jpg").string());
+        img = cv::imread(fixture_data("unit/post_process/bus.jpg").string());
     }
 
     std::unique_ptr<YoloV5DetectPostProcessRknn> processor;

@@ -31,7 +31,7 @@ class YoloV8DetectPostProcessAwnnTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        const fs::path npz_path = fixture_data("unit/post_process/yolov8_detect_awnn/model_outputs.npz");
+        const fs::path npz_path = fixture_data("unit/post_process/yolov8_detect_awnn.npz");
         if (!fs::is_regular_file(npz_path))
         {
             GTEST_SKIP() << "fixture not found (dump on board first): " << npz_path;
@@ -47,7 +47,7 @@ protected:
         model_outputs_npz = cnpy::npz_load(npz_path.string());
 
         const cv::Mat orig = cv::imread(
-            fixture_data("unit/post_process/yolov8_detect_awnn/dog.jpg").string());
+            fixture_data("unit/post_process/dog.jpg").string());
         cv::resize(orig, img, cv::Size(params.model_in_w, params.model_in_h));
     }
 

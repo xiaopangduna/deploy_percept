@@ -25,7 +25,7 @@ protected:
     void SetUp() override
     {
         const fs::path npz_path =
-            fixture_data("unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz");
+            fixture_data("unit/post_process/mobilenetv2_classify_awnn.npz");
         if (!fs::is_regular_file(npz_path))
         {
             GTEST_SKIP() << "fixture not found (dump on board first): " << npz_path;

@@ -35,10 +35,10 @@ protected:
         processor = std::make_unique<YoloV8SegPostProcessRknn>(YoloV8SegPostProcessRknn::Params{});
 
         model_outputs_npz = cnpy::npz_load(
-            fixture_data("unit/post_process/yolov8_seg/model_outputs.npz").string());
+            fixture_data("unit/post_process/yolov8_seg_rknn.npz").string());
 
-        path_seg_result = fixture_data("unit/post_process/yolov8_seg/mask.bin");
-        img = cv::imread(fixture_data("unit/post_process/yolov8_seg/bus.jpg").string());
+        path_seg_result = fixture_data("unit/post_process/yolov8_seg_rknn_mask.bin");
+        img = cv::imread(fixture_data("unit/post_process/bus.jpg").string());
     }
 
     std::unique_ptr<YoloV8SegPostProcessRknn> processor;

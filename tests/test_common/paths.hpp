@@ -18,7 +18,7 @@ std::filesystem::path install_output_dir();
 /**
  * Resolve a file under tests/fixtures (source tree) or share/percept/fixtures (install).
  *
- * @p relative e.g. "unit/post_process/yolov5_seg/model_outputs.npz"
+ * @p relative e.g. "unit/post_process/yolov5_seg_rknn.npz"
  *              or "integration/awnn/yolov5_a733.nb"
  */
 std::filesystem::path fixture_path(const std::string &relative);

@@ -60,7 +60,7 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
   /tmp/model_outputs.npz
 ```
 
-拷回 PC 后置于 `tests/fixtures/unit/post_process/mobilenetv2_classify_awnn/model_outputs.npz`。
+拷回 PC 后置于 `tests/fixtures/unit/post_process/mobilenetv2_classify_awnn.npz`。
 
 ### 资源画像（`--duration-sec`）
 
