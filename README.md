@@ -18,6 +18,8 @@
 
 ## 构建与测试
 
+
+
 ### 1. 工具链
 
 - **x86_64**：无需额外配置，使用宿主机或 devcontainer 自带编译器。
@@ -135,7 +137,10 @@ bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-releas
 
 # 首次 / CI：加 --full；需要性能时再加 --bench
 bash scripts/test.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --board root@192.168.1.101:/customer/tmp/deploy_percept --full --bench
+  --board root@192.168.1.101:/customer/tmp/deploy_percept --full --bench --profile
+
+bash scripts/test.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release \
+  --board orangepi@192.168.1.103:/home/orangepi/tmp/deploy_percept --full --bench --profile
 
 ```
 

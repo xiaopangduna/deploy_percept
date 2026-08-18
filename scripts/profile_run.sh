@@ -2,7 +2,8 @@
 # 无参资源画像：在 install 根目录按列表依次「先 app 后 monitor」。
 # 用法: cd /path/to/deploy_percept && sh scripts/profile_run.sh
 #
-# 新增一组：在文末「场景列表」再调一次 run_one 即可。
+# 按 ./bin/*_<后缀> 是否存在选平台场景（*_sigmastar / *_awnn），命令与 fixture 仍写死。
+# 新增一组：在对应后缀块里再调一次 run_one 即可。
 set -eu
 
 if [ "$#" -ne 0 ]; then
@@ -77,33 +78,72 @@ run_one() {
     echo "################"
 }
 
+# 无匹配 glob 时 sh 保留字面量 ./bin/*_awnn，-x 失败 → 视为无此后缀。
+has_bin_suffix() {
+    suf=$1
+    for f in ./bin/*_"${suf}"; do
+        if [ -x "$f" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 echo "=== profile_run out=${OUT} ==="
 
-# ========== 场景列表（依次执行；新增一组再写一条 run_one）==========
-# app 90s / 组；monitor 预热 10s（summary 不含），稳态约 60s+；三组依次约 270s+
+# ========== 场景列表（按 bin 后缀选块；块内依次执行）==========
+# app 90s / 组；monitor 预热 10s（summary 不含），稳态约 60s+
+# Sigmastar 三组约 270s+；AWNN 两组约 180s+
 
-run_one yolov8_detect_sigmastar yolov8_detect \
-    ./bin/yolov8_detect_sigmastar --duration-sec 90 \
-    share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
-    share/percept/fixtures/integration/sigmastar/dog.jpg
+RAN_PLATFORM=0
 
-run_one mobilenetv2_classify_sigmastar mobilenetv2_classify \
-    ./bin/mobilenetv2_classify_sigmastar --duration-sec 90 \
-    share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
-    share/percept/fixtures/integration/sigmastar/apple.jpg
+if has_bin_suffix sigmastar; then
+    RAN_PLATFORM=1
+    echo "=== platform: sigmastar ==="
 
-run_one yolo_cls_sigmastar yolo_cls \
-    ./bin/yolo_cls_sigmastar --duration-sec 90 \
-    share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
-    share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
-    share/percept/fixtures/integration/sigmastar/dog.jpg \
-    share/percept/fixtures/integration/sigmastar/apple.jpg
+    run_one yolov8_detect_sigmastar yolov8_detect \
+        ./bin/yolov8_detect_sigmastar --duration-sec 90 \
+        share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+        share/percept/fixtures/integration/sigmastar/dog.jpg
 
-# 示例：再加一组时复制上面，改 name / tag / 命令即可（app 需支持 --duration-sec）
-# run_one yolov8_seg_sigmastar yolov8_seg \
-#     ./bin/yolov8_seg_sigmastar --duration-sec 90 \
-#     share/percept/fixtures/integration/sigmastar/yolov8n_seg_640x640_ssd2355.img \
-#     share/percept/fixtures/integration/sigmastar/bus.jpg
+    run_one mobilenetv2_classify_sigmastar mobilenetv2_classify \
+        ./bin/mobilenetv2_classify_sigmastar --duration-sec 90 \
+        share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+        share/percept/fixtures/integration/sigmastar/apple.jpg
+
+    run_one yolo_cls_sigmastar yolo_cls \
+        ./bin/yolo_cls_sigmastar --duration-sec 90 \
+        share/percept/fixtures/integration/sigmastar/yolov8n_640x640_ssd2355.img \
+        share/percept/fixtures/integration/sigmastar/mobilenet_v2_224_ssd2355.img \
+        share/percept/fixtures/integration/sigmastar/dog.jpg \
+        share/percept/fixtures/integration/sigmastar/apple.jpg
+
+    # 示例：再加一组时复制上面，改 name / tag / 命令即可（app 需支持 --duration-sec）
+    # run_one yolov8_seg_sigmastar yolov8_seg \
+    #     ./bin/yolov8_seg_sigmastar --duration-sec 90 \
+    #     share/percept/fixtures/integration/sigmastar/yolov8n_seg_640x640_ssd2355.img \
+    #     share/percept/fixtures/integration/sigmastar/bus.jpg
+fi
+
+if has_bin_suffix awnn; then
+    RAN_PLATFORM=1
+    echo "=== platform: awnn ==="
+
+    run_one yolov8_detect_awnn yolov8_detect_awnn \
+        ./bin/yolov8_detect_awnn --duration-sec 90 \
+        share/percept/fixtures/integration/awnn/yolov8_a733.nb \
+        share/percept/fixtures/integration/awnn/dog.jpg
+
+    run_one mobilenetv2_classify_awnn mobilenetv2_classify_awnn \
+        ./bin/mobilenetv2_classify_awnn --duration-sec 90 \
+        share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+        share/percept/fixtures/integration/awnn/cat.jpg
+fi
+
+if [ "${RAN_PLATFORM}" -eq 0 ]; then
+    echo "错误: ./bin 下没有 *_sigmastar / *_awnn 可执行文件" >&2
+    FAIL=1
+fi
 
 # ==================================================================
 

@@ -2,13 +2,17 @@
  * Allwinner YOLOv8 检测 demo（AwnnEngine + YoloV8DetectPostProcessAwnn）
  *
  * 用法（路径相对当前工作目录，或使用绝对路径）：
- *   yolov8_detect_awnn [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
+ *   yolov8_detect_awnn [--duration-sec T] [model.nb] [input.jpg] [output.jpg] [model_outputs.npz]
  *
  * 默认：./yolov8_a733.nb  ./dog.jpg  ./yolov8_detect_awnn_out.jpg
+ * --duration-sec：按墙钟循环推理，供 tests/profiling/percept_monitor 旁路采样
  * 性能对比见 tests/benchmarks/awnn/bench_yolov8
  */
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -65,12 +69,39 @@ bool prepare_model_input(
 
 int main(int argc, char **argv)
 {
-    const std::string model_path_str = (argc > 1) ? argv[1] : kDefaultModel;
-    const std::string input_path_str = (argc > 2) ? argv[2] : kDefaultInput;
+    double duration_sec = 0.0;
+    int argi = 1;
+    if (argi + 1 < argc && std::strcmp(argv[argi], "--duration-sec") == 0)
+    {
+        duration_sec = std::atof(argv[argi + 1]);
+        if (duration_sec <= 0.0)
+        {
+            std::fprintf(stderr, "invalid --duration-sec: %s\n", argv[argi + 1]);
+            return 1;
+        }
+        argi += 2;
+    }
+
+    const std::string model_path_str = (argi < argc) ? argv[argi] : kDefaultModel;
+    const std::string input_path_str =
+        (argi + 1 < argc) ? argv[argi + 1] : kDefaultInput;
     const char *model_path = model_path_str.c_str();
     const char *input_path = input_path_str.c_str();
-    const char *output_path = (argc > 3) ? argv[3] : kDefaultOutput;
-    const char *npz_path = (argc > 4) ? argv[4] : nullptr;
+    const char *output_path = (argi + 2 < argc) ? argv[argi + 2] : kDefaultOutput;
+    const char *npz_path = (argi + 3 < argc) ? argv[argi + 3] : nullptr;
+
+    std::printf("yolov8_detect_awnn\n");
+    std::printf("  model : %s\n", model_path);
+    std::printf("  input : %s\n", input_path);
+    std::printf("  output: %s\n", output_path);
+    if (duration_sec > 0.0)
+    {
+        std::printf("  duration-sec: %.3f\n", duration_sec);
+    }
+    if (npz_path != nullptr)
+    {
+        std::printf("  npz   : %s\n", npz_path);
+    }
 
     if (!fs::is_regular_file(model_path))
     {
@@ -119,59 +150,69 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!engine.run(input_buffer.data(), input_buffer.size()))
-    {
-        std::fprintf(stderr, "AwnnEngine::run failed\n");
-        return 1;
-    }
-
-    // 默认（is_copy_host=true）：输出已在 host，直接读取
-    const auto &tensor_views = engine.getResult().tensor_views;
-    // 零拷贝 mapped（is_copy_host=false 时改用）：
-    // deploy_percept::engine::EngineResultGuard engine_result_guard(engine);
-    // const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
-    if (tensor_views.empty())
-    {
-        std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
-        return 1;
-    }
-
-    std::error_code ec;
-
-    if (npz_path != nullptr)
-    {
-        try
-        {
-            const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
-            fs::create_directories(fs::path(npz_path).parent_path(), ec);
-            if (!save_npz(npz_path, model_outputs_npz))
-            {
-                std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
-                return 1;
-            }
-            std::printf("saved model outputs to %s\n", npz_path);
-        }
-        catch (const std::exception &ex)
-        {
-            std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
-            return 1;
-        }
-    }
-
     YoloV8DetectPostProcessAwnn::Params post_params;
     post_params.model_in_w = model_w;
     post_params.model_in_h = model_h;
 
     YoloV8DetectPostProcessAwnn processor(post_params);
-    if (!processor.run(tensor_views))
+
+    const auto t0 = std::chrono::steady_clock::now();
+    std::uint64_t frames = 0;
+    do
     {
-        std::fprintf(stderr, "post process failed\n");
-        return 1;
-    }
+        if (!engine.run(input_buffer.data(), input_buffer.size()))
+        {
+            std::fprintf(stderr, "AwnnEngine::run failed\n");
+            return 1;
+        }
+
+        // 默认（is_copy_host=true）：输出已在 host，直接读取
+        const auto &tensor_views = engine.getResult().tensor_views;
+        // 零拷贝 mapped（is_copy_host=false 时改用）：
+        // deploy_percept::engine::EngineResultGuard engine_result_guard(engine);
+        // const auto &tensor_views = engine_result_guard.getEngineResult().tensor_views;
+        if (tensor_views.empty())
+        {
+            std::fprintf(stderr, "AwnnEngine output tensors unavailable\n");
+            return 1;
+        }
+
+        if (npz_path != nullptr && frames == 0)
+        {
+            std::error_code npz_ec;
+            try
+            {
+                const cnpy::npz_t model_outputs_npz = convertTensorViewsToNpz(tensor_views);
+                fs::create_directories(fs::path(npz_path).parent_path(), npz_ec);
+                if (!save_npz(npz_path, model_outputs_npz))
+                {
+                    std::fprintf(stderr, "failed to save model outputs to %s\n", npz_path);
+                    return 1;
+                }
+                std::printf("saved model outputs to %s\n", npz_path);
+            }
+            catch (const std::exception &ex)
+            {
+                std::fprintf(stderr, "failed to dump npz: %s\n", ex.what());
+                return 1;
+            }
+        }
+
+        if (!processor.run(tensor_views))
+        {
+            std::fprintf(stderr, "post process failed\n");
+            return 1;
+        }
+        engine.releaseResult();
+        ++frames;
+    } while (duration_sec > 0.0 &&
+             std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() <
+                 duration_sec);
 
     cv::Mat result_img = model_input.clone();
     drawDetectionResults(result_img, processor.getResult(), &kCoco80Labels);
 
+    std::error_code ec;
     fs::create_directories(fs::path(output_path).parent_path(), ec);
     if (!cv::imwrite(output_path, result_img))
     {
@@ -181,5 +222,14 @@ int main(int argc, char **argv)
 
     std::printf("detection num: %zu\n", processor.getResult().detections.size());
     std::printf("saved detect result to %s\n", output_path);
+    if (duration_sec > 0.0)
+    {
+        const double wall =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf(
+            "done: frames=%llu wall=%.3fs\n",
+            static_cast<unsigned long long>(frames),
+            wall);
+    }
     return 0;
 }

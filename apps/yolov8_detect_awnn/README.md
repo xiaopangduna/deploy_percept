@@ -63,6 +63,31 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 无参运行时默认使用当前工作目录下的 `./yolov8_a733.nb`、`./dog.jpg`。也可显式传参指定模型与输入路径。
 
+可选前缀：`--duration-sec T`（见下）。
+
+### 资源画像（`--duration-sec`）
+
+按墙钟循环推理（预处理只做一次），供 `profiling/percept_monitor` 旁路采样。
+
+**推荐（无参编排）：**
+
+```bash
+cd ~/deploy_percept
+sh scripts/profile_run.sh
+```
+
+`./bin` 下有 `*_awnn` 时脚本跑检测 + 分类两组；monitor `--name` 为对应 basename，`--warmup-sec 10`。日志在 `var/profile/<时间戳>/`。
+
+手跑等价：
+
+```bash
+./bin/yolov8_detect_awnn --duration-sec 90 \
+  share/percept/fixtures/integration/awnn/yolov8_a733.nb \
+  share/percept/fixtures/integration/awnn/dog.jpg &
+
+./profiling/percept_monitor --name yolov8_detect_awnn --warmup-sec 10
+```
+
 **正确性回归（板端）：**
 
 ```bash

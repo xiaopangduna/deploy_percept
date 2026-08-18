@@ -64,17 +64,21 @@ export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
 
 ### 资源画像（`--duration-sec`）
 
-按墙钟循环推理，供 `profiling/percept_monitor` 旁路采样。`--profile T` / `--duration-sec T` 都是 **app 循环持续时间**（推荐 ≥60）；monitor 跟进程退出。读 NPU 请用 **root** 会话（见 profiling README）。
+按墙钟循环推理，供 `profiling/percept_monitor` 旁路采样。`--duration-sec T` 是 **app 循环持续时间**（推荐 ≥60）；monitor 跟进程退出。读 NPU 请用 **root** 会话（见 profiling README）。
+
+**推荐（无参编排）：** `./bin` 有 `*_awnn` 时 `sh scripts/profile_run.sh` 会跑检测 + 本分类两组。
+
+手跑等价：
 
 ```bash
-./bin/mobilenetv2_classify_awnn --duration-sec 60 \
+./bin/mobilenetv2_classify_awnn --duration-sec 90 \
   share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
   share/percept/fixtures/integration/awnn/cat.jpg &
 
-./profiling/percept_monitor --name mobilenetv2_classify_awnn
+./profiling/percept_monitor --name mobilenetv2_classify_awnn --warmup-sec 10
 ```
 
-详见 [tests/profiling/README.md](../../tests/profiling/README.md)（手跑 app + `percept_monitor`；`test.sh` 不再带 `--profile`）。
+详见 [tests/profiling/README.md](../../tests/profiling/README.md)。
 
 ## 预处理
 
