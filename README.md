@@ -247,6 +247,7 @@ deploy_percept/
 | A733   | 目标检测 | `yolov5_detect_awnn`        | [README](apps/yolov5_detect_awnn/README.md)        |
 | A733   | 目标检测 | `yolov8_detect_awnn`        | [README](apps/yolov8_detect_awnn/README.md)        |
 | A733   | 图像分类 | `mobilenetv2_classify_awnn` | [README](apps/mobilenetv2_classify_awnn/README.md) |
+| A733   | 检测+分类 | `yolo_cls_awnn`             | [README](apps/yolo_cls_awnn/README.md)             |
 | RK3588 | 目标检测 | `yolov5_detect_rknn`        | —                                                  |
 | RK3588 | 实例分割 | `yolov5_seg_rknn`           | —                                                  |
 | RK3588 | 实例分割 | `yolov8_seg_rknn`           | [README](apps/yolov8_seg_rknn/README.md)           |

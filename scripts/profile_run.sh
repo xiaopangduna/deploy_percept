@@ -93,7 +93,7 @@ echo "=== profile_run out=${OUT} ==="
 
 # ========== 场景列表（按 bin 后缀选块；块内依次执行）==========
 # app 90s / 组；monitor 预热 10s（summary 不含），稳态约 60s+
-# Sigmastar 三组约 270s+；AWNN 两组约 180s+
+# Sigmastar / AWNN 均为三组，约 270s+
 
 RAN_PLATFORM=0
 
@@ -137,6 +137,13 @@ if has_bin_suffix awnn; then
     run_one mobilenetv2_classify_awnn mobilenetv2_classify_awnn \
         ./bin/mobilenetv2_classify_awnn --duration-sec 90 \
         share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+        share/percept/fixtures/integration/awnn/cat.jpg
+
+    run_one yolo_cls_awnn yolo_cls_awnn \
+        ./bin/yolo_cls_awnn --duration-sec 90 \
+        share/percept/fixtures/integration/awnn/yolov8_a733.nb \
+        share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+        share/percept/fixtures/integration/awnn/dog.jpg \
         share/percept/fixtures/integration/awnn/cat.jpg
 fi
 

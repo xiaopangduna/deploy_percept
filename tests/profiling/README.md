@@ -98,14 +98,16 @@ sh scripts/profile_run.sh
 3. `./bin/yolo_cls_sigmastar --duration-sec 90` + 检测/分类 fixture（同进程双模型）  
    `./profiling/percept_monitor --name yolo_cls_sigmastar --warmup-sec 10`
 
-**`*_awnn`（两组，约 180s+）：**
+**`*_awnn`（三组，约 270s+）：**
 
 1. `./bin/yolov8_detect_awnn --duration-sec 90` + awnn fixture  
    `./profiling/percept_monitor --name yolov8_detect_awnn --warmup-sec 10`
 2. `./bin/mobilenetv2_classify_awnn --duration-sec 90` + awnn fixture  
    `./profiling/percept_monitor --name mobilenetv2_classify_awnn --warmup-sec 10`
+3. `./bin/yolo_cls_awnn --duration-sec 90` + 检测/分类 fixture（同进程双模型）  
+   `./profiling/percept_monitor --name yolo_cls_awnn --warmup-sec 10`
 
-每组：app 墙钟 90s；monitor 前 10s 为预热（不进 summary），其后至进程退出为稳态采样（约 60s+）。monitor 本身跟目标进程退出，无单独「监控时长」参数。Sigmastar 前两组 / AWNN 两组是单模型进程；`yolo_cls_sigmastar` 才是同进程双 Channel。两种后缀的 bin 都不存在则 FAIL。
+每组：app 墙钟 90s；monitor 前 10s 为预热（不进 summary），其后至进程退出为稳态采样（约 60s+）。monitor 本身跟目标进程退出，无单独「监控时长」参数。两平台前两组是单模型进程；`yolo_cls_*` 才是同进程双模型。两种后缀的 bin 都不存在则 FAIL。
 
 日志：`var/profile/<时间戳>/{app_<tag>.log,monitor_<tag>.log}`。
 
@@ -145,6 +147,20 @@ cd /customer/tmp/deploy_percept
   share/percept/fixtures/integration/sigmastar/apple.jpg &
 
 ./profiling/percept_monitor --name mobilenetv2_classify_sigmastar
+```
+
+### AWNN + yolo_cls（同进程双模型）
+
+```bash
+cd /root/deploy_percept
+
+./bin/yolo_cls_awnn --duration-sec 60 \
+  share/percept/fixtures/integration/awnn/yolov8_a733.nb \
+  share/percept/fixtures/integration/awnn/mobilenetv2_a733.nb \
+  share/percept/fixtures/integration/awnn/dog.jpg \
+  share/percept/fixtures/integration/awnn/cat.jpg &
+
+./profiling/percept_monitor --name yolo_cls_awnn
 ```
 
 ### Sigmastar + yolo_cls（同进程双模型）
