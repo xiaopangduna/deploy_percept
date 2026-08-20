@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <vector>
@@ -56,6 +57,100 @@ namespace deploy_percept
                 if (p.w > 0.f && p.h > 0.f)
                 {
                     proposals.push_back(p);
+                }
+            }
+
+            int tensorElemBytes(TensorDtype dtype)
+            {
+                switch (dtype)
+                {
+                case TensorDtype::FP32:
+                    return static_cast<int>(sizeof(float));
+                case TensorDtype::INT16:
+                    return static_cast<int>(sizeof(std::int16_t));
+                case TensorDtype::INT8:
+                    return static_cast<int>(sizeof(std::int8_t));
+                }
+                return 1;
+            }
+
+            int tensorElemCount(const TensorView &view)
+            {
+                const int elem_bytes = tensorElemBytes(view.dtype);
+                if (view.data == nullptr || elem_bytes <= 0 ||
+                    view.byte_size < static_cast<std::size_t>(elem_bytes))
+                {
+                    return 0;
+                }
+                return static_cast<int>(view.byte_size / static_cast<std::size_t>(elem_bytes));
+            }
+
+            int readIntElem(const TensorView &view, int index)
+            {
+                switch (view.dtype)
+                {
+                case TensorDtype::FP32:
+                    return static_cast<int>(
+                        std::lround(static_cast<const float *>(view.data)[index]));
+                case TensorDtype::INT16:
+                    return static_cast<int>(static_cast<const std::int16_t *>(view.data)[index]);
+                case TensorDtype::INT8:
+                    return static_cast<int>(static_cast<const std::int8_t *>(view.data)[index]);
+                }
+                return 0;
+            }
+
+            float readFloatElem(const TensorView &view, int index, float scalar)
+            {
+                switch (view.dtype)
+                {
+                case TensorDtype::FP32:
+                    return static_cast<const float *>(view.data)[index];
+                case TensorDtype::INT16:
+                    return static_cast<float>(static_cast<const std::int16_t *>(view.data)[index]) *
+                           scalar;
+                case TensorDtype::INT8:
+                    return static_cast<float>(static_cast<const std::int8_t *>(view.data)[index]) *
+                           scalar;
+                }
+                return 0.f;
+            }
+
+            float scalarAt(const std::vector<float> &scalars, std::size_t index)
+            {
+                return index < scalars.size() ? scalars[index] : 1.f;
+            }
+
+            /** pcupid with_filter: [1, N, 4]；OpenDLA INT16 filter: [1, 4, N] / 缺省 8400。 */
+            void inferPureIpuBoxLayout(
+                const std::vector<std::uint32_t> &shape,
+                int *num_all_boxes,
+                bool *coords_last)
+            {
+                *num_all_boxes = 8400;
+                *coords_last = false;
+                if (shape.size() >= 2 && shape.back() == 4)
+                {
+                    int prod = 1;
+                    for (std::size_t i = 0; i + 1 < shape.size(); ++i)
+                    {
+                        prod *= static_cast<int>(shape[i]);
+                    }
+                    if (prod > 0)
+                    {
+                        *num_all_boxes = prod;
+                        *coords_last = true;
+                    }
+                    return;
+                }
+                if (shape.size() >= 3 && shape[1] == 4 && shape[2] > 0)
+                {
+                    *num_all_boxes = static_cast<int>(shape[2]);
+                    return;
+                }
+                if (shape.size() >= 2 && shape[0] == 4 && shape[1] > 0)
+                {
+                    *num_all_boxes = static_cast<int>(shape[1]);
                 }
             }
 
@@ -463,26 +558,67 @@ namespace deploy_percept
                 return false;
             }
 
-            const float *bboxes = static_cast<const float *>(inputs[0].data);
-            const std::int16_t *class_id =
-                inputs[1].data != nullptr ? static_cast<const std::int16_t *>(inputs[1].data)
-                                          : nullptr;
-            const float *scores = static_cast<const float *>(inputs[2].data);
-            const std::int16_t *scores_index = static_cast<const std::int16_t *>(inputs[3].data);
-            const std::int16_t *box_num = static_cast<const std::int16_t *>(inputs[4].data);
-            const int num_boxes = static_cast<int>(*box_num);
-            constexpr int kAllBoxes = 8400;
+            int num_all_boxes = 8400;
+            bool coords_last = false;
+            if (!params_.output_shapes.empty())
+            {
+                inferPureIpuBoxLayout(params_.output_shapes[0], &num_all_boxes, &coords_last);
+            }
+
+            const int index_count = tensorElemCount(inputs[3]);
+            int num_boxes = readIntElem(inputs[4], 0);
+            if (num_boxes < 0)
+            {
+                num_boxes = 0;
+            }
+            num_boxes = std::min(num_boxes, index_count);
+            num_boxes = std::min(num_boxes, params_.obj_numb_max_size);
+            if (num_all_boxes <= 0)
+            {
+                return false;
+            }
+
+            const float box_scalar = scalarAt(params_.output_scalars, 0);
+            const float score_scalar = scalarAt(params_.output_scalars, 2);
+            const int class_count = tensorElemCount(inputs[1]);
+            const int score_count = tensorElemCount(inputs[2]);
+            const int box_coord_count = tensorElemCount(inputs[0]);
 
             for (int i = 0; i < num_boxes; ++i)
             {
-                const int box_index = static_cast<int>(scores_index[i]);
+                const int box_index = readIntElem(inputs[3], i);
+                if (box_index < 0 || box_index >= num_all_boxes)
+                {
+                    continue;
+                }
+
                 float p_box[4];
+                bool coords_ok = true;
                 for (int j = 0; j < 4; ++j)
                 {
-                    p_box[j] = bboxes[kAllBoxes * j + box_index];
+                    const int coord_index = coords_last ? box_index * 4 + j
+                                                        : j * num_all_boxes + box_index;
+                    if (coord_index < 0 || coord_index >= box_coord_count)
+                    {
+                        coords_ok = false;
+                        break;
+                    }
+                    p_box[j] = readFloatElem(inputs[0], coord_index, box_scalar);
                 }
-                const int r_class = class_id == nullptr ? 0 : static_cast<int>(class_id[box_index]);
-                const float r_score = scores[box_index];
+                if (!coords_ok)
+                {
+                    continue;
+                }
+
+                const int r_class =
+                    (inputs[1].data == nullptr || box_index >= class_count)
+                        ? 0
+                        : readIntElem(inputs[1], box_index);
+                if (box_index >= score_count)
+                {
+                    continue;
+                }
+                const float r_score = readFloatElem(inputs[2], box_index, score_scalar);
                 if (r_score < params_.conf_threshold)
                 {
                     continue;

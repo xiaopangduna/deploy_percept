@@ -254,6 +254,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    std::printf("%s", engine.dump_info().c_str());
+
     const auto &desc = engine.getInfo().desc;
     if (desc.u32InputTensorCount < 1u)
     {

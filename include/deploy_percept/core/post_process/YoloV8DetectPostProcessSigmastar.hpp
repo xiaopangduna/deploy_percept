@@ -13,10 +13,11 @@ namespace deploy_percept
         /**
          * YOLOv8 检测后处理（Sigmastar IPU 离线输出）。
          *
-         * 支持 OpenDLA demo 三种输出形态：
+         * 支持 OpenDLA / pcupid 三种输出形态：
          *   - 1 路：IPU 已融合 decode（FP32 / INT16 + scalar）
          *   - 3 路：CPU DFL decode（每层 INT16/FP32）
-         *   - 5 路：Pure IPU 输出（bboxes/class/score/index/num）
+         *   - 5 路：IPU filter（boxes/classes/scores/score_index/score_number）
+         *     pcupid with_filter 为 FP32、boxes=[1,N,4]；旧 OpenDLA 为 INT16 index/num、boxes=[1,4,N]
          *
          * 调用前用 extract_shapes_from_MI_IPU_TensorDesc_t /
          * extract_fscalars_from_MI_IPU_TensorDesc_t 填写。
