@@ -25,6 +25,7 @@ show_help() {
     echo "  x86_64"
     echo "  aarch64-linux-gnu_orange_pi_4_pro_a733"
     echo "  armv7l-linux-gnueabihf_comake_pi_d1_ssd2355"
+    echo "  armv7l-linux-gnueabihf_ssc308qe"
     echo ""
     echo "支持的库:"
     echo "  zlib       - zlib 压缩库（cnpy 依赖，建议先构建）"

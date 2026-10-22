@@ -6,6 +6,7 @@ THIRD_PARTY_SUPPORTED_PLATFORMS=(
     x86_64
     aarch64-linux-gnu_orange_pi_4_pro_a733
     armv7l-linux-gnueabihf_comake_pi_d1_ssd2355
+    armv7l-linux-gnueabihf_ssc308qe
 )
 
 # 各 builder 定义 log() 后可选：builder_log() { log "$@"; }
@@ -29,7 +30,7 @@ list_supported_third_party_platforms() {
 validate_third_party_platform() {
     local platform="$1"
     case "${platform}" in
-        x86_64|aarch64-linux-gnu_orange_pi_4_pro_a733|armv7l-linux-gnueabihf_comake_pi_d1_ssd2355)
+        x86_64|aarch64-linux-gnu_orange_pi_4_pro_a733|armv7l-linux-gnueabihf_comake_pi_d1_ssd2355|armv7l-linux-gnueabihf_ssc308qe)
             return 0
             ;;
         *)
