@@ -12,7 +12,10 @@ RUN sed -i 's@archive.ubuntu.com@mirrors.tuna.tsinghua.edu.cn@g' /etc/apt/source
  && rm -rf /var/lib/apt/lists/*
 
 # CMake >= 3.21（CMakePresets.json version 3 / cmake --preset）；
-# Ubuntu 20.04 自带 3.16 会把 --preset 当成源码路径。用 Kitware 源装新版。
+# Ubuntu 20.04 自带 3.16 会把 --preset 当成源码路径。用 Kitware 源装 3.31（钉死，避免 apt 跟到 4.x
+# 后因 cmake_minimum_required < 3.5 导致旧第三方如 cnpy/OpenCV 配置失败）。
+# 先 purge 系统 cmake：Kitware 把 cmake.m4 挪到 cmake 包，直接升级会与旧 cmake-data 文件冲突。
+ARG CMAKE_KITWARE_VERSION=3.31.12-0kitware2ubuntu20.04.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -22,7 +25,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' \
     > /etc/apt/sources.list.d/kitware.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends cmake \
+ && apt-get remove -y --purge cmake cmake-data \
+ && apt-get install -y --no-install-recommends \
+    "cmake=${CMAKE_KITWARE_VERSION}" \
+    "cmake-data=${CMAKE_KITWARE_VERSION}" \
+ && apt-mark hold cmake cmake-data \
  && cmake --version \
  && rm -rf /var/lib/apt/lists/*
 
