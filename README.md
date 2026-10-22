@@ -12,6 +12,7 @@
 | `x86_64-debug`                                        | 宿主机开发、后处理单测                 | —                                        |
 | `aarch64-linux-gnu_orange_pi_4_pro_a733-release`      | Orange Pi A733 交叉编译与板端部署    | AWNN                                     |
 | `armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release` | CoMake Pi D1 (SSD2355) 交叉编译 | Sigmastar IPU（`yolov8_detect_sigmastar`） |
+| `armv7l-linux-gnueabihf_ssc308qe-release`              | SSC308QE (Iford) 交叉编译       | Sigmastar IPU                            |
 
 
 开发容器：`.devcontainer/ubuntu-22.04-allwinner/`、`.devcontainer/ubuntu-20.04-sigmastar/`（详见 [.devcontainer/README.md](.devcontainer/README.md)）。
@@ -26,6 +27,7 @@
 - **aarch64-linux-gnu_orange_pi_4_pro_a733**：下载 `gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu`，放置于 `/opt/toolchains/`
   - 下载：[https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/](https://mirrors.tuna.tsinghua.edu.cn/armbian-releases/_toolchain/)
 - **armv7l-linux-gnueabihf_comake_pi_d1_ssd2355**：`arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf`，放置于 `/opt/toolchains/`（见 sigmastar devcontainer）
+- **armv7l-linux-gnueabihf_ssc308qe**：`gcc-11.1.0-20210608-sigmastar-glibc-x86_64_arm-linux-gnueabihf`，放置于 `/opt/toolchains/`（与 CoMake 共用同一 sigmastar 容器；路径见对应 cmake toolchain）
 
 
 

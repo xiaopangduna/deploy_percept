@@ -36,9 +36,24 @@
         "INSTALL_BENCHMARKS": "ON",
         "ENABLE_PROFILING": "ON",
         "INSTALL_PROFILING": "ON"
-      },
-      "environment": {
-        "PATH": "/opt/toolchains/arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf/bin:$penv{PATH}"
+      }
+    },
+    {
+      "name": "armv7l-linux-gnueabihf_ssc308qe-release",
+      "displayName": "SSC308QE Iford (Release build type)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/armv7l-linux-gnueabihf_ssc308qe-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/armv7l-linux-gnueabihf_ssc308qe-toolchain.cmake",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/armv7l-linux-gnueabihf_ssc308qe",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TESTS": "ON",
+        "INSTALL_TESTS": "ON",
+        "ENABLE_BENCHMARKS": "ON",
+        "INSTALL_BENCHMARKS": "ON",
+        "ENABLE_PROFILING": "ON",
+        "INSTALL_PROFILING": "ON"
       }
     },
     {
@@ -57,9 +72,6 @@
         "INSTALL_BENCHMARKS": "ON",
         "ENABLE_PROFILING": "ON",
         "INSTALL_PROFILING": "ON"
-      },
-      "environment": {
-        "PATH": "/opt/toolchains/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin:$penv{PATH}"
       }
     }
   ],
@@ -73,6 +85,11 @@
     {
       "name": "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
       "configurePreset": "armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release",
+      "jobs": 16
+    },
+    {
+      "name": "armv7l-linux-gnueabihf_ssc308qe-release",
+      "configurePreset": "armv7l-linux-gnueabihf_ssc308qe-release",
       "jobs": 16
     },
     {

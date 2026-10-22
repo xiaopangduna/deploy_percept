@@ -2,17 +2,17 @@
 set -euo pipefail
 
 CONTAINER_NAME="ubuntu-20.04-sigmastar"
-TOOLCHAIN_ROOT="${TOOLCHAIN_ROOT:-/opt/toolchains/arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf}"
 
-echo "[${CONTAINER_NAME} post-create] Checking toolchain..."
+echo "[${CONTAINER_NAME} post-create] Checking /opt/toolchains (bind mount)..."
 
-if [ -x "${TOOLCHAIN_ROOT}/bin/arm-unknown-linux-gnueabihf-gcc" ]; then
-    echo "[${CONTAINER_NAME} post-create] Found toolchain: ${TOOLCHAIN_ROOT}"
-    "${TOOLCHAIN_ROOT}/bin/arm-unknown-linux-gnueabihf-gcc" --version | head -1
+if [ ! -d /opt/toolchains ]; then
+    echo "[${CONTAINER_NAME} post-create] WARN: /opt/toolchains missing"
 else
-    echo "[${CONTAINER_NAME} post-create] WARN: toolchain not found at ${TOOLCHAIN_ROOT}"
-    echo "  Place arm-unknown-linux-gcc-12.4.0-glibc-2.37-gnueabihf under /opt/toolchains/ on the host,"
-    echo "  then rebuild or restart the container."
+    # 只列顶层目录，不绑定某一平台；具体路径由 cmake/toolchains/*.cmake 指定
+    echo "[${CONTAINER_NAME} post-create] Contents:"
+    ls -1 /opt/toolchains | sed 's/^/  /' || true
 fi
 
+echo "[${CONTAINER_NAME} post-create] cmake $(cmake --version | head -1)"
+echo "[${CONTAINER_NAME} post-create] Select platform via cmake --preset / third_party_builder (see cmake/toolchains/)."
 echo "[${CONTAINER_NAME} post-create] Done."

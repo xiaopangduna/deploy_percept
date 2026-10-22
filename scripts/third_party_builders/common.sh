@@ -137,8 +137,8 @@ setup_third_party_toolchain_env() {
     local mode="${1:-cmake}"
     local compiler=""
 
-    if [[ "${PLATFORM}" == aarch64-linux-gnu_orange_pi_4_pro_a733 \
-       || "${PLATFORM}" == armv7l-linux-gnueabihf_comake_pi_d1_ssd2355 ]]; then
+    # 交叉平台：从 cmake/toolchains/${PLATFORM}-toolchain.cmake 解析 TOOLCHAIN_ROOT（不依赖容器 ENV）
+    if [[ "${PLATFORM}" != x86_64* ]] && [ -f "${TOOLCHAIN_FILE}" ]; then
         read_toolchain_vars || exit 1
         CROSS_COMPILE_PREFIX="${TOOLCHAIN_PREFIX}"
         export PATH="${TOOLCHAIN_ROOT}/bin:${PATH}"
