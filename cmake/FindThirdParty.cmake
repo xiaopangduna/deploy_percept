@@ -38,5 +38,6 @@ include(FindOpenCVCustom)
 include(FindSpdlogCustom)
 include(FindGTestCustom)
 include(FindYamlCppCustom)
+include(FindNlohmannJson)
 
 message(STATUS "已完成第三方库配置")

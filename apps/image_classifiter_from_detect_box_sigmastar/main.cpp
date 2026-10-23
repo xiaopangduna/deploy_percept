@@ -413,6 +413,75 @@ bool pack_strided_rows(
     return true;
 }
 
+const char *elm_format_name(std::uint32_t elm_format)
+{
+    switch (static_cast<MI_IPU_ELEMENT_FORMAT>(elm_format))
+    {
+    case MI_IPU_FORMAT_U8:
+        return "U8";
+    case MI_IPU_FORMAT_NV12:
+        return "NV12";
+    case MI_IPU_FORMAT_ARGB8888:
+        return "ARGB8888(BGRA)";
+    case MI_IPU_FORMAT_ABGR8888:
+        return "ABGR8888(RGBA)";
+    case MI_IPU_FORMAT_GRAY:
+        return "GRAY";
+#ifdef MI_IPU_FORMAT_RGB888
+    case MI_IPU_FORMAT_RGB888:
+        return "RGB888";
+#endif
+#ifdef MI_IPU_FORMAT_BGR888
+    case MI_IPU_FORMAT_BGR888:
+        return "BGR888";
+#endif
+    default:
+        return "UNKNOWN";
+    }
+}
+
+/** RGB/BGR：文档要求紧密排列，不做 W 对齐。to_rgb=true 时 BGR→RGB。 */
+bool pack_rgb888_tight(
+    const cv::Mat &model_input_bgr,
+    bool to_rgb,
+    const int model_w,
+    const int model_h,
+    const std::size_t buffer_bytes,
+    std::vector<std::uint8_t> &input_buffer,
+    const char *tag)
+{
+    cv::Mat packed;
+    if (to_rgb)
+    {
+        cv::cvtColor(model_input_bgr, packed, cv::COLOR_BGR2RGB);
+    }
+    else
+    {
+        packed = model_input_bgr;
+    }
+    // 紧密排列：row_stride = W*3（input_formats=RGB/BGR 不用对齐）
+    const std::uint32_t row_stride = static_cast<std::uint32_t>(model_w) * 3u;
+    return pack_strided_rows(
+        packed.ptr<std::uint8_t>(0),
+        static_cast<int>(packed.step[0]),
+        model_w * 3,
+        model_h,
+        row_stride,
+        buffer_bytes,
+        input_buffer,
+        tag);
+}
+
+/**
+ * 按模型 ``eElmFormat`` 打包 LetterBox 后的 BGR 图。
+ *
+ * 量化 ``input_formats`` → 常见 ``eElmFormat``：
+ *   BGRA → ARGB8888（内存 BGRA，stride 16 对齐）
+ *   RGBA → ABGR8888（内存 RGBA）
+ *   RGB  → RGB888（新 SDK）或 U8 + buf≈H*W*3（旧 SDK）
+ *   BGR  → BGR888 或 U8
+ *   YUV_NV12 → NV12
+ */
 bool pack_model_input(
     const cv::Mat &model_input_bgr,
     const int model_w,
@@ -460,6 +529,7 @@ bool pack_model_input(
 
     if (fmt == MI_IPU_FORMAT_ARGB8888)
     {
+        // 量化 input_formats=BGRA：SStar ARGB 内存序为 BGRA
         cv::Mat bgra;
         cv::cvtColor(model_input_bgr, bgra, cv::COLOR_BGR2BGRA);
         const std::uint32_t row_stride =
@@ -492,7 +562,57 @@ bool pack_model_input(
             "ABGR8888");
     }
 
-    std::fprintf(stderr, "unsupported input elm_format: %u\n", elm_format);
+#ifdef MI_IPU_FORMAT_RGB888
+    if (fmt == MI_IPU_FORMAT_RGB888)
+    {
+        return pack_rgb888_tight(
+            model_input_bgr, true, model_w, model_h, buffer_bytes, input_buffer, "RGB888");
+    }
+#endif
+#ifdef MI_IPU_FORMAT_BGR888
+    if (fmt == MI_IPU_FORMAT_BGR888)
+    {
+        return pack_rgb888_tight(
+            model_input_bgr, false, model_w, model_h, buffer_bytes, input_buffer, "BGR888");
+    }
+#endif
+
+    // 旧 SDK 无 RGB888 枚举时，input_formats=RGB 常落成 U8，buf≈H*W*3
+    if (fmt == MI_IPU_FORMAT_U8)
+    {
+        const std::size_t rgb_bytes =
+            static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3u;
+        const std::size_t gray_bytes =
+            static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h);
+        if (buffer_bytes >= rgb_bytes)
+        {
+            return pack_rgb888_tight(
+                model_input_bgr, true, model_w, model_h, buffer_bytes, input_buffer, "U8-as-RGB888");
+        }
+        if (buffer_bytes >= gray_bytes)
+        {
+            cv::Mat gray;
+            cv::cvtColor(model_input_bgr, gray, cv::COLOR_BGR2GRAY);
+            return pack_strided_rows(
+                gray.ptr<std::uint8_t>(0),
+                static_cast<int>(gray.step[0]),
+                model_w,
+                model_h,
+                static_cast<std::uint32_t>(model_w),
+                buffer_bytes,
+                input_buffer,
+                "U8-GRAY");
+        }
+    }
+
+    std::fprintf(
+        stderr,
+        "unsupported input elm_format=%u (%s), buf=%zu, HxW=%dx%d\n",
+        elm_format,
+        elm_format_name(elm_format),
+        buffer_bytes,
+        model_w,
+        model_h);
     return false;
 }
 
@@ -625,6 +745,24 @@ int main(int argc, char **argv)
     const std::size_t buffer_bytes = in0.u32BufSize;
     const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
     const float out_scalar = out0.fScalar;
+    const std::uint32_t elm_format = static_cast<std::uint32_t>(in0.eElmFormat);
+    const std::size_t rgb_bytes =
+        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3u;
+    std::printf(
+        "  input elm : %u (%s), HxW=%dx%d, buf=%zu\n",
+        elm_format,
+        elm_format_name(elm_format),
+        model_h,
+        model_w,
+        buffer_bytes);
+    if (static_cast<MI_IPU_ELEMENT_FORMAT>(elm_format) == MI_IPU_FORMAT_U8 &&
+        buffer_bytes >= rgb_bytes)
+    {
+        std::printf(
+            "  pack mode : U8 as RGB888 (tight), buf=%zu HxWx3=%zu\n",
+            buffer_bytes,
+            rgb_bytes);
+    }
 
     if (num_classes < kExpectedNumClasses)
     {
@@ -686,7 +824,7 @@ int main(int argc, char **argv)
                 letterboxed,
                 model_w,
                 model_h,
-                static_cast<std::uint32_t>(in0.eElmFormat),
+                elm_format,
                 buffer_bytes,
                 input_buffer))
         {

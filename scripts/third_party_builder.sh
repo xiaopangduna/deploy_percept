@@ -36,6 +36,7 @@ show_help() {
     echo "  rknpu      - Rockchip NPU 库（预留，RK3588）"
     echo "  spdlog     - 快速C++日志库 (v1.14.1)"
     echo "  yaml-cpp   - yaml文件"
+    echo "  nlohmann_json - JSON 库 (header-only, v3.11.3)"
     echo ""
     echo "示例:"
     echo "  bash scripts/third_party_builder.sh x86_64 --libs all"

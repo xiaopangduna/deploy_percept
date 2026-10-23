@@ -6,7 +6,19 @@ Sigmastar **板端 dump**：按检测框裁剪后做分类，批量写出 float 
 - `deep_learning/src/train/scripts/eval_box_crop_classifier_onnx.py`
 - `deep_learning/src/train/scripts/confusion_from_classifier_dump.py`
 
-流程：读 CSV → 原图按 `cx,cy,w,h` × `box_scale` 裁切 → LetterBox(fill=114) → 按模型输入格式打包（BGRA/NV12）→ `INT16 × fScalar`（Softmax 前）→ 写 dump CSV。
+流程：读 CSV → 原图按 `cx,cy,w,h` × `box_scale` 裁切 → LetterBox(fill=114) → 按 `.img` 的 `eElmFormat` 打包 → `INT16 × fScalar`（Softmax 前）→ 写 dump CSV。
+
+输入格式自适应（由模型描述决定，无需改 CLI）：
+
+| 量化 `input_formats` | 常见 `eElmFormat` | 打包 |
+|----------------------|-------------------|------|
+| BGRA | `ARGB8888` | BGR→BGRA，stride 16 对齐 |
+| RGBA | `ABGR8888` | BGR→RGBA，stride 16 对齐 |
+| RGB | `RGB888` 或旧 SDK `U8`(buf≈H×W×3) | BGR→RGB，**紧密排列** |
+| BGR | `BGR888` / `U8` | BGR 紧密排列 |
+| YUV_NV12 | `NV12` | BGR→NV12 |
+
+启动时会打印 `input elm : …`，便于确认新量化模型实际格式。
 
 标签映射 A：CSV `class_id` `0/1 → gt_id=1`，`2 → gt_id=2`（不合成 background）。
 
