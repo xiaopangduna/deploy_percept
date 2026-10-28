@@ -50,19 +50,20 @@ show_help() {
         echo "  - ${p}"
     done
     echo ""
-    echo "认证: export SSHPASS='...'（需主机安装 sshpass；勿提交仓库）"
+    echo "认证: export SSHPASS='密码'；板子密码为空时 export SSHPASS=''（需主机安装 sshpass；勿提交仓库）"
     echo "新板 / CI 请加 --full；日常迭代用默认 quick。"
     echo ""
     echo "示例:"
-    echo "  export SSHPASS='...'"
+    echo "  export SSHPASS=''          # 板子 root 密码为空"
     echo "  bash $0 --install-dir install/armv7l-linux-gnueabihf_comake_pi_d1_ssd2355 \\"
     echo "    --board root@192.168.1.102:/customer/tmp/deploy_percept"
     echo "  bash $0 --install-dir install/... --board root@host:/customer/tmp/deploy_percept --full"
 }
 
 setup_ssh_transport() {
-    if [[ -z "${SSHPASS:-}" ]]; then
-        echo "错误: 需要设置 SSHPASS" >&2
+    # 必须显式 export。空字符串是合法口令，交给 sshpass -e。
+    if [[ -z "${SSHPASS+x}" ]]; then
+        echo "错误: 需要设置 SSHPASS（密码为空时: export SSHPASS=''）" >&2
         echo "示例: export SSHPASS='your_password'" >&2
         return 1
     fi

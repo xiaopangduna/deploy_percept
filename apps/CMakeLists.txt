@@ -20,6 +20,12 @@ else()
     message(STATUS "apps: AWNN 未找到，跳过 AWNN 示例（检查 third_party/.../awnn/npuruntime）")
 endif()
 
+if(TARGET sigmastar::sensor_pipeline)
+    add_subdirectory(sensor_preview_sigmastar)
+else()
+    message(STATUS "apps: sigmastar::sensor_pipeline 未找到，跳过 sensor_preview_sigmastar")
+endif()
+
 if(SIGMASTAR_FOUND AND TARGET deploy_percept_utils AND TARGET deploy_percept_core)
     add_subdirectory(yolov8_detect_sigmastar)
     add_subdirectory(yolov8_seg_sigmastar)

@@ -15,7 +15,10 @@
 #   ln -sfn /path/to/SourceCode/project/release \
 #     third_party/<platform>/sigmastar/release
 #
-# 提供：SIGMASTAR_FOUND、SIGMASTAR_CHIP_ARCH、sigmastar::mi
+# 提供：
+#   SIGMASTAR_FOUND、SIGMASTAR_CHIP_ARCH、sigmastar::mi
+#   单摄预览另外提供 sigmastar::sensor_pipeline
+#   （sensor / vif / isp / scl / disp + 3A；不含 vdisp、ipu 画框、gfx）
 
 set(SIGMASTAR_FOUND FALSE)
 set(SIGMASTAR_CHIP_ARCH "")
@@ -146,6 +149,52 @@ set(SIGMASTAR_SDK_ROOT "${_SIGMASTAR_SDK_ROOT}" CACHE INTERNAL "Sigmastar SDK re
 set(SIGMASTAR_MI_LIB_DIR "${_SIGMASTAR_MI_LIB_DIR}" CACHE INTERNAL "Sigmastar MI static lib dir")
 set(SIGMASTAR_CHIP_ARCH "${SIGMASTAR_CHIP_ARCH}" CACHE INTERNAL "SGS chip architecture")
 
+# 单摄上屏：头文件在 include/isp 与 include/isp/<arch>，库与 sigmastar::mi 同目录。
+# 不并进 sigmastar::mi，避免只跑 IPU 的示例被 ISP/DISP 静态库牵进去。
+set(_SIGMASTAR_ISP_INCLUDE_DIR "${_SIGMASTAR_INCLUDE_DIR}/isp")
+set(_SIGMASTAR_ISP_CHIP_INCLUDE_DIR
+    "${_SIGMASTAR_ISP_INCLUDE_DIR}/${SIGMASTAR_CHIP_ARCH}")
+set(_SIGMASTAR_PIPELINE_LIBS_OK TRUE)
+foreach(_lib IN ITEMS mi_sensor mi_vif mi_isp mi_scl mi_disp cus3a ispalgo)
+    if(NOT EXISTS "${_SIGMASTAR_MI_LIB_DIR}/lib${_lib}.a")
+        set(_SIGMASTAR_PIPELINE_LIBS_OK FALSE)
+    endif()
+endforeach()
+if(NOT EXISTS "${_SIGMASTAR_ISP_INCLUDE_DIR}/mi_isp.h"
+   OR NOT EXISTS "${_SIGMASTAR_ISP_CHIP_INCLUDE_DIR}/mi_isp_hw_dep_datatype.h")
+    set(_SIGMASTAR_PIPELINE_LIBS_OK FALSE)
+endif()
+
+set(_SIGMASTAR_PIPELINE_STATUS "not found")
+if(_SIGMASTAR_PIPELINE_LIBS_OK AND NOT TARGET sigmastar::sensor_pipeline)
+    add_library(sigmastar_sensor_pipeline INTERFACE)
+    add_library(sigmastar::sensor_pipeline ALIAS sigmastar_sensor_pipeline)
+    target_link_libraries(sigmastar_sensor_pipeline INTERFACE sigmastar::mi)
+    target_include_directories(sigmastar_sensor_pipeline INTERFACE
+        "${_SIGMASTAR_ISP_INCLUDE_DIR}"
+        "${_SIGMASTAR_ISP_CHIP_INCLUDE_DIR}"
+    )
+    # mi_isp 与 cus3a/ispalgo/mi_sys 互相引用，放进同一组。
+    target_link_libraries(sigmastar_sensor_pipeline INTERFACE
+        -Wl,--start-group
+        mi_sensor
+        mi_vif
+        mi_isp
+        mi_scl
+        mi_disp
+        cus3a
+        ispalgo
+        mi_sys
+        mi_common
+        cam_os_wrapper
+        cam_fs_wrapper
+        -Wl,--end-group
+    )
+    set(_SIGMASTAR_PIPELINE_STATUS "sigmastar::sensor_pipeline")
+elseif(TARGET sigmastar::sensor_pipeline)
+    set(_SIGMASTAR_PIPELINE_STATUS "sigmastar::sensor_pipeline")
+endif()
+
 message(STATUS "==============================================================================")
 message(STATUS "Sigmastar MI/IPU found")
 message(STATUS "  platform  : ${THIRD_PARTY_PLATFORM_TAG}")
@@ -155,8 +204,15 @@ message(STATUS "  mi libs   : ${_SIGMASTAR_MI_LIB_DIR}")
 message(STATUS "  common    : ${_SIGMASTAR_COMMON_LIB_DIR}")
 message(STATUS "  include   : ${_SIGMASTAR_INCLUDE_DIR}")
 message(STATUS "  ipu       : ${_SIGMASTAR_IPU_INCLUDE_DIR}")
+message(STATUS "  isp       : ${_SIGMASTAR_ISP_INCLUDE_DIR}")
 message(STATUS "  target    : sigmastar::mi")
+message(STATUS "  pipeline  : ${_SIGMASTAR_PIPELINE_STATUS}")
 message(STATUS "==============================================================================")
+
+unset(_SIGMASTAR_ISP_INCLUDE_DIR)
+unset(_SIGMASTAR_ISP_CHIP_INCLUDE_DIR)
+unset(_SIGMASTAR_PIPELINE_LIBS_OK)
+unset(_SIGMASTAR_PIPELINE_STATUS)
 
 unset(_SIGMASTAR_MI_LIB_REL)
 unset(_SIGMASTAR_COMMON_LIB_REL)
