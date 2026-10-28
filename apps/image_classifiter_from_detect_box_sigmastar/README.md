@@ -6,19 +6,21 @@ Sigmastar **板端 dump**：按检测框裁剪后做分类，批量写出 float 
 - `deep_learning/src/train/scripts/eval_box_crop_classifier_onnx.py`
 - `deep_learning/src/train/scripts/confusion_from_classifier_dump.py`
 
-流程：读 CSV → 原图按 `cx,cy,w,h` × `box_scale` 裁切 → LetterBox(fill=114) → 按 `.img` 的 `eElmFormat` 打包 → `INT16 × fScalar`（Softmax 前）→ 写 dump CSV。
+流程：读 CSV → 按模型决定读图通道 → 原图按 `cx,cy,w,h` × `box_scale` 裁切 → LetterBox(fill=114) → 按 `.img` 的 `eElmFormat` 打包 → `INT16 × fScalar`（Softmax 前）→ 写 dump CSV。
 
-输入格式自适应（由模型描述决定，无需改 CLI）：
+输入格式自适应（由模型描述决定，无需改 CLI）。读图跟模型走：灰度在 LetterBox 之前就是单通道；彩色仍按 BGR 读入。
 
-| 量化 `input_formats` | 常见 `eElmFormat` | 打包 |
-|----------------------|-------------------|------|
-| BGRA | `ARGB8888` | BGR→BGRA，stride 16 对齐 |
-| RGBA | `ABGR8888` | BGR→RGBA，stride 16 对齐 |
-| RGB | `RGB888` 或旧 SDK `U8`(buf≈H×W×3) | BGR→RGB，**紧密排列** |
-| BGR | `BGR888` / `U8` | BGR 紧密排列 |
-| YUV_NV12 | `NV12` | BGR→NV12 |
+| 量化 `input_formats` | 常见 `eElmFormat` | 读图与打包 |
+|----------------------|-------------------|------------|
+| GRAY | `GRAY` | `IMREAD_GRAYSCALE`，单通道紧密排列 |
+| GRAY（旧 SDK 落成 U8） | `U8` 且 `H×W <= buf < H×W×3` | 同上 |
+| BGRA | `ARGB8888` | `IMREAD_COLOR`，BGR→BGRA，stride 16 对齐 |
+| RGBA | `ABGR8888` | `IMREAD_COLOR`，BGR→RGBA，stride 16 对齐 |
+| RGB | `RGB888` 或旧 SDK `U8`(buf≈H×W×3) | `IMREAD_COLOR`，BGR→RGB，**紧密排列** |
+| BGR | `BGR888` / `U8` | `IMREAD_COLOR`，BGR 紧密排列 |
+| YUV_NV12 | `NV12` | `IMREAD_COLOR`，BGR→NV12 |
 
-启动时会打印 `input elm : …`，便于确认新量化模型实际格式。
+启动时会打印 `input elm : …` 和 `pack mode : …`，便于确认新量化模型实际走了哪条路径。
 
 标签映射 A：CSV `class_id` `0/1 → gt_id=1`，`2 → gt_id=2`（不合成 background）。
 

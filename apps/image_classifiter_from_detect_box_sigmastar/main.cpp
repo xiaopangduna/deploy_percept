@@ -7,6 +7,7 @@
  *     [--out dump_board.csv] [--box-scale 1.2] [-h]
  *
  * path_img 相对 CSV 所在目录。logit = INT16 × fScalar（Softmax 前）。
+ * 读图通道由模型输入决定：GRAY，或 U8 且 buf < H*W*3，用灰度；其余用 BGR。
  * 标签映射 A：CSV class_id 0/1 → gt_id=1，2 → gt_id=2。
  */
 #include <algorithm>
@@ -440,6 +441,133 @@ const char *elm_format_name(std::uint32_t elm_format)
     }
 }
 
+enum class ReadLayout
+{
+    Color,
+    Gray,
+};
+
+/** 由模型输入描述决定整批样本的读图与打包方式。 */
+struct InputPlan
+{
+    ReadLayout layout = ReadLayout::Color;
+    int imread_flag = cv::IMREAD_COLOR;
+    std::string pack_mode;
+};
+
+bool resolve_input_plan(
+    std::uint32_t elm_format,
+    int model_w,
+    int model_h,
+    std::size_t buffer_bytes,
+    InputPlan &plan)
+{
+    if (model_w <= 0 || model_h <= 0)
+    {
+        std::fprintf(stderr, "invalid model input size: %dx%d\n", model_w, model_h);
+        return false;
+    }
+
+    const std::size_t rgb_bytes =
+        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3u;
+    const std::size_t gray_bytes =
+        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h);
+    const auto fmt = static_cast<MI_IPU_ELEMENT_FORMAT>(elm_format);
+
+    auto set_color = [&](const char *mode) {
+        plan.layout = ReadLayout::Color;
+        plan.imread_flag = cv::IMREAD_COLOR;
+        plan.pack_mode = mode;
+    };
+    auto set_gray = [&](const char *mode) {
+        plan.layout = ReadLayout::Gray;
+        plan.imread_flag = cv::IMREAD_GRAYSCALE;
+        plan.pack_mode = mode;
+    };
+
+    if (fmt == MI_IPU_FORMAT_GRAY)
+    {
+        if (buffer_bytes < gray_bytes)
+        {
+            std::fprintf(
+                stderr,
+                "GRAY input buffer too small: buf=%zu need>=%zu\n",
+                buffer_bytes,
+                gray_bytes);
+            return false;
+        }
+        set_gray("GRAY (imread grayscale)");
+        return true;
+    }
+
+    if (fmt == MI_IPU_FORMAT_U8)
+    {
+        if (buffer_bytes >= rgb_bytes)
+        {
+            char mode[128];
+            std::snprintf(
+                mode,
+                sizeof(mode),
+                "U8 as RGB888 (tight), buf=%zu HxWx3=%zu",
+                buffer_bytes,
+                rgb_bytes);
+            set_color(mode);
+            return true;
+        }
+        if (buffer_bytes >= gray_bytes)
+        {
+            set_gray("U8-GRAY (imread grayscale)");
+            return true;
+        }
+        std::fprintf(
+            stderr,
+            "U8 input buffer too small: buf=%zu need>=%zu\n",
+            buffer_bytes,
+            gray_bytes);
+        return false;
+    }
+
+    if (fmt == MI_IPU_FORMAT_NV12)
+    {
+        set_color("NV12 (imread color)");
+        return true;
+    }
+    if (fmt == MI_IPU_FORMAT_ARGB8888)
+    {
+        set_color("ARGB8888 (imread color)");
+        return true;
+    }
+    if (fmt == MI_IPU_FORMAT_ABGR8888)
+    {
+        set_color("ABGR8888 (imread color)");
+        return true;
+    }
+#ifdef MI_IPU_FORMAT_RGB888
+    if (fmt == MI_IPU_FORMAT_RGB888)
+    {
+        set_color("RGB888 (imread color)");
+        return true;
+    }
+#endif
+#ifdef MI_IPU_FORMAT_BGR888
+    if (fmt == MI_IPU_FORMAT_BGR888)
+    {
+        set_color("BGR888 (imread color)");
+        return true;
+    }
+#endif
+
+    std::fprintf(
+        stderr,
+        "unsupported input elm_format=%u (%s), buf=%zu, HxW=%dx%d\n",
+        elm_format,
+        elm_format_name(elm_format),
+        buffer_bytes,
+        model_w,
+        model_h);
+    return false;
+}
+
 /** RGB/BGR：文档要求紧密排列，不做 W 对齐。to_rgb=true 时 BGR→RGB。 */
 bool pack_rgb888_tight(
     const cv::Mat &model_input_bgr,
@@ -472,8 +600,40 @@ bool pack_rgb888_tight(
         tag);
 }
 
+/** 灰度：读图阶段已是单通道，紧密排列，stride = W。 */
+bool pack_gray_tight(
+    const cv::Mat &gray,
+    const int model_w,
+    const int model_h,
+    const std::size_t buffer_bytes,
+    std::vector<std::uint8_t> &input_buffer)
+{
+    if (gray.cols != model_w || gray.rows != model_h || gray.channels() != 1)
+    {
+        std::fprintf(
+            stderr,
+            "gray letterbox mismatch: got %dx%d ch=%d expect %dx%d ch=1\n",
+            gray.cols,
+            gray.rows,
+            gray.channels(),
+            model_w,
+            model_h);
+        return false;
+    }
+    input_buffer.assign(buffer_bytes, 0);
+    return pack_strided_rows(
+        gray.ptr<std::uint8_t>(0),
+        static_cast<int>(gray.step[0]),
+        model_w,
+        model_h,
+        static_cast<std::uint32_t>(model_w),
+        buffer_bytes,
+        input_buffer,
+        "GRAY");
+}
+
 /**
- * 按模型 ``eElmFormat`` 打包 LetterBox 后的 BGR 图。
+ * 打包 LetterBox 后的 BGR 图。灰度模型不走这里，见 ``pack_gray_tight``。
  *
  * 量化 ``input_formats`` → 常见 ``eElmFormat``：
  *   BGRA → ARGB8888（内存 BGRA，stride 16 对齐）
@@ -490,13 +650,15 @@ bool pack_model_input(
     const std::size_t buffer_bytes,
     std::vector<std::uint8_t> &input_buffer)
 {
-    if (model_input_bgr.cols != model_w || model_input_bgr.rows != model_h)
+    if (model_input_bgr.cols != model_w || model_input_bgr.rows != model_h ||
+        model_input_bgr.channels() != 3)
     {
         std::fprintf(
             stderr,
-            "letterbox size mismatch: got %dx%d expect %dx%d\n",
+            "letterbox size mismatch: got %dx%d ch=%d expect %dx%d ch=3\n",
             model_input_bgr.cols,
             model_input_bgr.rows,
+            model_input_bgr.channels(),
             model_w,
             model_h);
         return false;
@@ -577,31 +739,16 @@ bool pack_model_input(
     }
 #endif
 
-    // 旧 SDK 无 RGB888 枚举时，input_formats=RGB 常落成 U8，buf≈H*W*3
+    // 旧 SDK 无 RGB888 枚举时，input_formats=RGB 常落成 U8，buf≈H*W*3。
+    // buf≈H*W 的灰度 U8 在 resolve_input_plan 里走 pack_gray_tight。
     if (fmt == MI_IPU_FORMAT_U8)
     {
         const std::size_t rgb_bytes =
             static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3u;
-        const std::size_t gray_bytes =
-            static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h);
         if (buffer_bytes >= rgb_bytes)
         {
             return pack_rgb888_tight(
                 model_input_bgr, true, model_w, model_h, buffer_bytes, input_buffer, "U8-as-RGB888");
-        }
-        if (buffer_bytes >= gray_bytes)
-        {
-            cv::Mat gray;
-            cv::cvtColor(model_input_bgr, gray, cv::COLOR_BGR2GRAY);
-            return pack_strided_rows(
-                gray.ptr<std::uint8_t>(0),
-                static_cast<int>(gray.step[0]),
-                model_w,
-                model_h,
-                static_cast<std::uint32_t>(model_w),
-                buffer_bytes,
-                input_buffer,
-                "U8-GRAY");
         }
     }
 
@@ -746,8 +893,6 @@ int main(int argc, char **argv)
     const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
     const float out_scalar = out0.fScalar;
     const std::uint32_t elm_format = static_cast<std::uint32_t>(in0.eElmFormat);
-    const std::size_t rgb_bytes =
-        static_cast<std::size_t>(model_w) * static_cast<std::size_t>(model_h) * 3u;
     std::printf(
         "  input elm : %u (%s), HxW=%dx%d, buf=%zu\n",
         elm_format,
@@ -755,14 +900,12 @@ int main(int argc, char **argv)
         model_h,
         model_w,
         buffer_bytes);
-    if (static_cast<MI_IPU_ELEMENT_FORMAT>(elm_format) == MI_IPU_FORMAT_U8 &&
-        buffer_bytes >= rgb_bytes)
+    InputPlan plan;
+    if (!resolve_input_plan(elm_format, model_w, model_h, buffer_bytes, plan))
     {
-        std::printf(
-            "  pack mode : U8 as RGB888 (tight), buf=%zu HxWx3=%zu\n",
-            buffer_bytes,
-            rgb_bytes);
+        return 1;
     }
+    std::printf("  pack mode : %s\n", plan.pack_mode.c_str());
 
     if (num_classes < kExpectedNumClasses)
     {
@@ -807,8 +950,8 @@ int main(int argc, char **argv)
             fs::path(row.path_img).is_absolute()
                 ? fs::path(row.path_img)
                 : (csv_dir / row.path_img);
-        cv::Mat bgr = cv::imread(img_path.string(), cv::IMREAD_COLOR);
-        if (bgr.empty())
+        cv::Mat image = cv::imread(img_path.string(), plan.imread_flag);
+        if (image.empty())
         {
             std::fprintf(stderr, "[%zu] failed to read: %s\n", i, img_path.c_str());
             ++skip_count;
@@ -816,17 +959,27 @@ int main(int argc, char **argv)
         }
 
         const cv::Mat crop =
-            crop_cxcywh(bgr, row.cx, row.cy, row.w, row.h, cli.box_scale);
+            crop_cxcywh(image, row.cx, row.cy, row.w, row.h, cli.box_scale);
         const cv::Mat letterboxed =
             letterbox_yolo(crop, model_w, model_h, kLetterboxFill);
 
-        if (!pack_model_input(
+        bool packed = false;
+        if (plan.layout == ReadLayout::Gray)
+        {
+            packed = pack_gray_tight(
+                letterboxed, model_w, model_h, buffer_bytes, input_buffer);
+        }
+        else
+        {
+            packed = pack_model_input(
                 letterboxed,
                 model_w,
                 model_h,
                 elm_format,
                 buffer_bytes,
-                input_buffer))
+                input_buffer);
+        }
+        if (!packed)
         {
             std::fprintf(stderr, "[%zu] pack input failed: %s\n", i, row.path_img.c_str());
             ++skip_count;
