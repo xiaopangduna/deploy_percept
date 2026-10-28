@@ -16,6 +16,8 @@
 
 #include <unistd.h>
 
+#include "detect_session.hpp"
+
 #include "mi_common.h"
 #include "mi_disp.h"
 #include "mi_isp.h"
@@ -38,6 +40,11 @@ constexpr MI_U32 kIspPort = 1;
 constexpr MI_U32 kSclDev = 1;
 constexpr MI_U32 kSclPreviewChn = 0;
 constexpr MI_U32 kSclRotateChn = 1;
+constexpr MI_U32 kSclDetectChn = 5;
+constexpr MI_U16 kDetectWidth = 800;
+constexpr MI_U16 kDetectHeight = 480;
+const char *kDefaultModel =
+    "/customer/sample_code/disp_sensor2Panel_demo/model/yolov8n_800x480_P3P_fixed.sim_sgsimg.img";
 constexpr MI_U32 kDispDev = 0;
 constexpr MI_U32 kDispLayer = 0;
 constexpr MI_U32 kDispPort = 0;
@@ -60,6 +67,8 @@ struct Options
     MI_SYS_Rotate_e rotate = E_MI_SYS_ROTATE_90;
     MI_SYS_BindType_e vif_isp_bind = E_MI_SYS_BIND_TYPE_REALTIME;
     std::string iq_dir = "/customer";
+    bool detect = false;
+    std::string model_path = kDefaultModel;
 };
 
 struct Port
@@ -99,6 +108,11 @@ struct Pipeline
     bool disp_port = false;
     bool scl_to_disp = false;
     bool preview_port = false;
+    bool scl_detect = false;
+    bool isp_to_detect = false;
+    bool detect_port = false;
+    bool detect_running = false;
+    sensor_preview::DetectSession detect_session;
 };
 
 bool step_ok(MI_S32 ret, const char *name)
@@ -205,6 +219,11 @@ Port scl_rotate_port()
     return Port{E_MI_MODULE_ID_SCL, kSclDev, kSclRotateChn, 0};
 }
 
+Port scl_detect_port()
+{
+    return Port{E_MI_MODULE_ID_SCL, kSclDev, kSclDetectChn, 0};
+}
+
 Port disp_port()
 {
     return Port{E_MI_MODULE_ID_DISP, kDispDev, 0, 0};
@@ -215,10 +234,27 @@ bool rotated_90_or_270(MI_SYS_Rotate_e rotate)
     return rotate == E_MI_SYS_ROTATE_90 || rotate == E_MI_SYS_ROTATE_270;
 }
 
+int rotate_degree(MI_SYS_Rotate_e rotate)
+{
+    if (rotate == E_MI_SYS_ROTATE_90)
+    {
+        return 90;
+    }
+    if (rotate == E_MI_SYS_ROTATE_180)
+    {
+        return 180;
+    }
+    if (rotate == E_MI_SYS_ROTATE_270)
+    {
+        return 270;
+    }
+    return 0;
+}
+
 void print_usage(const char *argv0)
 {
     std::printf(
-        "Usage: %s [-c res] [-n 0] [-p 0|1] [-t 0|1|2] [-r 0|90|180|270] [-b 0|1] [-i iq_dir]\n"
+        "Usage: %s [-c res] [-n 0] [-p 0|1] [-t 0|1|2] [-r 0|90|180|270] [-b 0|1] [-i iq_dir] [-d 0|1] [-m model]\n"
         "\n"
         "  -c  sensor resolution index (default 1, gc2053 1920x1080 1lane)\n"
         "  -n  must be 0 (pad0 only)\n"
@@ -227,6 +263,8 @@ void print_usage(const char *argv0)
         "  -r  SCL rotate (default 90)\n"
         "  -b  0 VIF->ISP realtime, 1 frame (default 0)\n"
         "  -i  directory of iqApiBin0.bin (default /customer)\n"
+        "  -d  0 preview only, 1 also run YOLOv8 and draw boxes (default 0)\n"
+        "  -m  .img path used when -d 1\n"
         "\n"
         "Type 110 to quit.\n",
         argv0);
@@ -236,7 +274,7 @@ bool parse_args(int argc, char **argv, Options &opt)
 {
     optind = 1;
     int flag = 0;
-    while ((flag = getopt(argc, argv, "c:n:p:t:r:b:i:h")) != -1)
+    while ((flag = getopt(argc, argv, "c:n:p:t:r:b:i:d:m:h")) != -1)
     {
         switch (flag)
         {
@@ -294,6 +332,13 @@ bool parse_args(int argc, char **argv, Options &opt)
             break;
         case 'i':
             opt.iq_dir = optarg;
+            break;
+        case 'd':
+            opt.detect = std::atoi(optarg) != 0;
+            std::printf("detect:%d\n", opt.detect ? 1 : 0);
+            break;
+        case 'm':
+            opt.model_path = optarg;
             break;
         case 'h':
             print_usage(argv[0]);
@@ -533,6 +578,44 @@ bool start_scl_channels(Pipeline &pipe)
     return true;
 }
 
+bool start_detect_scl(Pipeline &pipe)
+{
+    MI_SCL_ChannelAttr_t chn_attr;
+    MI_SCL_ChnParam_t chn_param;
+    std::memset(&chn_attr, 0, sizeof(chn_attr));
+    std::memset(&chn_param, 0, sizeof(chn_param));
+    chn_param.eRot = E_MI_SYS_ROTATE_NONE;
+    if (!step_ok(MI_SCL_CreateChannel(kSclDev, kSclDetectChn, &chn_attr), "MI_SCL_CreateChannel detect") ||
+        !step_ok(MI_SCL_SetChnParam(kSclDev, kSclDetectChn, &chn_param), "MI_SCL_SetChnParam detect") ||
+        !step_ok(MI_SCL_StartChannel(kSclDev, kSclDetectChn), "MI_SCL_StartChannel detect"))
+    {
+        return false;
+    }
+    pipe.scl_detect = true;
+
+    if (!bind_ports(isp_port(), scl_detect_port(), pipe.fps, E_MI_SYS_BIND_TYPE_FRAME_BASE))
+    {
+        return false;
+    }
+    pipe.isp_to_detect = true;
+
+    MI_SCL_OutPortParam_t out_param;
+    std::memset(&out_param, 0, sizeof(out_param));
+    out_param.stSCLOutputSize.u16Width = kDetectWidth;
+    out_param.stSCLOutputSize.u16Height = kDetectHeight;
+    out_param.ePixelFormat = E_MI_SYS_PIXEL_FRAME_YUV_SEMIPLANAR_420;
+    if (!step_ok(MI_SCL_SetOutputPortParam(kSclDev, kSclDetectChn, 0, &out_param),
+                 "MI_SCL_SetOutputPortParam detect") ||
+        !set_depth(scl_detect_port(), 2, 4) ||
+        !step_ok(MI_SCL_EnableOutputPort(kSclDev, kSclDetectChn, 0), "MI_SCL_EnableOutputPort detect"))
+    {
+        return false;
+    }
+    pipe.detect_port = true;
+    std::printf("detect scl %ux%u NV12, chn %u\n", kDetectWidth, kDetectHeight, kSclDetectChn);
+    return true;
+}
+
 bool start_disp(Pipeline &pipe)
 {
     MI_DISP_PubAttr_t pub_attr;
@@ -673,7 +756,7 @@ bool start_pipeline(Pipeline &pipe)
     pipe.vif_isp_bound = true;
     std::printf("bind VIF(0 0 0) -> ISP(0 0), bind type:%d\n",
                 static_cast<int>(pipe.opt.vif_isp_bind));
-    if (!start_scl_channels(pipe) || !start_disp(pipe))
+    if (!start_scl_channels(pipe) || (pipe.opt.detect && !start_detect_scl(pipe)) || !start_disp(pipe))
     {
         return false;
     }
@@ -682,11 +765,46 @@ bool start_pipeline(Pipeline &pipe)
         return false;
     }
     pipe.scl_to_disp = true;
-    return enable_preview_port(pipe);
+    if (!enable_preview_port(pipe))
+    {
+        return false;
+    }
+    if (!pipe.opt.detect)
+    {
+        return true;
+    }
+    sensor_preview::DetectConfig detect_config;
+    detect_config.model_path = pipe.opt.model_path;
+    detect_config.rotate_degree = rotate_degree(pipe.opt.rotate);
+    if (!pipe.detect_session.start(detect_config))
+    {
+        return false;
+    }
+    pipe.detect_running = true;
+    return true;
 }
 
 void stop_pipeline(Pipeline &pipe)
 {
+    if (pipe.detect_running)
+    {
+        pipe.detect_session.stop();
+        pipe.detect_running = false;
+    }
+    if (pipe.detect_port)
+    {
+        step_release(MI_SCL_DisableOutputPort(kSclDev, kSclDetectChn, 0),
+                     "MI_SCL_DisableOutputPort detect");
+    }
+    if (pipe.isp_to_detect)
+    {
+        unbind_ports(isp_port(), scl_detect_port());
+    }
+    if (pipe.scl_detect)
+    {
+        step_release(MI_SCL_StopChannel(kSclDev, kSclDetectChn), "MI_SCL_StopChannel detect");
+        step_release(MI_SCL_DestroyChannel(kSclDev, kSclDetectChn), "MI_SCL_DestroyChannel detect");
+    }
     if (pipe.scl_to_disp)
     {
         unbind_ports(scl_preview_port(), disp_port());
