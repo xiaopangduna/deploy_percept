@@ -2,7 +2,7 @@
  * Sigmastar：单张图 → .img 推理 → 一个 NPZ。
  *
  * 用法：
- *   img_tensor_dump_sigmastar --model <path.img> --image <path>
+ *   dump_img_output_from_image --model <path.img> --image <path>
  *       [--out dump_board.npz] [-h]
  *
  * 输入格式由 .img 的 eElmFormat 决定（GRAY / RGB / BGR / BGRA / RGBA / NV12）。
@@ -799,7 +799,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("img_tensor_dump_sigmastar\n");
+    std::printf("dump_img_output_from_image\n");
     std::printf("  model : %s\n", cli.model.c_str());
     std::printf("  image : %s\n", cli.image.c_str());
     std::printf("  out   : %s\n", cli.out.c_str());

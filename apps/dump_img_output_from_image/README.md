@@ -1,4 +1,4 @@
-# img_tensor_dump_sigmastar
+# dump_img_output_from_image
 
 Sigmastar **板端张量 dump**：一张图进 `.img`，把全部输出反量化成 float32，写进一个 NPZ。
 
@@ -6,8 +6,8 @@ Sigmastar **板端张量 dump**：一张图进 `.img`，把全部输出反量化
 
 PC 侧比对放在训练仓库，按模型分开。MobileNetV2：
 
-- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/eval_onnx_dump.py`
-- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/compare_dumps.py`
+- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/dump_onnx_output_from_image.py`
+- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/compare_img_and_onnx_dumps.py`
 
 输入格式由 `.img` 的 `eElmFormat` 决定，规则与 `image_classifiter_from_detect_box_sigmastar` 相同。图已经是模型 `H×W` 时原样使用；否则 `INTER_LINEAR` 缩放到模型输入。推荐直接喂一张已经缩好的 PNG。
 
@@ -18,7 +18,7 @@ PC 侧比对放在训练仓库，按模型分开。MobileNetV2：
 ```bash
 cmake --preset=armv7l-linux-gnueabihf_ssc308qe-release
 cmake --build --preset=armv7l-linux-gnueabihf_ssc308qe-release \
-  --target img_tensor_dump_sigmastar
+  --target dump_img_output_from_image
 ```
 
 需要 `nlohmann_json`。其它 Sigmastar preset 同样替换 preset 名。
@@ -27,7 +27,7 @@ cmake --build --preset=armv7l-linux-gnueabihf_ssc308qe-release \
 
 ```bash
 cd /customer/deploy_percept
-./bin/img_tensor_dump_sigmastar \
+./bin/dump_img_output_from_image \
   --model ./model.img \
   --image ./input.png \
   --out ./dump_board.npz
@@ -51,4 +51,4 @@ cd /customer/deploy_percept
 
 ## PC
 
-在 `train/exports/sigmastar/mobilenet_v2` 下跑，把板端 `dump_board.npz` 拷到该目录。灰度 `--value-scale` 用 `1/255`，RGB 是否再归一化看该目录 README。
+在 `train/exports/sigmastar/mobilenet_v2` 下先跑 `dump_onnx_output_from_image.py`，再用 `compare_img_and_onnx_dumps.py` 和板端 `dump_board.npz` 比。灰度 `--value-scale` 用 `1/255`，RGB 的归一化见该目录 README。

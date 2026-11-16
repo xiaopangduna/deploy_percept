@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(img_tensor_dump_sigmastar LANGUAGES CXX)
+project(dump_img_output_from_image LANGUAGES CXX)
 
-add_executable(img_tensor_dump_sigmastar main.cpp)
+add_executable(dump_img_output_from_image main.cpp)
 
-target_link_libraries(img_tensor_dump_sigmastar PRIVATE
+target_link_libraries(dump_img_output_from_image PRIVATE
     deploy_percept_core
     deploy_percept_utils
     nlohmann_json::nlohmann_json)
@@ -12,8 +12,8 @@ target_link_libraries(img_tensor_dump_sigmastar PRIVATE
 include(GNUInstallDirs)
 
 # cnpy 默认 SHARED：install 树为 bin/ + lib/libcnpy.so，需 $ORIGIN/../lib
-set_target_properties(img_tensor_dump_sigmastar PROPERTIES
+set_target_properties(dump_img_output_from_image PROPERTIES
     INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
 
-install(TARGETS img_tensor_dump_sigmastar
+install(TARGETS dump_img_output_from_image
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
