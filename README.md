@@ -83,6 +83,7 @@ bash scripts/build.sh --preset <preset> --install
 ```bash
 bash scripts/build.sh --preset x86_64-debug --install
 bash scripts/build.sh --preset aarch64-linux-gnu_orange_pi_4_pro_a733-release --install
+bash scripts/build.sh --preset armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release --install
 ```
 
 install 包布局（`install/<platform>/`）：

@@ -33,7 +33,7 @@ show_help() {
     echo "tests/、benchmarks/ 均由 scripts/test_run.sh 执行（无额外 ELF 参数）。"
     echo "profile 由 scripts/profile_run.sh 执行（按 bin 后缀选平台；每组约 90s；Sigmastar / AWNN 各三组约 270s+）。"
     echo ""
-    echo "板端需: export SSHPASS='...'（sshpass）"
+    echo "板端需: export SSHPASS='密码'（sshpass）；密码为空时 export SSHPASS=''"
     echo "新板 / CI 请加 --full。--bench 需 ENABLE_BENCHMARKS=ON；--profile 需 ENABLE/INSTALL_PROFILING。"
     echo ""
     echo "示例:"
@@ -43,8 +43,9 @@ show_help() {
 }
 
 setup_ssh_transport() {
-    if [[ -z "${SSHPASS:-}" ]]; then
-        echo "错误: 板端模式需要设置 SSHPASS" >&2
+    # 必须显式 export。空字符串是合法口令，交给 sshpass -e。
+    if [[ -z "${SSHPASS+x}" ]]; then
+        echo "错误: 板端模式需要设置 SSHPASS（密码为空时: export SSHPASS=''）" >&2
         return 1
     fi
     if ! command -v sshpass >/dev/null 2>&1; then

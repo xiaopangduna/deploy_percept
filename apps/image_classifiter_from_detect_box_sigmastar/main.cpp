@@ -1,14 +1,16 @@
 /**
- * Sigmastar：检测框裁剪分类 dump（原图 + CSV → float logits CSV）
+ * Sigmastar：分类 dump（CSV → 一个 JSON）。
  *
  * 用法：
  *   image_classifiter_from_detect_box_sigmastar
  *     --model <path.img> --csv <path.csv>
- *     [--out dump_board.csv] [--box-scale 1.2] [-h]
+ *     [--out <model_stem>.json] [--box-scale 1.2] [-h]
  *
- * path_img 相对 CSV 所在目录。logit = INT16 × fScalar（Softmax 前）。
+ * CSV 有 path_img,class_id 时整图 LetterBox。四列 cx,cy,w,h 同时存在时先裁框再 LetterBox。
+ * path_img 相对 CSV 所在目录。logit = 元素 × fScalar（Softmax 前）。
  * 读图通道由模型输入决定：GRAY，或 U8 且 buf < H*W*3，用灰度；其余用 BGR。
- * 标签映射 A：CSV class_id 0/1 → gt_id=1，2 → gt_id=2。
+ * --box-scale > 0 且 CSV 有 cx,cy,w,h 时裁框；否则整图。
+ * acc1 / acc5 只比较 class_id 与 pred_id。
  */
 #include <algorithm>
 #include <cmath>
@@ -18,9 +20,12 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
+#include <system_error>
 #include <vector>
 
+#include <nlohmann/json.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "mi_ipu.h"
@@ -34,22 +39,29 @@ using deploy_percept::TensorDtype;
 using deploy_percept::TensorView;
 using deploy_percept::engine::SigmastarEngine;
 using deploy_percept::engine::SigmastarRuntime;
+using json = nlohmann::ordered_json;
 
 namespace
 {
 
-constexpr const char *kDefaultOut = "dump_board.csv";
-constexpr float kDefaultBoxScale = 1.2f;
 constexpr int kLetterboxFill = 114;
+constexpr int kFormatVersion = 1;
+constexpr int kTopKMax = 5;
 constexpr std::uint32_t kDivpYuvAlignment = 16;
-constexpr int kExpectedNumClasses = 3;
+
+enum class CsvMode
+{
+    Image,
+    Box,
+};
 
 struct Cli
 {
     std::string model;
     std::string csv;
-    std::string out = kDefaultOut;
-    float box_scale = kDefaultBoxScale;
+    std::string out;
+    float box_scale = 0.f;
+    bool box_scale_set = false;
 };
 
 struct CsvRow
@@ -65,20 +77,21 @@ struct CsvRow
 void print_help(const char *argv0)
 {
     std::printf(
-        "Usage: %s --model <path.img> --csv <path.csv> [--out dump_board.csv] "
-        "[--box-scale 1.2] [-h]\n"
+        "Usage: %s --model <path.img> --csv <path.csv> [--out <model_stem>.json]\n"
+        "       [--box-scale 1.2] [-h]\n"
         "\n"
         "  --model       Sigmastar .img (required)\n"
         "  --csv         annotation CSV (required); path_img relative to CSV dir\n"
-        "  --out         dump CSV path (default: %s)\n"
-        "  --box-scale   crop expand factor (default: %.1f)\n"
+        "  --out         dump JSON path (default: <model file stem>.json)\n"
+        "  --box-scale   >0 and CSV has cx,cy,w,h: crop with this expand factor\n"
+        "                omitted or <=0: whole image\n"
         "  -h, --help    show this help\n"
         "\n"
-        "Dump columns: path_img,class_id,gt_id,logit_0,logit_1,logit_2,pred_id\n"
-        "gt_id mapping A: CSV 0/1 -> 1, CSV 2 -> 2\n",
-        argv0,
-        kDefaultOut,
-        static_cast<double>(kDefaultBoxScale));
+        "Missing cx,cy,w,h also uses the whole image.\n"
+        "Writes one JSON object: meta + samples.\n"
+        "logits = elem * fScalar, before softmax.\n"
+        "acc1/acc5 compare class_id with pred_id.\n",
+        argv0);
 }
 
 bool parse_cli(int argc, char **argv, Cli &cli)
@@ -133,12 +146,14 @@ bool parse_cli(int argc, char **argv, Cli &cli)
             {
                 return false;
             }
-            cli.box_scale = static_cast<float>(std::atof(v));
-            if (!(cli.box_scale > 0.f))
+            char *end = nullptr;
+            cli.box_scale = std::strtof(v, &end);
+            if (end == v || *end != '\0')
             {
                 std::fprintf(stderr, "invalid --box-scale: %s\n", v);
                 return false;
             }
+            cli.box_scale_set = true;
         }
         else
         {
@@ -152,21 +167,17 @@ bool parse_cli(int argc, char **argv, Cli &cli)
         print_help(argv[0]);
         return false;
     }
+    if (cli.out.empty())
+    {
+        const std::string stem = fs::path(cli.model).stem().string();
+        if (stem.empty())
+        {
+            std::fprintf(stderr, "model path has no file name: %s\n", cli.model.c_str());
+            return false;
+        }
+        cli.out = stem + ".json";
+    }
     return true;
-}
-
-/** 标签映射 A：CSV 0/1 → 1，2 → 2；其它返回 -1 */
-int map_gt_id(int class_id)
-{
-    if (class_id == 0 || class_id == 1)
-    {
-        return 1;
-    }
-    if (class_id == 2)
-    {
-        return 2;
-    }
-    return -1;
 }
 
 std::vector<std::string> split_csv_line(const std::string &line)
@@ -189,7 +200,7 @@ std::vector<std::string> split_csv_line(const std::string &line)
     return fields;
 }
 
-bool load_csv_rows(const fs::path &csv_path, std::vector<CsvRow> &rows)
+bool load_csv_rows(const fs::path &csv_path, std::vector<CsvRow> &rows, bool &has_box)
 {
     std::ifstream ifs(csv_path);
     if (!ifs)
@@ -238,14 +249,23 @@ bool load_csv_rows(const fs::path &csv_path, std::vector<CsvRow> &rows)
             idx_h = i;
         }
     }
-    if (idx_path < 0 || idx_class < 0 || idx_cx < 0 || idx_cy < 0 || idx_w < 0 || idx_h < 0)
+    if (idx_path < 0 || idx_class < 0)
     {
         std::fprintf(
             stderr,
-            "csv missing required columns "
-            "(path_img,class_id,cx,cy,w,h): %s\n",
+            "csv missing required columns (path_img,class_id): %s\n",
             csv_path.c_str());
         return false;
+    }
+    const int box_cols = (idx_cx >= 0 ? 1 : 0) + (idx_cy >= 0 ? 1 : 0) +
+                         (idx_w >= 0 ? 1 : 0) + (idx_h >= 0 ? 1 : 0);
+    has_box = box_cols == 4;
+    if (box_cols != 0 && !has_box)
+    {
+        std::fprintf(
+            stderr,
+            "csv missing some of cx,cy,w,h, using the whole image: %s\n",
+            csv_path.c_str());
     }
 
     int line_no = 1;
@@ -257,8 +277,9 @@ bool load_csv_rows(const fs::path &csv_path, std::vector<CsvRow> &rows)
             continue;
         }
         const auto fields = split_csv_line(line);
-        const int need = std::max(
-            {idx_path, idx_class, idx_cx, idx_cy, idx_w, idx_h});
+        const int need = has_box
+                             ? std::max({idx_path, idx_class, idx_cx, idx_cy, idx_w, idx_h})
+                             : std::max(idx_path, idx_class);
         if (static_cast<int>(fields.size()) <= need)
         {
             std::fprintf(stderr, "csv line %d: too few fields, skip\n", line_no);
@@ -267,10 +288,13 @@ bool load_csv_rows(const fs::path &csv_path, std::vector<CsvRow> &rows)
         CsvRow row;
         row.path_img = fields[static_cast<std::size_t>(idx_path)];
         row.class_id = std::atoi(fields[static_cast<std::size_t>(idx_class)].c_str());
-        row.cx = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_cx)].c_str()));
-        row.cy = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_cy)].c_str()));
-        row.w = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_w)].c_str()));
-        row.h = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_h)].c_str()));
+        if (has_box)
+        {
+            row.cx = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_cx)].c_str()));
+            row.cy = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_cy)].c_str()));
+            row.w = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_w)].c_str()));
+            row.h = static_cast<float>(std::atof(fields[static_cast<std::size_t>(idx_h)].c_str()));
+        }
         rows.push_back(std::move(row));
     }
     return true;
@@ -821,6 +845,202 @@ int argmax(const std::vector<float> &logits)
     return best;
 }
 
+/** class_id 的名次：logit 更大者在前；相等时下标更小者在前，与 argmax 一致。 */
+bool in_top_k(const std::vector<float> &logits, int class_id, int top_k)
+{
+    if (class_id < 0 || class_id >= static_cast<int>(logits.size()) || top_k <= 0)
+    {
+        return false;
+    }
+    const float class_logit = logits[static_cast<std::size_t>(class_id)];
+    int better = 0;
+    for (int i = 0; i < static_cast<int>(logits.size()); ++i)
+    {
+        if (i == class_id)
+        {
+            continue;
+        }
+        const float logit = logits[static_cast<std::size_t>(i)];
+        if (logit > class_logit || (logit == class_logit && i < class_id))
+        {
+            ++better;
+        }
+    }
+    return better < top_k;
+}
+
+bool logits_finite(const std::vector<float> &logits)
+{
+    for (float logit : logits)
+    {
+        if (!std::isfinite(logit))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool tensor_numel(const MI_IPU_TensorDesc_t &tensor, std::size_t &numel)
+{
+    if (tensor.u32TensorDim == 0 || tensor.u32TensorDim > MI_IPU_MAX_TENSOR_DIM)
+    {
+        return false;
+    }
+    numel = 1;
+    for (MI_U32 i = 0; i < tensor.u32TensorDim; ++i)
+    {
+        const std::uint32_t dim = tensor.u32TensorShape[i];
+        if (dim == 0 || numel > std::numeric_limits<std::size_t>::max() / dim)
+        {
+            return false;
+        }
+        numel *= dim;
+    }
+    return true;
+}
+
+bool ensure_parent_dir(const fs::path &path)
+{
+    const fs::path parent = path.parent_path();
+    if (parent.empty())
+    {
+        return true;
+    }
+    std::error_code ec;
+    fs::create_directories(parent, ec);
+    if (ec)
+    {
+        std::fprintf(
+            stderr,
+            "failed to create directory %s: %s\n",
+            parent.c_str(),
+            ec.message().c_str());
+        return false;
+    }
+    return true;
+}
+
+json make_sample(
+    const CsvRow &row,
+    std::size_t row_index,
+    CsvMode mode,
+    const std::vector<float> &logits,
+    int pred_id)
+{
+    json sample;
+    sample["row"] = row_index;
+    sample["path_img"] = row.path_img;
+    sample["class_id"] = row.class_id;
+    if (mode == CsvMode::Box)
+    {
+        sample["cx"] = static_cast<double>(row.cx);
+        sample["cy"] = static_cast<double>(row.cy);
+        sample["w"] = static_cast<double>(row.w);
+        sample["h"] = static_cast<double>(row.h);
+    }
+    json logits_json = json::array();
+    for (float logit : logits)
+    {
+        logits_json.push_back(static_cast<double>(logit));
+    }
+    sample["logits"] = std::move(logits_json);
+    sample["pred_id"] = pred_id;
+    return sample;
+}
+
+bool write_dump_json(
+    const fs::path &sample_tmp,
+    const fs::path &out_path,
+    const json &meta,
+    std::size_t ok_count)
+{
+    std::ifstream ifs(sample_tmp);
+    if (!ifs)
+    {
+        std::fprintf(stderr, "failed to read samples: %s\n", sample_tmp.c_str());
+        return false;
+    }
+    const fs::path staging = fs::path(out_path.string() + ".writing");
+    std::ofstream ofs(staging);
+    if (!ofs)
+    {
+        std::fprintf(stderr, "failed to open %s\n", staging.c_str());
+        return false;
+    }
+
+    ofs << "{\n  \"meta\": ";
+    const std::string meta_text = meta.dump(2, ' ', false, json::error_handler_t::replace);
+    for (char c : meta_text)
+    {
+        ofs << c;
+        if (c == '\n')
+        {
+            ofs << "  ";
+        }
+    }
+    ofs << ",\n  \"samples\": [";
+    std::size_t written = 0;
+    if (ok_count == 0)
+    {
+        ofs << "]\n}\n";
+    }
+    else
+    {
+        ofs << '\n';
+        std::string line;
+        while (std::getline(ifs, line))
+        {
+            if (line.empty())
+            {
+                continue;
+            }
+            ++written;
+            ofs << "    " << line;
+            if (written < ok_count)
+            {
+                ofs << ',';
+            }
+            ofs << '\n';
+        }
+        ofs << "  ]\n}\n";
+    }
+    if (written != ok_count)
+    {
+        std::fprintf(
+            stderr,
+            "sample count mismatch: file has %zu lines, expected %zu\n",
+            written,
+            ok_count);
+        ofs.close();
+        std::error_code ec;
+        fs::remove(staging, ec);
+        return false;
+    }
+    ofs.close();
+    if (!ofs)
+    {
+        std::fprintf(stderr, "failed to write %s\n", staging.c_str());
+        std::error_code ec;
+        fs::remove(staging, ec);
+        return false;
+    }
+
+    std::error_code ec;
+    fs::rename(staging, out_path, ec);
+    if (ec)
+    {
+        std::fprintf(
+            stderr,
+            "failed to rename %s -> %s: %s\n",
+            staging.c_str(),
+            out_path.c_str(),
+            ec.message().c_str());
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -835,7 +1055,6 @@ int main(int argc, char **argv)
     std::printf("  model     : %s\n", cli.model.c_str());
     std::printf("  csv       : %s\n", cli.csv.c_str());
     std::printf("  out       : %s\n", cli.out.c_str());
-    std::printf("  box-scale : %.4f\n", static_cast<double>(cli.box_scale));
 
     if (!fs::is_regular_file(cli.model))
     {
@@ -852,9 +1071,21 @@ int main(int argc, char **argv)
     const fs::path csv_dir = csv_path.parent_path();
 
     std::vector<CsvRow> rows;
-    if (!load_csv_rows(csv_path, rows))
+    bool has_box = false;
+    if (!load_csv_rows(csv_path, rows, has_box))
     {
         return 1;
+    }
+    const bool crop = cli.box_scale_set && cli.box_scale > 0.f && has_box;
+    const CsvMode csv_mode = crop ? CsvMode::Box : CsvMode::Image;
+    if (cli.box_scale_set && cli.box_scale > 0.f && !has_box)
+    {
+        std::fprintf(stderr, "--box-scale > 0 but csv has no cx,cy,w,h, using the whole image\n");
+    }
+    std::printf("  mode      : %s\n", csv_mode == CsvMode::Box ? "box" : "image");
+    if (csv_mode == CsvMode::Box)
+    {
+        std::printf("  box-scale : %.4f\n", static_cast<double>(cli.box_scale));
     }
     std::printf("  samples   : %zu\n", rows.size());
 
@@ -890,8 +1121,24 @@ int main(int argc, char **argv)
     const int model_h = static_cast<int>(in0.u32TensorShape[1]);
     const int model_w = static_cast<int>(in0.u32TensorShape[2]);
     const std::size_t buffer_bytes = in0.u32BufSize;
-    const int num_classes = static_cast<int>(out0.u32TensorShape[1]);
+    std::size_t output_numel = 0;
+    if (!tensor_numel(out0, output_numel) ||
+        output_numel == 0 ||
+        output_numel > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    {
+        std::fprintf(stderr, "invalid classification output shape\n");
+        return 1;
+    }
+    const int num_classes = static_cast<int>(output_numel);
     const float out_scalar = out0.fScalar;
+    const int top_k = std::min(kTopKMax, num_classes);
+    if (out0.s64ZeroPoint != 0)
+    {
+        std::fprintf(
+            stderr,
+            "output zero_point=%lld, logits use elem * fScalar\n",
+            static_cast<long long>(out0.s64ZeroPoint));
+    }
     const std::uint32_t elm_format = static_cast<std::uint32_t>(in0.eElmFormat);
     std::printf(
         "  input elm : %u (%s), HxW=%dx%d, buf=%zu\n",
@@ -906,41 +1153,40 @@ int main(int argc, char **argv)
         return 1;
     }
     std::printf("  pack mode : %s\n", plan.pack_mode.c_str());
+    std::printf("  classes   : %d\n", num_classes);
+    std::printf("  top-k     : %d\n", top_k);
 
-    if (num_classes < kExpectedNumClasses)
+    const fs::path out_path(cli.out);
+    if (!ensure_parent_dir(out_path))
     {
-        std::fprintf(
-            stderr,
-            "model num_classes=%d < %d, cannot dump 3 logits\n",
-            num_classes,
-            kExpectedNumClasses);
         return 1;
     }
-
-    std::ofstream ofs(cli.out);
-    if (!ofs)
+    const fs::path sample_tmp = fs::path(out_path.string() + ".samples.tmp");
+    std::ofstream sample_ofs(sample_tmp);
+    if (!sample_ofs)
     {
-        std::fprintf(stderr, "failed to open out: %s\n", cli.out.c_str());
+        std::fprintf(stderr, "failed to open %s\n", sample_tmp.c_str());
         return 1;
     }
-    ofs << "path_img,class_id,gt_id,logit_0,logit_1,logit_2,pred_id\n";
 
     std::vector<std::uint8_t> input_buffer;
     std::vector<float> logits;
     std::size_t ok_count = 0;
     std::size_t skip_count = 0;
+    std::size_t correct1 = 0;
+    std::size_t correct5 = 0;
 
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
         const CsvRow &row = rows[i];
-        const int gt_id = map_gt_id(row.class_id);
-        if (gt_id < 0)
+        if (csv_mode == CsvMode::Box &&
+            !(std::isfinite(row.cx) && std::isfinite(row.cy) && std::isfinite(row.w) &&
+              std::isfinite(row.h)))
         {
             std::fprintf(
                 stderr,
-                "[%zu] skip unmapped class_id=%d path=%s\n",
+                "[%zu] skip non-finite box path=%s\n",
                 i,
-                row.class_id,
                 row.path_img.c_str());
             ++skip_count;
             continue;
@@ -958,10 +1204,14 @@ int main(int argc, char **argv)
             continue;
         }
 
-        const cv::Mat crop =
-            crop_cxcywh(image, row.cx, row.cy, row.w, row.h, cli.box_scale);
         const cv::Mat letterboxed =
-            letterbox_yolo(crop, model_w, model_h, kLetterboxFill);
+            csv_mode == CsvMode::Box
+                ? letterbox_yolo(
+                      crop_cxcywh(image, row.cx, row.cy, row.w, row.h, cli.box_scale),
+                      model_w,
+                      model_h,
+                      kLetterboxFill)
+                : letterbox_yolo(image, model_w, model_h, kLetterboxFill);
 
         bool packed = false;
         if (plan.layout == ReadLayout::Gray)
@@ -1003,10 +1253,32 @@ int main(int argc, char **argv)
             continue;
         }
 
+        if (!logits_finite(logits))
+        {
+            std::fprintf(stderr, "[%zu] non-finite logits: %s\n", i, row.path_img.c_str());
+            engine.releaseResult();
+            ++skip_count;
+            continue;
+        }
+
         const int pred_id = argmax(logits);
-        ofs << row.path_img << ',' << row.class_id << ',' << gt_id << ','
-            << logits[0] << ',' << logits[1] << ',' << logits[2] << ',' << pred_id
-            << '\n';
+        sample_ofs << make_sample(row, i, csv_mode, logits, pred_id)
+                          .dump(-1, ' ', false, json::error_handler_t::replace)
+                   << '\n';
+        if (!sample_ofs)
+        {
+            std::fprintf(stderr, "failed to write %s\n", sample_tmp.c_str());
+            engine.releaseResult();
+            return 1;
+        }
+        if (pred_id == row.class_id)
+        {
+            ++correct1;
+        }
+        if (in_top_k(logits, row.class_id, top_k))
+        {
+            ++correct5;
+        }
         engine.releaseResult();
         ++ok_count;
 
@@ -1016,11 +1288,75 @@ int main(int argc, char **argv)
         }
     }
 
-    ofs.close();
+    sample_ofs.close();
+    if (!sample_ofs)
+    {
+        std::fprintf(stderr, "failed to write %s\n", sample_tmp.c_str());
+        return 1;
+    }
+
+    json meta;
+    meta["format_version"] = kFormatVersion;
+    meta["source"] = "board";
+    meta["model"] = cli.model;
+    meta["csv"] = cli.csv;
+    meta["mode"] = csv_mode == CsvMode::Box ? "box" : "image";
+    if (csv_mode == CsvMode::Box)
+    {
+        meta["box_scale"] = static_cast<double>(cli.box_scale);
+    }
+    meta["num_classes"] = num_classes;
+    meta["output_shape"] = json::array();
+    for (MI_U32 d = 0; d < out0.u32TensorDim; ++d)
+    {
+        meta["output_shape"].push_back(out0.u32TensorShape[d]);
+    }
+    meta["output_fscalar"] = static_cast<double>(out_scalar);
+    meta["model_h"] = model_h;
+    meta["model_w"] = model_w;
+    meta["letterbox_fill"] = kLetterboxFill;
+    meta["elm_format"] = elm_format;
+    meta["elm_format_name"] = elm_format_name(elm_format);
+    meta["pack_mode"] = plan.pack_mode;
+    meta["ok"] = ok_count;
+    meta["skip"] = skip_count;
+    meta["top_k"] = top_k;
+    if (ok_count == 0)
+    {
+        meta["acc1"] = json(nullptr);
+        meta["acc5"] = json(nullptr);
+        std::printf("acc1: n/a\n");
+        std::printf("acc5: n/a (top_k=%d)\n", top_k);
+    }
+    else
+    {
+        const double acc1 = static_cast<double>(correct1) / static_cast<double>(ok_count);
+        const double acc5 = static_cast<double>(correct5) / static_cast<double>(ok_count);
+        meta["acc1"] = acc1;
+        meta["acc5"] = acc5;
+        std::printf("acc1: %zu/%zu = %.6f\n", correct1, ok_count, acc1);
+        std::printf("acc5: %zu/%zu = %.6f (top_k=%d)\n", correct5, ok_count, acc5, top_k);
+    }
+
+    if (!write_dump_json(sample_tmp, out_path, meta, ok_count))
+    {
+        std::fprintf(stderr, "samples kept at %s\n", sample_tmp.c_str());
+        return 1;
+    }
+    std::error_code remove_ec;
+    fs::remove(sample_tmp, remove_ec);
+    if (remove_ec)
+    {
+        std::fprintf(
+            stderr,
+            "failed to remove %s: %s\n",
+            sample_tmp.c_str(),
+            remove_ec.message().c_str());
+    }
     std::printf(
-        "done: wrote %zu rows to %s (skipped %zu)\n",
+        "done: wrote %zu samples to %s (skipped %zu)\n",
         ok_count,
-        cli.out.c_str(),
+        out_path.c_str(),
         skip_count);
     return ok_count > 0 ? 0 : 1;
 }

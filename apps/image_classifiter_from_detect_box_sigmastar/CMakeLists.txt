@@ -6,7 +6,8 @@ add_executable(image_classifiter_from_detect_box_sigmastar main.cpp)
 
 target_link_libraries(image_classifiter_from_detect_box_sigmastar PRIVATE
     deploy_percept_core
-    deploy_percept_utils)
+    deploy_percept_utils
+    nlohmann_json::nlohmann_json)
 
 include(GNUInstallDirs)
 
