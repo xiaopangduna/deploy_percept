@@ -4,12 +4,14 @@
  * 用法：
  *   image_classifiter_from_detect_box_sigmastar
  *     --model <path.img> --csv <path.csv>
- *     [--out <model_stem>.json] [--box-scale 1.2] [-h]
+ *     [--out <model_stem>.json] [--box-scale 1.2]
+ *     [--prep letterbox|resize|imagenet] [-h]
  *
- * CSV 有 path_img,class_id 时整图 LetterBox。四列 cx,cy,w,h 同时存在时先裁框再 LetterBox。
+ * CSV 有 path_img,class_id 时默认整图 LetterBox。四列 cx,cy,w,h 同时存在时先裁框。
+ * --prep resize 直接 INTER_LINEAR 到模型 H×W。
+ * --prep imagenet 短边缩到 floor(min(H,W)/0.875)，再中心裁到模型尺寸。
+ * 标准化不在这里做。转 .img 时由 input_config 决定；ONNX 侧另做。
  * path_img 相对 CSV 所在目录。logit = 元素 × fScalar（Softmax 前）。
- * 读图通道由模型输入决定：GRAY，或 U8 且 buf < H*W*3，用灰度；其余用 BGR。
- * --box-scale > 0 且 CSV 有 cx,cy,w,h 时裁框；否则整图。
  * acc1 / acc5 只比较 class_id 与 pred_id。
  */
 #include <algorithm>
@@ -55,6 +57,13 @@ enum class CsvMode
     Box,
 };
 
+enum class SpatialPrep
+{
+    Letterbox,
+    Resize,
+    Imagenet,
+};
+
 struct Cli
 {
     std::string model;
@@ -62,6 +71,7 @@ struct Cli
     std::string out;
     float box_scale = 0.f;
     bool box_scale_set = false;
+    SpatialPrep prep = SpatialPrep::Letterbox;
 };
 
 struct CsvRow
@@ -74,18 +84,37 @@ struct CsvRow
     float h = 0.f;
 };
 
+const char *prep_name(SpatialPrep prep)
+{
+    switch (prep)
+    {
+    case SpatialPrep::Resize:
+        return "resize";
+    case SpatialPrep::Imagenet:
+        return "imagenet";
+    case SpatialPrep::Letterbox:
+    default:
+        return "letterbox";
+    }
+}
+
 void print_help(const char *argv0)
 {
     std::printf(
         "Usage: %s --model <path.img> --csv <path.csv> [--out <model_stem>.json]\n"
-        "       [--box-scale 1.2] [-h]\n"
+        "       [--box-scale 1.2] [--prep letterbox|resize|imagenet] [-h]\n"
         "\n"
         "  --model       Sigmastar .img (required)\n"
         "  --csv         annotation CSV (required); path_img relative to CSV dir\n"
         "  --out         dump JSON path (default: <model file stem>.json)\n"
         "  --box-scale   >0 and CSV has cx,cy,w,h: crop with this expand factor\n"
         "                omitted or <=0: whole image\n"
+        "  --prep        letterbox (default): keep aspect, pad 114\n"
+        "                resize: INTER_LINEAR to model HxW\n"
+        "                imagenet: shorter side -> floor(min(H,W)/0.875), center crop\n"
         "  -h, --help    show this help\n"
+        "\n"
+        "Pixels stay raw. Mean/std is chosen when converting the .img, and on ONNX.\n"
         "\n"
         "Missing cx,cy,w,h also uses the whole image.\n"
         "Writes one JSON object: meta + samples.\n"
@@ -154,6 +183,31 @@ bool parse_cli(int argc, char **argv, Cli &cli)
                 return false;
             }
             cli.box_scale_set = true;
+        }
+        else if (std::strcmp(a, "--prep") == 0)
+        {
+            const char *v = need_value(a);
+            if (v == nullptr)
+            {
+                return false;
+            }
+            if (std::strcmp(v, "letterbox") == 0)
+            {
+                cli.prep = SpatialPrep::Letterbox;
+            }
+            else if (std::strcmp(v, "resize") == 0)
+            {
+                cli.prep = SpatialPrep::Resize;
+            }
+            else if (std::strcmp(v, "imagenet") == 0)
+            {
+                cli.prep = SpatialPrep::Imagenet;
+            }
+            else
+            {
+                std::fprintf(stderr, "invalid --prep: %s\n", v);
+                return false;
+            }
         }
         else
         {
@@ -370,6 +424,77 @@ cv::Mat letterbox_yolo(
         return exact;
     }
     return padded;
+}
+
+/** 短边缩到 shorter，长边按比例，INTER_LINEAR。 */
+cv::Mat resize_shorter_side(const cv::Mat &src, int shorter)
+{
+    const int src_w = src.cols;
+    const int src_h = src.rows;
+    if (src_w <= 0 || src_h <= 0 || shorter <= 0 || std::min(src_w, src_h) == shorter)
+    {
+        return src;
+    }
+    int new_w = 0;
+    int new_h = 0;
+    if (src_w < src_h)
+    {
+        new_w = shorter;
+        new_h = std::max(
+            1,
+            static_cast<int>(std::lround(
+                static_cast<float>(src_h) * static_cast<float>(shorter) / static_cast<float>(src_w))));
+    }
+    else
+    {
+        new_h = shorter;
+        new_w = std::max(
+            1,
+            static_cast<int>(std::lround(
+                static_cast<float>(src_w) * static_cast<float>(shorter) / static_cast<float>(src_h))));
+    }
+    cv::Mat dst;
+    cv::resize(src, dst, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
+    return dst;
+}
+
+/** 中心裁切。源图某一边小于目标时退回直接缩放到目标尺寸。 */
+cv::Mat center_crop(const cv::Mat &src, int crop_w, int crop_h)
+{
+    if (src.cols == crop_w && src.rows == crop_h)
+    {
+        return src;
+    }
+    if (src.cols < crop_w || src.rows < crop_h)
+    {
+        cv::Mat scaled;
+        cv::resize(src, scaled, cv::Size(crop_w, crop_h), 0, 0, cv::INTER_LINEAR);
+        return scaled;
+    }
+    const int x = static_cast<int>(std::lround((src.cols - crop_w) / 2.0));
+    const int y = static_cast<int>(std::lround((src.rows - crop_h) / 2.0));
+    return src(cv::Rect(x, y, crop_w, crop_h)).clone();
+}
+
+cv::Mat fit_model_canvas(const cv::Mat &src, int model_w, int model_h, SpatialPrep prep)
+{
+    if (prep == SpatialPrep::Resize)
+    {
+        if (src.cols == model_w && src.rows == model_h)
+        {
+            return src;
+        }
+        cv::Mat scaled;
+        cv::resize(src, scaled, cv::Size(model_w, model_h), 0, 0, cv::INTER_LINEAR);
+        return scaled;
+    }
+    if (prep == SpatialPrep::Imagenet)
+    {
+        const int crop = std::min(model_w, model_h);
+        const int shorter = static_cast<int>(std::floor(static_cast<float>(crop) / 0.875f));
+        return center_crop(resize_shorter_side(src, shorter), model_w, model_h);
+    }
+    return letterbox_yolo(src, model_w, model_h, kLetterboxFill);
 }
 
 std::uint32_t align_up(std::uint32_t x, std::uint32_t align)
@@ -657,7 +782,7 @@ bool pack_gray_tight(
 }
 
 /**
- * 打包 LetterBox 后的 BGR 图。灰度模型不走这里，见 ``pack_gray_tight``。
+ * 打包缩放后的 BGR 图。灰度模型不走这里，见 ``pack_gray_tight``。
  *
  * 量化 ``input_formats`` → 常见 ``eElmFormat``：
  *   BGRA → ARGB8888（内存 BGRA，stride 16 对齐）
@@ -1153,6 +1278,7 @@ int main(int argc, char **argv)
         return 1;
     }
     std::printf("  pack mode : %s\n", plan.pack_mode.c_str());
+    std::printf("  prep      : %s\n", prep_name(cli.prep));
     std::printf("  classes   : %d\n", num_classes);
     std::printf("  top-k     : %d\n", top_k);
 
@@ -1204,25 +1330,22 @@ int main(int argc, char **argv)
             continue;
         }
 
-        const cv::Mat letterboxed =
+        const cv::Mat region =
             csv_mode == CsvMode::Box
-                ? letterbox_yolo(
-                      crop_cxcywh(image, row.cx, row.cy, row.w, row.h, cli.box_scale),
-                      model_w,
-                      model_h,
-                      kLetterboxFill)
-                : letterbox_yolo(image, model_w, model_h, kLetterboxFill);
+                ? crop_cxcywh(image, row.cx, row.cy, row.w, row.h, cli.box_scale)
+                : image;
+        const cv::Mat fitted = fit_model_canvas(region, model_w, model_h, cli.prep);
 
         bool packed = false;
         if (plan.layout == ReadLayout::Gray)
         {
             packed = pack_gray_tight(
-                letterboxed, model_w, model_h, buffer_bytes, input_buffer);
+                fitted, model_w, model_h, buffer_bytes, input_buffer);
         }
         else
         {
             packed = pack_model_input(
-                letterboxed,
+                fitted,
                 model_w,
                 model_h,
                 elm_format,
@@ -1314,7 +1437,11 @@ int main(int argc, char **argv)
     meta["output_fscalar"] = static_cast<double>(out_scalar);
     meta["model_h"] = model_h;
     meta["model_w"] = model_w;
-    meta["letterbox_fill"] = kLetterboxFill;
+    meta["prep"] = prep_name(cli.prep);
+    if (cli.prep == SpatialPrep::Letterbox)
+    {
+        meta["letterbox_fill"] = kLetterboxFill;
+    }
     meta["elm_format"] = elm_format;
     meta["elm_format_name"] = elm_format_name(elm_format);
     meta["pack_mode"] = plan.pack_mode;

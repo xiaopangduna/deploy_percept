@@ -6,7 +6,7 @@ Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里�
 
 - `deep_learning/src/train/scripts/confusion_from_classifier_dump.py`
 
-流程：读 CSV → 按模型决定读图通道 → 整图，或在 `--box-scale > 0` 且 CSV 有框时按 `cx,cy,w,h` × `box_scale` 裁切 → LetterBox(fill=114) → 按 `.img` 的 `eElmFormat` 打包 → `元素 × fScalar`（Softmax 前）→ 写 JSON。
+流程：读 CSV → 按模型决定读图通道 → 整图，或在 `--box-scale > 0` 且 CSV 有框时按 `cx,cy,w,h` × `box_scale` 裁切 → 按 `--prep` 缩放到模型尺寸 → 按 `.img` 的 `eElmFormat` 打包 → `元素 × fScalar`（Softmax 前）→ 写 JSON。
 
 输入格式自适应（由模型描述决定，无需改 CLI）。读图跟模型走：灰度在 LetterBox 之前就是单通道；彩色仍按 BGR 读入。
 
@@ -26,9 +26,19 @@ Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里�
 
 | 条件 | 行为 |
 |------|------|
-| 未传 `--box-scale`，或值 `<= 0` | 整图 LetterBox |
-| `--box-scale > 0`，且 CSV 有 `cx,cy,w,h` | 先按归一化框裁切，再 LetterBox |
+| 未传 `--box-scale`，或值 `<= 0` | 整图，再按 `--prep` 缩放 |
+| `--box-scale > 0`，且 CSV 有 `cx,cy,w,h` | 先按归一化框裁切，再按 `--prep` 缩放 |
 | `--box-scale > 0`，但框列缺少 | 整图，并在 stderr 说明 |
+
+`--prep`：
+
+| 值 | 几何 |
+|----|------|
+| `letterbox`（默认） | 保持宽高比，不足处填 114 |
+| `resize` | 直接 `INTER_LINEAR` 拉到模型 `H×W` |
+| `imagenet` | 短边缩到 `floor(min(H,W) / 0.875)`，再中心裁到模型尺寸。224 输入就是短边 256、中心裁 224 |
+
+像素保持原值。要不要做 `(像素 - mean) / std` 在转 `.img` 时由 `input_config` 决定；ONNX 侧在 `dump_onnx_output_from_image.py` 里做。这个程序不减均值、不除标准差。
 
 `cx,cy,w,h` 是相对原图宽高的归一化值。裁框时写出的样本里仍是这个值，还没乘 `box_scale`。
 
@@ -77,7 +87,10 @@ cd /customer/deploy_percept
 | `--csv` | 是 | — | 标注 CSV |
 | `--out` | 否 | `<模型文件名>.json` | dump 输出路径 |
 | `--box-scale` | 否 | 整图 | `> 0` 且 CSV 有 `cx,cy,w,h` 时作为外扩系数裁框；`<= 0` 或不传则整图 |
+| `--prep` | 否 | `letterbox` | `letterbox`、`resize`、`imagenet` |
 | `-h` / `--help` | 否 | — | 用法 |
+
+`--prep imagenet` 只做验证集的几何：短边 256、中心裁 224。像素除以 255 和 mean/std 不在这里。
 
 类别数是分类头输出张量的元素个数。`acc1` 是 `pred_id == class_id` 的比例，`acc5` 是 `class_id` 落在 logit 最大的 `top_k` 个里的比例，`top_k = min(5, num_classes)`。分母是成功样本数。`class_id` 不在 `0 .. num_classes-1` 时这条算错，仍然写入 `samples`。这两个数写入 `meta`，并打到 stdout。没有成功样本时 `acc1` / `acc5` 为 `null`，进程返回 1。
 
@@ -99,6 +112,7 @@ cd /customer/deploy_percept
     "output_fscalar": 0.000183,
     "model_h": 224,
     "model_w": 224,
+    "prep": "letterbox",
     "letterbox_fill": 114,
     "elm_format": 6,
     "elm_format_name": "GRAY",
