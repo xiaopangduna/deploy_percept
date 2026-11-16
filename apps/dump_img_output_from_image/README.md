@@ -51,4 +51,4 @@ cd /customer/deploy_percept
 
 ## PC
 
-在 `train/exports/sigmastar/mobilenet_v2` 下先跑 `dump_onnx_output_from_image.py`，再用 `compare_img_and_onnx_dumps.py` 和板端 `dump_board.npz` 比。灰度 `--value-scale` 用 `1/255`，RGB 的归一化见该目录 README。
+在 `train/exports/sigmastar/mobilenet_v2` 下先跑 `dump_onnx_output_from_image.py`，再用 `compare_img_and_onnx_dumps.py` 和板端 `dump_board.npz` 比。灰度传 `--mean 0 --std 255`，RGB 可省略 `--mean` 和 `--std`。细节见该目录 README。
