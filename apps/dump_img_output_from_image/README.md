@@ -6,8 +6,8 @@ Sigmastar **板端张量 dump**：一张图进 `.img`，把全部输出反量化
 
 PC 侧比对放在训练仓库，按模型分开。MobileNetV2：
 
-- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/dump_onnx_output_from_image.py`
-- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/compare_img_and_onnx_dumps.py`
+- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/verify/single_image_similarity_dump_onnx_npz.py`
+- `deep_learning/src/train/exports/sigmastar/mobilenet_v2/verify/single_image_similarity_compare_board_onnx_npz.py`
 
 输入格式由 `.img` 的 `eElmFormat` 决定，规则与 `classifier_dump_sigmastar` 相同。图已经是模型 `H×W` 时原样使用；否则 `INTER_LINEAR` 缩放到模型输入。推荐直接喂一张已经缩好的 PNG。
 
@@ -51,4 +51,4 @@ cd /customer/deploy_percept
 
 ## PC
 
-在 `train/exports/sigmastar/mobilenet_v2` 下先跑 `dump_onnx_output_from_image.py`，再用 `compare_img_and_onnx_dumps.py` 和板端 `dump_board.npz` 比。灰度传 `--mean 0 --std 255`，RGB 可省略 `--mean` 和 `--std`。细节见该目录 README。
+在 `train/exports/sigmastar/mobilenet_v2` 下先跑 `verify/single_image_similarity_dump_onnx_npz.py`，再用 `verify/single_image_similarity_compare_board_onnx_npz.py` 和板端 `dump_board.npz` 比。灰度传 `--mean 0 --std 255`，RGB 可省略 `--mean` 和 `--std`。细节见该目录 README。

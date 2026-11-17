@@ -38,7 +38,7 @@ Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里�
 | `resize` | 直接 `INTER_LINEAR` 拉到模型 `H×W` |
 | `imagenet` | 短边缩到 `floor(min(H,W) / 0.875)`，再中心裁到模型尺寸。224 输入就是短边 256、中心裁 224 |
 
-像素保持原值。要不要做 `(像素 - mean) / std` 在转 `.img` 时由 `input_config` 决定；ONNX 侧在 `dump_onnx_output_from_image.py` 里做。这个程序不减均值、不除标准差。
+像素保持原值。要不要做 `(像素 - mean) / std` 在转 `.img` 时由 `input_config` 决定；ONNX 侧在 `train/exports/sigmastar/mobilenet_v2/verify/multi_image_accuracy_dump_onnx_json.py` 里做。这个程序不减均值、不除标准差。
 
 `cx,cy,w,h` 是相对原图宽高的归一化值。裁框时写出的样本里仍是这个值，还没乘 `box_scale`。
 
