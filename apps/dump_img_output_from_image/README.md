@@ -9,7 +9,7 @@ PC 侧比对放在训练仓库，按模型分开。MobileNetV2：
 - `deep_learning/src/train/exports/sigmastar/mobilenet_v2/dump_onnx_output_from_image.py`
 - `deep_learning/src/train/exports/sigmastar/mobilenet_v2/compare_img_and_onnx_dumps.py`
 
-输入格式由 `.img` 的 `eElmFormat` 决定，规则与 `image_classifiter_from_detect_box_sigmastar` 相同。图已经是模型 `H×W` 时原样使用；否则 `INTER_LINEAR` 缩放到模型输入。推荐直接喂一张已经缩好的 PNG。
+输入格式由 `.img` 的 `eElmFormat` 决定，规则与 `classifier_dump_sigmastar` 相同。图已经是模型 `H×W` 时原样使用；否则 `INTER_LINEAR` 缩放到模型输入。推荐直接喂一张已经缩好的 PNG。
 
 反量化：`float32 = 元素 × fScalar`（zero point 按 0）。`zero_point != 0` 时仍按这个式子写，并在 stderr 打出来。
 

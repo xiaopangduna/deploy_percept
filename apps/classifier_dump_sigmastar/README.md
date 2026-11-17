@@ -1,4 +1,4 @@
-# image_classifiter_from_detect_box_sigmastar
+# classifier_dump_sigmastar
 
 Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里有这次运行的参数和 `acc1` / `acc5`，`samples` 里是每条成功样本的 logit。
 
@@ -51,12 +51,12 @@ Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里�
 ```bash
 cmake --preset=armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release
 cmake --build --preset=armv7l-linux-gnueabihf_comake_pi_d1_ssd2355-release \
-  --target image_classifiter_from_detect_box_sigmastar
+  --target classifier_dump_sigmastar
 ```
 
 SSC308QE 等其它 Sigmastar preset 同理替换 preset 名。
 
-产物：`build/.../apps/image_classifiter_from_detect_box_sigmastar/image_classifiter_from_detect_box_sigmastar`
+产物：`build/.../apps/classifier_dump_sigmastar/classifier_dump_sigmastar`
 
 ## 板端数据布局
 
@@ -73,7 +73,7 @@ eye_v007.img
 
 ```bash
 cd /customer/deploy_percept
-./bin/image_classifiter_from_detect_box_sigmastar \
+./bin/classifier_dump_sigmastar \
   --model ./eye_v007.img \
   --csv ./v301_eye_copy/test_v301.csv \
   --box-scale 1.2

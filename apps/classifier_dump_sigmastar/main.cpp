@@ -2,7 +2,7 @@
  * Sigmastar：分类 dump（CSV → 一个 JSON）。
  *
  * 用法：
- *   image_classifiter_from_detect_box_sigmastar
+ *   classifier_dump_sigmastar
  *     --model <path.img> --csv <path.csv>
  *     [--out <model_stem>.json] [--box-scale 1.2]
  *     [--prep letterbox|resize|imagenet] [-h]
@@ -1176,7 +1176,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    std::printf("image_classifiter_from_detect_box_sigmastar\n");
+    std::printf("classifier_dump_sigmastar\n");
     std::printf("  model     : %s\n", cli.model.c_str());
     std::printf("  csv       : %s\n", cli.csv.c_str());
     std::printf("  out       : %s\n", cli.out.c_str());
