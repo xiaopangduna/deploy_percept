@@ -1,6 +1,6 @@
 # classifier_dump_sigmastar
 
-Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里有这次运行的参数和 `acc1` / `acc5`，`samples` 里是每条成功样本的 logit。
+Sigmastar **板端 dump**：按 CSV 做分类，写出一个 JSON。`meta` 里是这次运行的参数，`samples` 里是每条成功样本的 logit，`summary` 里是 `acc1` / `acc5`。
 
 混淆矩阵在训练仓计算：
 
@@ -92,16 +92,16 @@ cd /customer/deploy_percept
 
 `--prep imagenet` 只做验证集的几何：短边 256、中心裁 224。像素除以 255 和 mean/std 不在这里。
 
-类别数是分类头输出张量的元素个数。`acc1` 是 `pred_id == class_id` 的比例，`acc5` 是 `class_id` 落在 logit 最大的 `top_k` 个里的比例，`top_k = min(5, num_classes)`。分母是成功样本数。`class_id` 不在 `0 .. num_classes-1` 时这条算错，仍然写入 `samples`。这两个数写入 `meta`，并打到 stdout。没有成功样本时 `acc1` / `acc5` 为 `null`，进程返回 1。
+类别数是分类头输出张量的元素个数。`acc1` 是 `pred_id == class_id` 的比例，`acc5` 是 `class_id` 落在 logit 最大的 `top_k` 个里的比例，`top_k = min(5, num_classes)`。分母是成功样本数。`class_id` 不在 `0 .. num_classes-1` 时这条算错，仍然写入 `samples`。这两个数写入 `summary`，并打到 stdout。没有成功样本时 `acc1` / `acc5` 为 `null`，进程返回 1。
 
-读图失败、推理失败的样本不进 `samples`，只计入 `meta.skip`。原因打在 stderr。
+读图失败、推理失败的样本不进 `samples`，只计入 `summary.skip`。原因打在 stderr。
 
 ## JSON
 
 ```json
 {
   "meta": {
-    "format_version": 1,
+    "format_version": 2,
     "source": "board",
     "model": "eye_v007.img",
     "csv": "v301_eye_copy/test_v301.csv",
@@ -117,11 +117,7 @@ cd /customer/deploy_percept
     "elm_format": 6,
     "elm_format_name": "GRAY",
     "pack_mode": "gray_tight",
-    "ok": 1000,
-    "skip": 3,
-    "top_k": 3,
-    "acc1": 0.912,
-    "acc5": 1.0
+    "top_k": 3
   },
   "samples": [
     {
@@ -135,7 +131,13 @@ cd /customer/deploy_percept
       "logits": [1.2, -0.4, 0.3],
       "pred_id": 0
     }
-  ]
+  ],
+  "summary": {
+    "ok": 1000,
+    "skip": 3,
+    "acc1": 0.912,
+    "acc5": 1.0
+  }
 }
 ```
 
@@ -143,7 +145,7 @@ cd /customer/deploy_percept
 
 `row` 是该样本在读入的 CSV 数据行里的下标，从 0 起。空行和字段不够的行不计入。`logits` 是 softmax 之前的值，长度等于 `num_classes`。`pred_id` 是 argmax。
 
-推理时样本先写入 `<输出名>.samples.tmp`，结束后拼成最终 JSON 再删掉临时文件。中途中断时临时文件里是已经完成的样本。
+推理时先把 `meta` 和已完成的样本写入 `<输出名>.writing`，每成功一条追加一条。全部跑完后补上 `summary`，再改名为最终 JSON。中断时 `.writing` 还不是合法 JSON，已完成的样本留在里面；原来的输出文件保持上次成功的结果。
 
 ## PC
 
@@ -155,4 +157,4 @@ cd /path/to/deep_learning/src/train
 python scripts/confusion_from_classifier_dump.py --dump eye_v007.json
 ```
 
-`meta.acc1` 是板上用 `class_id` 和 `pred_id` 算的 top-1。混淆矩阵、以及另外一套标签映射，用 `samples` 里的 `class_id,pred_id` 在别的脚本里算。ONNX 侧 `eval_box_crop_classifier_onnx.py` 仍写带 `gt_id` 的 CSV，`confusion_from_classifier_dump.py` 读 CSV 时用 `gt_id`，读这份 JSON 时用 `class_id`。
+`summary.acc1` 是板上用 `class_id` 和 `pred_id` 算的 top-1。混淆矩阵、以及另外一套标签映射，用 `samples` 里的 `class_id,pred_id` 在别的脚本里算。ONNX 侧 `eval_box_crop_classifier_onnx.py` 仍写带 `gt_id` 的 CSV，`confusion_from_classifier_dump.py` 读 CSV 时用 `gt_id`，读这份 JSON 时用 `class_id`。

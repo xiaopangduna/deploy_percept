@@ -12,7 +12,8 @@
  * --prep imagenet 短边缩到 floor(min(H,W)/0.875)，再中心裁到模型尺寸。
  * 标准化不在这里做。转 .img 时由 input_config 决定；ONNX 侧另做。
  * path_img 相对 CSV 所在目录。logit = 元素 × fScalar（Softmax 前）。
- * acc1 / acc5 只比较 class_id 与 pred_id。
+ * JSON 先写 meta，每条成功样本追加进 samples，最后写 summary。
+ * acc1 / acc5 在 summary，只比较 class_id 与 pred_id。
  */
 #include <algorithm>
 #include <cmath>
@@ -23,6 +24,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <ostream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -47,7 +49,7 @@ namespace
 {
 
 constexpr int kLetterboxFill = 114;
-constexpr int kFormatVersion = 1;
+constexpr int kFormatVersion = 2;
 constexpr int kTopKMax = 5;
 constexpr std::uint32_t kDivpYuvAlignment = 16;
 
@@ -117,9 +119,9 @@ void print_help(const char *argv0)
         "Pixels stay raw. Mean/std is chosen when converting the .img, and on ONNX.\n"
         "\n"
         "Missing cx,cy,w,h also uses the whole image.\n"
-        "Writes one JSON object: meta + samples.\n"
+        "Writes one JSON object: meta, samples, then summary.\n"
         "logits = elem * fScalar, before softmax.\n"
-        "acc1/acc5 compare class_id with pred_id.\n",
+        "summary.acc1/acc5 compare class_id with pred_id.\n",
         argv0);
 }
 
@@ -1074,29 +1076,18 @@ json make_sample(
     return sample;
 }
 
-bool write_dump_json(
-    const fs::path &sample_tmp,
-    const fs::path &out_path,
-    const json &meta,
-    std::size_t ok_count)
+struct DumpStream
 {
-    std::ifstream ifs(sample_tmp);
-    if (!ifs)
-    {
-        std::fprintf(stderr, "failed to read samples: %s\n", sample_tmp.c_str());
-        return false;
-    }
-    const fs::path staging = fs::path(out_path.string() + ".writing");
-    std::ofstream ofs(staging);
-    if (!ofs)
-    {
-        std::fprintf(stderr, "failed to open %s\n", staging.c_str());
-        return false;
-    }
+    std::ofstream ofs;
+    fs::path staging;
+    fs::path out_path;
+    std::size_t written = 0;
+};
 
-    ofs << "{\n  \"meta\": ";
-    const std::string meta_text = meta.dump(2, ' ', false, json::error_handler_t::replace);
-    for (char c : meta_text)
+void write_indented(std::ostream &ofs, const json &value)
+{
+    const std::string text = value.dump(2, ' ', false, json::error_handler_t::replace);
+    for (char c : text)
     {
         ofs << c;
         if (c == '\n')
@@ -1104,62 +1095,80 @@ bool write_dump_json(
             ofs << "  ";
         }
     }
-    ofs << ",\n  \"samples\": [";
-    std::size_t written = 0;
-    if (ok_count == 0)
+}
+
+bool open_dump(DumpStream &dump, const fs::path &out_path, const json &meta)
+{
+    dump.out_path = out_path;
+    dump.staging = fs::path(out_path.string() + ".writing");
+    dump.written = 0;
+    dump.ofs.open(dump.staging);
+    if (!dump.ofs)
     {
-        ofs << "]\n}\n";
+        std::fprintf(stderr, "failed to open %s\n", dump.staging.c_str());
+        return false;
+    }
+    dump.ofs << "{\n  \"meta\": ";
+    write_indented(dump.ofs, meta);
+    dump.ofs << ",\n  \"samples\": [";
+    dump.ofs.flush();
+    if (!dump.ofs)
+    {
+        std::fprintf(stderr, "failed to write %s\n", dump.staging.c_str());
+        dump.ofs.close();
+        std::error_code ec;
+        fs::remove(dump.staging, ec);
+        return false;
+    }
+    return true;
+}
+
+bool append_sample(DumpStream &dump, const json &sample)
+{
+    if (dump.written > 0)
+    {
+        dump.ofs << ',';
+    }
+    dump.ofs << "\n    " << sample.dump(-1, ' ', false, json::error_handler_t::replace);
+    ++dump.written;
+    dump.ofs.flush();
+    if (!dump.ofs)
+    {
+        std::fprintf(stderr, "failed to write %s\n", dump.staging.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool finish_dump(DumpStream &dump, const json &summary)
+{
+    if (dump.written == 0)
+    {
+        dump.ofs << "],\n  \"summary\": ";
     }
     else
     {
-        ofs << '\n';
-        std::string line;
-        while (std::getline(ifs, line))
-        {
-            if (line.empty())
-            {
-                continue;
-            }
-            ++written;
-            ofs << "    " << line;
-            if (written < ok_count)
-            {
-                ofs << ',';
-            }
-            ofs << '\n';
-        }
-        ofs << "  ]\n}\n";
+        dump.ofs << "\n  ],\n  \"summary\": ";
     }
-    if (written != ok_count)
+    write_indented(dump.ofs, summary);
+    dump.ofs << "\n}\n";
+    dump.ofs.flush();
+    dump.ofs.close();
+    if (!dump.ofs)
     {
-        std::fprintf(
-            stderr,
-            "sample count mismatch: file has %zu lines, expected %zu\n",
-            written,
-            ok_count);
-        ofs.close();
-        std::error_code ec;
-        fs::remove(staging, ec);
-        return false;
-    }
-    ofs.close();
-    if (!ofs)
-    {
-        std::fprintf(stderr, "failed to write %s\n", staging.c_str());
-        std::error_code ec;
-        fs::remove(staging, ec);
+        std::fprintf(stderr, "partial dump kept at %s\n", dump.staging.c_str());
         return false;
     }
 
     std::error_code ec;
-    fs::rename(staging, out_path, ec);
+    fs::rename(dump.staging, dump.out_path, ec);
     if (ec)
     {
         std::fprintf(
             stderr,
             "failed to rename %s -> %s: %s\n",
-            staging.c_str(),
-            out_path.c_str(),
+            dump.staging.c_str(),
+            dump.out_path.c_str(),
             ec.message().c_str());
         return false;
     }
@@ -1287,11 +1296,39 @@ int main(int argc, char **argv)
     {
         return 1;
     }
-    const fs::path sample_tmp = fs::path(out_path.string() + ".samples.tmp");
-    std::ofstream sample_ofs(sample_tmp);
-    if (!sample_ofs)
+
+    json meta;
+    meta["format_version"] = kFormatVersion;
+    meta["source"] = "board";
+    meta["model"] = cli.model;
+    meta["csv"] = cli.csv;
+    meta["mode"] = csv_mode == CsvMode::Box ? "box" : "image";
+    if (csv_mode == CsvMode::Box)
     {
-        std::fprintf(stderr, "failed to open %s\n", sample_tmp.c_str());
+        meta["box_scale"] = static_cast<double>(cli.box_scale);
+    }
+    meta["num_classes"] = num_classes;
+    meta["output_shape"] = json::array();
+    for (MI_U32 d = 0; d < out0.u32TensorDim; ++d)
+    {
+        meta["output_shape"].push_back(out0.u32TensorShape[d]);
+    }
+    meta["output_fscalar"] = static_cast<double>(out_scalar);
+    meta["model_h"] = model_h;
+    meta["model_w"] = model_w;
+    meta["prep"] = prep_name(cli.prep);
+    if (cli.prep == SpatialPrep::Letterbox)
+    {
+        meta["letterbox_fill"] = kLetterboxFill;
+    }
+    meta["elm_format"] = elm_format;
+    meta["elm_format_name"] = elm_format_name(elm_format);
+    meta["pack_mode"] = plan.pack_mode;
+    meta["top_k"] = top_k;
+
+    DumpStream dump;
+    if (!open_dump(dump, out_path, meta))
+    {
         return 1;
     }
 
@@ -1385,12 +1422,8 @@ int main(int argc, char **argv)
         }
 
         const int pred_id = argmax(logits);
-        sample_ofs << make_sample(row, i, csv_mode, logits, pred_id)
-                          .dump(-1, ' ', false, json::error_handler_t::replace)
-                   << '\n';
-        if (!sample_ofs)
+        if (!append_sample(dump, make_sample(row, i, csv_mode, logits, pred_id)))
         {
-            std::fprintf(stderr, "failed to write %s\n", sample_tmp.c_str());
             engine.releaseResult();
             return 1;
         }
@@ -1411,47 +1444,13 @@ int main(int argc, char **argv)
         }
     }
 
-    sample_ofs.close();
-    if (!sample_ofs)
-    {
-        std::fprintf(stderr, "failed to write %s\n", sample_tmp.c_str());
-        return 1;
-    }
-
-    json meta;
-    meta["format_version"] = kFormatVersion;
-    meta["source"] = "board";
-    meta["model"] = cli.model;
-    meta["csv"] = cli.csv;
-    meta["mode"] = csv_mode == CsvMode::Box ? "box" : "image";
-    if (csv_mode == CsvMode::Box)
-    {
-        meta["box_scale"] = static_cast<double>(cli.box_scale);
-    }
-    meta["num_classes"] = num_classes;
-    meta["output_shape"] = json::array();
-    for (MI_U32 d = 0; d < out0.u32TensorDim; ++d)
-    {
-        meta["output_shape"].push_back(out0.u32TensorShape[d]);
-    }
-    meta["output_fscalar"] = static_cast<double>(out_scalar);
-    meta["model_h"] = model_h;
-    meta["model_w"] = model_w;
-    meta["prep"] = prep_name(cli.prep);
-    if (cli.prep == SpatialPrep::Letterbox)
-    {
-        meta["letterbox_fill"] = kLetterboxFill;
-    }
-    meta["elm_format"] = elm_format;
-    meta["elm_format_name"] = elm_format_name(elm_format);
-    meta["pack_mode"] = plan.pack_mode;
-    meta["ok"] = ok_count;
-    meta["skip"] = skip_count;
-    meta["top_k"] = top_k;
+    json summary;
+    summary["ok"] = ok_count;
+    summary["skip"] = skip_count;
     if (ok_count == 0)
     {
-        meta["acc1"] = json(nullptr);
-        meta["acc5"] = json(nullptr);
+        summary["acc1"] = json(nullptr);
+        summary["acc5"] = json(nullptr);
         std::printf("acc1: n/a\n");
         std::printf("acc5: n/a (top_k=%d)\n", top_k);
     }
@@ -1459,26 +1458,15 @@ int main(int argc, char **argv)
     {
         const double acc1 = static_cast<double>(correct1) / static_cast<double>(ok_count);
         const double acc5 = static_cast<double>(correct5) / static_cast<double>(ok_count);
-        meta["acc1"] = acc1;
-        meta["acc5"] = acc5;
+        summary["acc1"] = acc1;
+        summary["acc5"] = acc5;
         std::printf("acc1: %zu/%zu = %.6f\n", correct1, ok_count, acc1);
         std::printf("acc5: %zu/%zu = %.6f (top_k=%d)\n", correct5, ok_count, acc5, top_k);
     }
 
-    if (!write_dump_json(sample_tmp, out_path, meta, ok_count))
+    if (!finish_dump(dump, summary))
     {
-        std::fprintf(stderr, "samples kept at %s\n", sample_tmp.c_str());
         return 1;
-    }
-    std::error_code remove_ec;
-    fs::remove(sample_tmp, remove_ec);
-    if (remove_ec)
-    {
-        std::fprintf(
-            stderr,
-            "failed to remove %s: %s\n",
-            sample_tmp.c_str(),
-            remove_ec.message().c_str());
     }
     std::printf(
         "done: wrote %zu samples to %s (skipped %zu)\n",
